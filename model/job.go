@@ -43,6 +43,7 @@ type Job struct {
 	WorkerRID  uuid.UUID  `json:"worker_rid"`
 	Parameters Parameters `json:"parameters"`
 	Status     string     `json:"status"`
+	Attempts   int        `json:"attempts"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 }
