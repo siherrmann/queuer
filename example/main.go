@@ -6,7 +6,6 @@ import (
 	"log"
 	"queuer"
 	"strconv"
-	"time"
 )
 
 func main() {
@@ -23,7 +22,7 @@ func main() {
 	queuer.Start()
 
 	// Example of how to add a task with parameters
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10; i++ {
 		go func() {
 			_, err := queuer.AddJob("myTask", 5, "10")
 			if err != nil {
@@ -39,7 +38,7 @@ func main() {
 // Simple example task function
 func MyTask(param1 int, param2 string) (int, error) {
 	// Simulate some work
-	time.Sleep(100 * time.Millisecond)
+	// time.Sleep(100 * time.Millisecond)
 
 	// Example for some error handling
 	param2Int, err := strconv.Atoi(param2)
