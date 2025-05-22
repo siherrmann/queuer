@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"queue/helper"
-	"queue/model"
+	"queuer/helper"
+	"queuer/model"
 	"time"
 )
 
@@ -28,10 +28,22 @@ type JobDBHandler struct {
 }
 
 // NewJobDBHandler creates a new instance of JobDBHandler.
-func NewJobDBHandler(dbConnection *helper.Database) *JobDBHandler {
-	return &JobDBHandler{
+func NewJobDBHandler(dbConnection *helper.Database) (*JobDBHandler, error) {
+	jobDbHandler := &JobDBHandler{
 		db: dbConnection,
 	}
+
+	err := jobDbHandler.DropTable()
+	if err != nil {
+		return nil, fmt.Errorf("error dropping job table: %#v", err)
+	}
+
+	err = jobDbHandler.CreateTable()
+	if err != nil {
+		return nil, fmt.Errorf("error creating job table: %#v", err)
+	}
+
+	return jobDbHandler, nil
 }
 
 // CheckTableExistance checks if the 'job' table exists in the database.
@@ -42,6 +54,7 @@ func (r JobDBHandler) CheckTableExistance() (bool, error) {
 }
 
 // CreateTable creates the 'job' table in the database if it doesn't already exist.
+// It also creates a trigger for notifying events on the table and all necessary indexes.
 func (r JobDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -51,17 +64,29 @@ func (r JobDBHandler) CreateTable() error {
 		`CREATE TABLE IF NOT EXISTS job (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			rid UUID UNIQUE DEFAULT gen_random_uuid(),
-			worker_id VARCHAR(200) DEFAULT '',
-			worker_rid UUID NOT NULL,
+			worker_id BIGINT DEFAULT 0,
+			worker_rid UUID DEFAULT NULL,
+			task_name VARCHAR(200) DEFAULT '',
 			parameters JSONB DEFAULT '{}',
-			attempts INT DEFAULT 0,
 			status VARCHAR(50) DEFAULT 'QUEUED',
+			attempts INT DEFAULT 0,
+			results JSONB DEFAULT '{}',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
+		);`,
 	)
 	if err != nil {
 		log.Fatalf("error creating job table: %#v", err)
+	}
+
+	_, err = r.db.Instance.ExecContext(
+		ctx,
+		`CREATE OR REPLACE TRIGGER job_notify_event
+			AFTER INSERT OR UPDATE OR DELETE ON job
+			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
+	)
+	if err != nil {
+		log.Fatalf("error creating notify trigger on job table: %#v", err)
 	}
 
 	err = r.db.CreateIndexes("job", "worker_rid", "status") // Indexes on common search/filter fields
@@ -92,10 +117,20 @@ func (r JobDBHandler) DropTable() error {
 func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO job (parameters)
-			VALUES ($1)
+		`INSERT INTO job (task_name, parameters)
+			VALUES ($1, $2)
 		RETURNING
-			id, rid, worker_id, worker_rid, status, parameters, attempts, created_at, updated_at`,
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			task_name,
+			parameters,
+			status,
+			attempts,
+			created_at,
+			updated_at;`,
+		job.TaskName,
 		job.Parameters,
 	)
 
@@ -104,8 +139,9 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 		&newJob.RID,
 		&newJob.WorkerID,
 		&newJob.WorkerRID,
-		&newJob.Status,
+		&newJob.TaskName,
 		&newJob.Parameters,
+		&newJob.Status,
 		&newJob.Attempts,
 		&newJob.CreatedAt,
 		&newJob.UpdatedAt,
@@ -128,23 +164,28 @@ func (r JobDBHandler) UpdateJob(job *model.Job) (*model.Job, error) {
 			worker_rid = $2,
 			status = $3,
 			attempts = $4,
+			results = $5,
 			updated_at = CURRENT_TIMESTAMP
 		WHERE
-			rid = $4
+			id = $6
 		RETURNING
 			id,
 			rid,
 			worker_id,
 			worker_rid,
+			task_name,
 			parameters,
+			status,
 			attempts,
+			results,
 			created_at,
 			updated_at;`,
 		job.WorkerID,
 		job.WorkerRID,
 		job.Status,
 		job.Attempts,
-		job.RID,
+		job.Results,
+		job.ID,
 	)
 
 	err := row.Scan(
@@ -152,9 +193,11 @@ func (r JobDBHandler) UpdateJob(job *model.Job) (*model.Job, error) {
 		&updatedJob.RID,
 		&updatedJob.WorkerID,
 		&updatedJob.WorkerRID,
+		&updatedJob.TaskName,
 		&updatedJob.Parameters,
 		&updatedJob.Status,
 		&updatedJob.Attempts,
+		&updatedJob.Results,
 		&updatedJob.CreatedAt,
 		&updatedJob.UpdatedAt,
 	)
@@ -175,9 +218,13 @@ func (r JobDBHandler) UpdateJobInitial(job *model.Job) (*model.Job, error) {
 			status = 'RUNNING',
 			attempts = attempts + 1,
 			updated_at = CURRENT_TIMESTAMP
-		WHERE id IN (
+		WHERE id = (
 			SELECT id FROM job 
-			WHERE status = 'QUEUED' 
+			WHERE 
+				status = 'QUEUED'
+				OR status = 'FAILED'
+			ORDER BY created_at ASC
+			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		)
 		RETURNING
@@ -185,7 +232,9 @@ func (r JobDBHandler) UpdateJobInitial(job *model.Job) (*model.Job, error) {
 			rid,
 			worker_id,
 			worker_rid,
+			task_name,
 			parameters,
+			status,
 			attempts,
 			created_at,
 			updated_at;`,
@@ -198,6 +247,7 @@ func (r JobDBHandler) UpdateJobInitial(job *model.Job) (*model.Job, error) {
 		&updatedJob.RID,
 		&updatedJob.WorkerID,
 		&updatedJob.WorkerRID,
+		&updatedJob.TaskName,
 		&updatedJob.Parameters,
 		&updatedJob.Status,
 		&updatedJob.Attempts,
@@ -234,9 +284,11 @@ func (r JobDBHandler) SelectJob(rid string) (*model.Job, error) {
 			rid,
 			worker_id,
 			worker_rid,
+			task_name,
 			parameters,
 			status,
 			attempts,
+			results,
 			created_at,
 			updated_at
 		FROM
@@ -250,9 +302,11 @@ func (r JobDBHandler) SelectJob(rid string) (*model.Job, error) {
 		&job.RID,
 		&job.WorkerID,
 		&job.WorkerRID,
+		&job.TaskName,
 		&job.Parameters,
 		&job.Status,
 		&job.Attempts,
+		&job.Results,
 		&job.CreatedAt,
 		&job.UpdatedAt,
 	)
@@ -273,8 +327,11 @@ func (r JobDBHandler) SelectAllJobs(workerRID string, lastID int, entries int) (
 			rid,
 			worker_id,
 			worker_rid,
+			task_name,
 			parameters,
 			status,
+			attempts,
+			results,
 			created_at,
 			updated_at
 		FROM
@@ -308,8 +365,11 @@ func (r JobDBHandler) SelectAllJobs(workerRID string, lastID int, entries int) (
 			&job.RID,
 			&job.WorkerID,
 			&job.WorkerRID,
+			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
+			&job.Attempts,
+			&job.Results,
 			&job.CreatedAt,
 			&job.UpdatedAt,
 		)
@@ -334,14 +394,18 @@ func (r JobDBHandler) SelectAllJobsBySearch(workerRID string, search string, las
 			rid,
 			worker_id,
 			worker_rid,
+			task_name,
 			parameters,
 			status,
+			attempts,
+			results,
 			created_at,
 			updated_at
 		FROM job
 		WHERE worker_rid = $1
 		AND (rid ILIKE '%' || $2 || '%'
 				OR worker_id ILIKE '%' || $2 || '%'
+				OR task_name ILIKE '%' || $2 || '%'
 				OR status ILIKE '%' || $2 || '%')
 			AND (0 = $3
 				OR created_at < (
@@ -372,8 +436,11 @@ func (r JobDBHandler) SelectAllJobsBySearch(workerRID string, search string, las
 			&job.RID,
 			&job.WorkerID,
 			&job.WorkerRID,
+			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
+			&job.Attempts,
+			&job.Results,
 			&job.CreatedAt,
 			&job.UpdatedAt,
 		)

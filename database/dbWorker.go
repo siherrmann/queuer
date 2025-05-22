@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"queue/helper"
-	"queue/model"
+	"queuer/helper"
+	"queuer/model"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,10 +30,17 @@ type WorkerDBHandler struct {
 }
 
 // NewWorkerDBHandler creates a new instance of WorkerDBHandler.
-func NewWorkerDBHandler(dbConnection *helper.Database) *WorkerDBHandler {
-	return &WorkerDBHandler{
+func NewWorkerDBHandler(dbConnection *helper.Database) (*WorkerDBHandler, error) {
+	workerDbHandler := &WorkerDBHandler{
 		db: dbConnection,
 	}
+
+	err := workerDbHandler.CreateTable()
+	if err != nil {
+		return nil, fmt.Errorf("error creating worker table: %#v", err)
+	}
+
+	return workerDbHandler, nil
 }
 
 // CheckTableExistance checks if the 'worker' table exists in the database.
@@ -99,7 +106,6 @@ func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, erro
             id, rid, queue_name, name, status, created_at, updated_at`,
 		worker.QueueName,
 		worker.Name,
-		worker.Status,
 	)
 
 	err := row.Scan(

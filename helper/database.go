@@ -30,8 +30,13 @@ func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
 		db.ConnectToDatabase(dbConfig, logger)
 		if db.Instance == nil {
 			logger.Fatal("failed to connect to database")
-			return nil
 		}
+
+		err := db.AddNotifyFunction()
+		if err != nil {
+			logger.Fatalf("failed to add notify function: %v", err)
+		}
+
 		return db
 	} else {
 		return &Database{name, logger, nil}
@@ -47,6 +52,10 @@ type DatabaseConfiguration struct {
 	Schema   string
 }
 
+func (d *DatabaseConfiguration) DatabaseConnectionString() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, d.Schema)
+}
+
 // Internal function for the service creation to connect to a database.
 // DatabaseConfiguration must contain uri, username and password.
 func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *log.Logger) {
@@ -58,15 +67,15 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 	var db *sql.DB
 	var err error
 
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", dbConfig.Username, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database, dbConfig.Schema)
-
 	logger.Printf("initializing the database with ip address: %v", dbConfig.Host)
 
 	connectOnce.Do(func() {
-		db, err = sql.Open("postgres", connStr)
+		db, err = sql.Open("postgres", dbConfig.DatabaseConnectionString())
 		if err != nil {
 			logger.Fatalf("error establishing connection to db: %v. Trying again.", err.Error())
 		}
+
+		db.SetMaxOpenConns(10)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -86,6 +95,32 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 	})
 
 	d.Instance = db
+}
+
+func (d *Database) AddNotifyFunction() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := d.Instance.ExecContext(
+		ctx,
+		`CREATE OR REPLACE FUNCTION notify_event() RETURNS TRIGGER AS $$
+			DECLARE
+				data JSON;
+			BEGIN
+				IF (TG_OP = 'DELETE') THEN
+					data = row_to_json(OLD);
+				ELSE
+					data = row_to_json(NEW);
+				END IF;
+				PERFORM pg_notify(TG_TABLE_NAME || '.' || TG_OP, data::text);
+				RETURN NEW;
+			END;
+		$$ LANGUAGE plpgsql;`,
+	)
+	if err != nil {
+		return fmt.Errorf("error creating notify function: %#v", err)
+	}
+	return nil
 }
 
 func (d *Database) CheckTableExistance(tableName string) (bool, error) {

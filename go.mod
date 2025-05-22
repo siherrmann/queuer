@@ -1,4 +1,4 @@
-module queue
+module queuer
 
 go 1.23.5
 
