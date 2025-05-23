@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // WorkerDBHandlerFunctions defines the interface for Worker database operations.
@@ -35,7 +36,13 @@ func NewWorkerDBHandler(dbConnection *helper.Database) (*WorkerDBHandler, error)
 		db: dbConnection,
 	}
 
-	err := workerDbHandler.CreateTable()
+	// TODO Remove table drop
+	err := workerDbHandler.DropTable()
+	if err != nil {
+		return nil, fmt.Errorf("error dropping worker table: %#v", err)
+	}
+
+	err = workerDbHandler.CreateTable()
 	if err != nil {
 		return nil, fmt.Errorf("error creating worker table: %#v", err)
 	}
@@ -62,6 +69,7 @@ func (r WorkerDBHandler) CreateTable() error {
             rid UUID UNIQUE DEFAULT gen_random_uuid(),
             queue_name VARCHAR(200) DEFAULT '',
             name VARCHAR(100) DEFAULT '',
+			available_tasks VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
             status VARCHAR(50) DEFAULT 'RUNNING',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -125,24 +133,50 @@ func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, erro
 }
 
 // UpdateWorker updates an existing worker record in the database based on its RID.
-func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) error {
-	_, err := r.db.Instance.Exec(
+func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, error) {
+	row := r.db.Instance.QueryRow(
 		`UPDATE
             worker
         SET
             queue_name = $1,
             name = $2,
-            status = $3,
+			available_tasks = $3,
+            status = $4,
             updated_at = CURRENT_TIMESTAMP
         WHERE
-            rid = $4`,
+            rid = $5
+		RETURNING
+			id,
+			rid,
+			queue_name,
+			name,
+			available_tasks,
+			status,
+			created_at,
+			updated_at;`,
 		worker.QueueName,
 		worker.Name,
+		pq.Array(worker.AvailableTasks),
 		worker.Status,
 		worker.RID,
 	)
 
-	return err
+	updatedWorker := &model.Worker{}
+	err := row.Scan(
+		&updatedWorker.ID,
+		&updatedWorker.RID,
+		&updatedWorker.QueueName,
+		&updatedWorker.Name,
+		pq.Array(&updatedWorker.AvailableTasks),
+		&updatedWorker.Status,
+		&updatedWorker.CreatedAt,
+		&updatedWorker.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error scanning updated worker: %w", err)
+	}
+
+	return updatedWorker, err
 }
 
 // DeleteWorker deletes a worker record from the database based on its RID.
@@ -169,6 +203,7 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
             rid,
             queue_name,
             name,
+			available_tasks,
             status,
             created_at,
             updated_at
@@ -183,6 +218,7 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 		&worker.RID,
 		&worker.QueueName,
 		&worker.Name,
+		pq.Array(&worker.AvailableTasks),
 		&worker.Status,
 		&worker.CreatedAt,
 		&worker.UpdatedAt,
@@ -201,6 +237,7 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
             rid,
             queue_name,
             name,
+			available_tasks,
             status,
             created_at,
             updated_at
@@ -233,6 +270,7 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 			&worker.RID,
 			&worker.QueueName,
 			&worker.Name,
+			pq.Array(&worker.AvailableTasks),
 			&worker.Status,
 			&worker.CreatedAt,
 			&worker.UpdatedAt,
@@ -261,12 +299,14 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
             rid,
             queue_name,
             name,
+			available_tasks,
             status,
             created_at,
             updated_at
         FROM worker
         WHERE (queue_name ILIKE '%' || $1 || '%'
                 OR name ILIKE '%' || $1 || '%'
+				OR array_to_string(available_tasks, ',') ILIKE '%' || $1 || '%'
                 OR status ILIKE '%' || $1 || '%')
             AND (0 = $2
                 OR created_at < (
@@ -296,6 +336,7 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 			&worker.RID,
 			&worker.QueueName,
 			&worker.Name,
+			pq.Array(&worker.AvailableTasks),
 			&worker.Status,
 			&worker.CreatedAt,
 			&worker.UpdatedAt,

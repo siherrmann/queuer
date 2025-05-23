@@ -107,16 +107,16 @@ func (d *Database) AddNotifyFunction() error {
 			DECLARE
 				data JSON;
 			BEGIN
-				IF (TG_OP = 'DELETE') THEN
-					data = row_to_json(OLD);
-				ELSE
-					data = row_to_json(NEW);
-				END IF;
 				PERFORM pg_notify(TG_TABLE_NAME || '.' || TG_OP, data::text);
 				RETURN NEW;
 			END;
 		$$ LANGUAGE plpgsql;`,
 	)
+	// IF (TG_OP = 'DELETE') THEN
+	// 	data = row_to_json(OLD);
+	// ELSE
+	// 	data = row_to_json(NEW);
+	// END IF;
 	if err != nil {
 		return fmt.Errorf("error creating notify function: %#v", err)
 	}

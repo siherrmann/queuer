@@ -2,21 +2,17 @@ package queuer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"queuer/database"
 	"queuer/helper"
 	"queuer/model"
 	"reflect"
-
-	"github.com/google/uuid"
 )
 
 type Queuer struct {
 	// Worker
-	workerID  int
-	workerRid uuid.UUID
+	worker *model.Worker
 	// DBs
 	dbJob    *database.JobDBHandler
 	dbWorker *database.WorkerDBHandler
@@ -30,12 +26,12 @@ type Queuer struct {
 
 func NewQueuer(workerQueue string, workerName string) *Queuer {
 	dbConfig := &helper.DatabaseConfiguration{
-		Host:     helper.GetEnvVariable("QUEUER_DB_HOST"),
-		Port:     helper.GetEnvVariable("QUEUER_DB_PORT"),
-		Database: helper.GetEnvVariable("QUEUER_DB_DATABASE"),
-		Username: helper.GetEnvVariable("QUEUER_DB_USERNAME"),
-		Password: helper.GetEnvVariable("QUEUER_DB_PASSWORD"),
-		Schema:   helper.GetEnvVariable("QUEUER_DB_SCHEMA"),
+		Host:     helper.GetEnvVariableWithoutDelete("QUEUER_DB_HOST"),
+		Port:     helper.GetEnvVariableWithoutDelete("QUEUER_DB_PORT"),
+		Database: helper.GetEnvVariableWithoutDelete("QUEUER_DB_DATABASE"),
+		Username: helper.GetEnvVariableWithoutDelete("QUEUER_DB_USERNAME"),
+		Password: helper.GetEnvVariableWithoutDelete("QUEUER_DB_PASSWORD"),
+		Schema:   helper.GetEnvVariableWithoutDelete("QUEUER_DB_SCHEMA"),
 	}
 
 	dbConnection := helper.NewDatabase(
@@ -78,8 +74,7 @@ func NewQueuer(workerQueue string, workerName string) *Queuer {
 	log.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
 
 	return &Queuer{
-		workerID:          worker.ID,
-		workerRid:         worker.RID,
+		worker:            worker,
 		dbJob:             dbJob,
 		dbWorker:          dbWorker,
 		jobInsertListener: jobInsertListener,
@@ -98,22 +93,11 @@ func (q *Queuer) Start() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		count := 0
 		go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) error {
-			var jobFromNotification *model.JobFromNotification
-			err := json.Unmarshal([]byte(data), &jobFromNotification)
+			err := q.RunJob()
 			if err != nil {
-				return fmt.Errorf("error unmarshalling json: %v", err)
+				return fmt.Errorf("error running job: %v", err)
 			}
-
-			if jobFromNotification.Status == model.JobStatusQueued {
-				count++
-				err = q.RunJob(jobFromNotification.ToJob())
-				if err != nil {
-					return fmt.Errorf("error running job %v, count %v: %v", jobFromNotification.ID, count, err)
-				}
-			}
-
 			return nil
 		})
 
@@ -150,13 +134,16 @@ func (q *Queuer) AddTask(taskName string, task interface{}) {
 		InputParameters:  inputParameters,
 		OutputParameters: outputParameters,
 	}
+	q.worker.AvailableTasks = append(q.worker.AvailableTasks, taskName)
+
+	// Update worker in DB
+	_, err := q.dbWorker.UpdateWorker(q.worker)
+	if err != nil {
+		log.Fatalf("failed to update worker: %v", err)
+	}
 }
 
 func (q *Queuer) AddJob(taskName string, parameters ...interface{}) (*model.Job, error) {
-	if _, ok := q.tasks[taskName]; !ok {
-		return nil, fmt.Errorf("task %s not found", taskName)
-	}
-
 	newJob := &model.Job{
 		TaskName:   taskName,
 		Parameters: parameters,
@@ -169,10 +156,15 @@ func (q *Queuer) AddJob(taskName string, parameters ...interface{}) (*model.Job,
 	return job, nil
 }
 
-func (q *Queuer) RunJob(job *model.Job) error {
-	if _, ok := q.tasks[job.TaskName]; !ok {
-		return fmt.Errorf("task %s not found", job.TaskName)
+func (q *Queuer) RunJob() error {
+	// Update job status to running with worker.
+	job, err := q.dbJob.UpdateJobInitial(q.worker)
+	if err != nil {
+		return fmt.Errorf("error updating job status to running: %v", err)
+	} else if job == nil {
+		return nil
 	}
+
 	if len(job.Parameters) != len(q.tasks[job.TaskName].InputParameters) {
 		return fmt.Errorf("task %s requires %d parameters, got %d", job.TaskName, len(q.tasks[job.TaskName].InputParameters), len(job.Parameters))
 	}
@@ -186,20 +178,6 @@ func (q *Queuer) RunJob(job *model.Job) error {
 		} else if task.InputParameters[i].Kind() != reflect.TypeOf(param).Kind() {
 			return fmt.Errorf("parameter %d of task %s must be of type %s, got %s", i, job.TaskName, task.InputParameters[i].Kind(), reflect.TypeOf(param).Kind())
 		}
-	}
-
-	// Get the worker
-	worker, err := q.dbWorker.SelectWorker(q.workerRid)
-	if err != nil {
-		return fmt.Errorf("error selecting worker: %v", err)
-	}
-
-	// Update job status to running with worker ID and RID
-	job.WorkerID = worker.ID
-	job.WorkerRID = worker.RID
-	_, err = q.dbJob.UpdateJobInitial(job)
-	if err != nil {
-		return fmt.Errorf("error updating job status to running: %v", err)
 	}
 
 	log.Printf("Job added with ID %v", job.ID)

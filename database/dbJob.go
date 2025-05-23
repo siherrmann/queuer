@@ -2,11 +2,14 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"queuer/helper"
 	"queuer/model"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // JobDBHandlerFunctions defines the interface for Job database operations.
@@ -33,6 +36,7 @@ func NewJobDBHandler(dbConnection *helper.Database) (*JobDBHandler, error) {
 		db: dbConnection,
 	}
 
+	// TODO Remove table drop
 	err := jobDbHandler.DropTable()
 	if err != nil {
 		return nil, fmt.Errorf("error dropping job table: %#v", err)
@@ -209,8 +213,8 @@ func (r JobDBHandler) UpdateJob(job *model.Job) (*model.Job, error) {
 }
 
 // UpdateJobInitial updates an existing queued non locked job record in the database.
-func (r JobDBHandler) UpdateJobInitial(job *model.Job) (*model.Job, error) {
-	updatedJob := &model.Job{}
+// Checks if the job is in 'QUEUED' or 'FAILED' status and if the worker can handle the task.
+func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
 		`UPDATE job SET 
 			worker_id = $1,
@@ -221,8 +225,9 @@ func (r JobDBHandler) UpdateJobInitial(job *model.Job) (*model.Job, error) {
 		WHERE id = (
 			SELECT id FROM job 
 			WHERE 
-				status = 'QUEUED'
-				OR status = 'FAILED'
+				task_name = ANY($3::VARCHAR[])
+				AND (status = 'QUEUED'
+				OR status = 'FAILED')
 			ORDER BY created_at ASC
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
@@ -238,27 +243,31 @@ func (r JobDBHandler) UpdateJobInitial(job *model.Job) (*model.Job, error) {
 			attempts,
 			created_at,
 			updated_at;`,
-		job.WorkerID,
-		job.WorkerRID,
+		worker.ID,
+		worker.RID,
+		pq.Array(worker.AvailableTasks),
 	)
 
+	job := &model.Job{}
 	err := row.Scan(
-		&updatedJob.ID,
-		&updatedJob.RID,
-		&updatedJob.WorkerID,
-		&updatedJob.WorkerRID,
-		&updatedJob.TaskName,
-		&updatedJob.Parameters,
-		&updatedJob.Status,
-		&updatedJob.Attempts,
-		&updatedJob.CreatedAt,
-		&updatedJob.UpdatedAt,
+		&job.ID,
+		&job.RID,
+		&job.WorkerID,
+		&job.WorkerRID,
+		&job.TaskName,
+		&job.Parameters,
+		&job.Status,
+		&job.Attempts,
+		&job.CreatedAt,
+		&job.UpdatedAt,
 	)
-	if err != nil {
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("error updating initial job for worker id %v: %w", job.WorkerRID, err)
 	}
 
-	return updatedJob, nil
+	return job, nil
 }
 
 // DeleteJob deletes a job record from the database based on its RID.
