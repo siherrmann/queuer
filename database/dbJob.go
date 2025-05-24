@@ -18,7 +18,8 @@ type JobDBHandlerFunctions interface {
 	CreateTable() error
 	DropTable() error
 	InsertJob(job *model.Job) (*model.Job, error)
-	UpdateJob(job *model.Job) error
+	UpdateJobFinal(job *model.Job) (*model.Job, error)
+	UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 	DeleteJob(rid string) error
 	SelectJob(rid string) (*model.Job, error)
 	SelectAllJobs(workerRID string, lastID int, entries int) ([]*model.Job, error)
@@ -70,6 +71,7 @@ func (r JobDBHandler) CreateTable() error {
 			rid UUID UNIQUE DEFAULT gen_random_uuid(),
 			worker_id BIGINT DEFAULT 0,
 			worker_rid UUID DEFAULT NULL,
+			options JSONB DEFAULT '{}',
 			task_name VARCHAR(200) DEFAULT '',
 			parameters JSONB DEFAULT '{}',
 			status VARCHAR(50) DEFAULT 'QUEUED',
@@ -77,7 +79,13 @@ func (r JobDBHandler) CreateTable() error {
 			results JSONB DEFAULT '{}',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`,
+		);
+		
+		CREATE TABLE job_archive (
+			LIKE job INCLUDING DEFAULTS INCLUDING CONSTRAINTS
+		);
+		ALTER TABLE job_archive ADD PRIMARY KEY (id, updated_at);
+		SELECT create_hypertable('job_archive', by_range('updated_at'));`,
 	)
 	if err != nil {
 		log.Fatalf("error creating job table: %#v", err)
@@ -93,7 +101,7 @@ func (r JobDBHandler) CreateTable() error {
 		log.Fatalf("error creating notify trigger on job table: %#v", err)
 	}
 
-	err = r.db.CreateIndexes("job", "worker_rid", "status") // Indexes on common search/filter fields
+	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "updated_at") // Indexes on common search/filter fields
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,19 +129,21 @@ func (r JobDBHandler) DropTable() error {
 func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO job (task_name, parameters)
-			VALUES ($1, $2)
+		`INSERT INTO job (options, task_name, parameters)
+			VALUES ($1, $2, $3)
 		RETURNING
 			id,
 			rid,
 			worker_id,
 			worker_rid,
+			options,
 			task_name,
 			parameters,
 			status,
 			attempts,
 			created_at,
 			updated_at;`,
+		job.Options,
 		job.TaskName,
 		job.Parameters,
 	)
@@ -143,6 +153,7 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 		&newJob.RID,
 		&newJob.WorkerID,
 		&newJob.WorkerRID,
+		&newJob.Options,
 		&newJob.TaskName,
 		&newJob.Parameters,
 		&newJob.Status,
@@ -155,61 +166,6 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	}
 
 	return newJob, nil
-}
-
-// UpdateJob updates an existing job record in the database based on its RID.
-func (r JobDBHandler) UpdateJob(job *model.Job) (*model.Job, error) {
-	updatedJob := &model.Job{}
-	row := r.db.Instance.QueryRow(
-		`UPDATE
-			job
-		SET
-			worker_id = $1,
-			worker_rid = $2,
-			status = $3,
-			attempts = $4,
-			results = $5,
-			updated_at = CURRENT_TIMESTAMP
-		WHERE
-			id = $6
-		RETURNING
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			task_name,
-			parameters,
-			status,
-			attempts,
-			results,
-			created_at,
-			updated_at;`,
-		job.WorkerID,
-		job.WorkerRID,
-		job.Status,
-		job.Attempts,
-		job.Results,
-		job.ID,
-	)
-
-	err := row.Scan(
-		&updatedJob.ID,
-		&updatedJob.RID,
-		&updatedJob.WorkerID,
-		&updatedJob.WorkerRID,
-		&updatedJob.TaskName,
-		&updatedJob.Parameters,
-		&updatedJob.Status,
-		&updatedJob.Attempts,
-		&updatedJob.Results,
-		&updatedJob.CreatedAt,
-		&updatedJob.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error updating job with id %v: %w", job.RID, err)
-	}
-
-	return updatedJob, nil
 }
 
 // UpdateJobInitial updates an existing queued non locked job record in the database.
@@ -268,6 +224,77 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 	}
 
 	return job, nil
+}
+
+// UpdateJobFinal updates an existing job record in the database to state 'FAILED' or 'SUCCEEDED'.
+func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
+	row := r.db.Instance.QueryRow(
+		`WITH data_final AS (
+			DELETE FROM data
+			WHERE id = $1
+			RETURNING
+				id,
+				rid,
+				worker_id,
+				worker_rid,
+				options,
+				task_name,
+				parameters,
+				attempts,
+				created_at,
+				updated_at
+		)INSERT INTO job_archive (
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			$2,
+			attempts,
+			$3,
+			created_at,
+			updated_at
+		)
+		SELECT *
+		FROM data_final
+		RETURNING
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			attempts,
+			results,
+			created_at,
+			updated_at;`,
+		job.ID,
+		job.Status,
+		job.Results,
+	)
+
+	archivedJob := &model.Job{}
+	err := row.Scan(
+		&archivedJob.ID,
+		&archivedJob.RID,
+		&archivedJob.WorkerID,
+		&archivedJob.WorkerRID,
+		&archivedJob.TaskName,
+		&archivedJob.Parameters,
+		&archivedJob.Status,
+		&archivedJob.Attempts,
+		&archivedJob.CreatedAt,
+		&archivedJob.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error updating final job for worker id %v: %w", job.WorkerRID, err)
+	}
+
+	return archivedJob, nil
 }
 
 // DeleteJob deletes a job record from the database based on its RID.

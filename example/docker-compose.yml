@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  psql:
+    image: timescale/timescaledb:latest-pg17
+    environment:
+      POSTGRES_DB: ${QUEUER_DB_DATABASE}
+      POSTGRES_USER: ${QUEUER_DB_USERNAME}
+      POSTGRES_PASSWORD: ${QUEUER_DB_PASSWORD}
+    ports:
+      - "${QUEUER_DB_PORT}:5432"
+    volumes:
+      - psql_volume:/var/lib/postgresql/data
+
+volumes:
+  psql_volume:

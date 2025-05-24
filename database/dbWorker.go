@@ -18,7 +18,7 @@ type WorkerDBHandlerFunctions interface {
 	CreateTable() error
 	DropTable() error
 	InsertWorker(worker *model.Worker) (*model.Worker, error)
-	UpdateWorker(worker *model.Worker) error
+	UpdateWorker(worker *model.Worker) (*model.Worker, error)
 	DeleteWorker(rid uuid.UUID) error
 	SelectWorker(rid uuid.UUID) (*model.Worker, error)
 	SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error)
@@ -69,6 +69,7 @@ func (r WorkerDBHandler) CreateTable() error {
             rid UUID UNIQUE DEFAULT gen_random_uuid(),
             queue_name VARCHAR(200) DEFAULT '',
             name VARCHAR(100) DEFAULT '',
+			options JSONB DEFAULT '{}',
 			available_tasks VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
             status VARCHAR(50) DEFAULT 'RUNNING',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

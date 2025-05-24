@@ -14,8 +14,8 @@ type Queuer struct {
 	// Worker
 	worker *model.Worker
 	// DBs
-	dbJob    *database.JobDBHandler
-	dbWorker *database.WorkerDBHandler
+	dbJob    database.JobDBHandlerFunctions
+	dbWorker database.WorkerDBHandlerFunctions
 	// Job listeners
 	jobInsertListener *database.QueuerListener
 	jobUpdateListener *database.QueuerListener
@@ -40,11 +40,14 @@ func NewQueuer(workerQueue string, workerName string) *Queuer {
 	)
 
 	// DBs
-	dbJob, err := database.NewJobDBHandler(dbConnection)
+	var err error
+	var dbJob database.JobDBHandlerFunctions
+	var dbWorker database.WorkerDBHandlerFunctions
+	dbJob, err = database.NewJobDBHandler(dbConnection)
 	if err != nil {
 		log.Fatalf("failed to create job db handler: %v", err)
 	}
-	dbWorker, err := database.NewWorkerDBHandler(dbConnection)
+	dbWorker, err = database.NewWorkerDBHandler(dbConnection)
 	if err != nil {
 		log.Fatalf("failed to create worker db handler: %v", err)
 	}
@@ -192,7 +195,7 @@ func (q *Queuer) RunJob() error {
 	// Update job status to completed with results
 	job.Status = model.JobStatusSucceeded
 	job.Results = resultValues
-	job, err = q.dbJob.UpdateJob(job)
+	job, err = q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		return fmt.Errorf("error updating job status to completed: %v", err)
 	}
