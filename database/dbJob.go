@@ -81,11 +81,11 @@ func (r JobDBHandler) CreateTable() error {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		
-		CREATE TABLE job_archive (
-			LIKE job INCLUDING DEFAULTS INCLUDING CONSTRAINTS
+		CREATE TABLE IF NOT EXISTS job_archive (
+			LIKE job INCLUDING DEFAULTS INCLUDING CONSTRAINTS,
+			PRIMARY KEY (id, updated_at)
 		);
-		ALTER TABLE job_archive ADD PRIMARY KEY (id, updated_at);
-		SELECT create_hypertable('job_archive', by_range('updated_at'));`,
+		SELECT create_hypertable('job_archive', by_range('updated_at'), if_not_exists => TRUE);`,
 	)
 	if err != nil {
 		log.Fatalf("error creating job table: %#v", err)
@@ -117,6 +117,12 @@ func (r JobDBHandler) DropTable() error {
 
 	query := `DROP TABLE IF EXISTS job`
 	_, err := r.db.Instance.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("error dropping job table: %#v", err)
+	}
+
+	query = `DROP TABLE IF EXISTS job_archive`
+	_, err = r.db.Instance.ExecContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("error dropping job table: %#v", err)
 	}
@@ -229,8 +235,8 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 // UpdateJobFinal updates an existing job record in the database to state 'FAILED' or 'SUCCEEDED'.
 func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
-		`WITH data_final AS (
-			DELETE FROM data
+		`WITH jobs_old AS (
+			DELETE FROM job
 			WHERE id = $1
 			RETURNING
 				id,
@@ -243,7 +249,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 				attempts,
 				created_at,
 				updated_at
-		)INSERT INTO job_archive (
+		) INSERT INTO job_archive (
 			id,
 			rid,
 			worker_id,
@@ -251,14 +257,26 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			options,
 			task_name,
 			parameters,
-			$2,
+			status,
 			attempts,
-			$3,
+			results,
 			created_at,
 			updated_at
 		)
-		SELECT *
-		FROM data_final
+		SELECT
+			jobs_old.id,
+			jobs_old.rid,
+			jobs_old.worker_id,
+			jobs_old.worker_rid,
+			jobs_old.options,
+			jobs_old.task_name,
+			jobs_old.parameters,
+			$2, -- This is your 'status' parameter
+			jobs_old.attempts,
+			$3, -- This is your 'results' parameter
+			jobs_old.created_at,
+			jobs_old.updated_at
+		FROM jobs_old
 		RETURNING
 			id,
 			rid,
@@ -283,10 +301,12 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 		&archivedJob.RID,
 		&archivedJob.WorkerID,
 		&archivedJob.WorkerRID,
+		&archivedJob.Options,
 		&archivedJob.TaskName,
 		&archivedJob.Parameters,
 		&archivedJob.Status,
 		&archivedJob.Attempts,
+		&archivedJob.Results,
 		&archivedJob.CreatedAt,
 		&archivedJob.UpdatedAt,
 	)

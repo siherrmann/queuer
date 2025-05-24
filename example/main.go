@@ -45,7 +45,7 @@ const (
 // Simple example task function
 func MyTask(param1 int, param2 string) (int, error) {
 	// Simulate some work
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	// Example for some error handling
 	param2Int, err := strconv.Atoi(param2)
