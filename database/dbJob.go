@@ -18,8 +18,8 @@ type JobDBHandlerFunctions interface {
 	CreateTable() error
 	DropTable() error
 	InsertJob(job *model.Job) (*model.Job, error)
-	UpdateJobFinal(job *model.Job) (*model.Job, error)
 	UpdateJobInitial(worker *model.Worker) (*model.Job, error)
+	UpdateJobFinal(job *model.Job) (*model.Job, error)
 	DeleteJob(rid string) error
 	SelectJob(rid string) (*model.Job, error)
 	SelectAllJobs(workerRID string, lastID int, entries int) ([]*model.Job, error)

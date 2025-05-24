@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"queuer/core"
 	"queuer/database"
 	"queuer/helper"
 	"queuer/model"
@@ -168,36 +169,30 @@ func (q *Queuer) RunJob() error {
 		return nil
 	}
 
-	if len(job.Parameters) != len(q.tasks[job.TaskName].InputParameters) {
-		return fmt.Errorf("task %s requires %d parameters, got %d", job.TaskName, len(q.tasks[job.TaskName].InputParameters), len(job.Parameters))
-	}
-
-	task := q.tasks[job.TaskName]
-	taskFunc := reflect.ValueOf(task.Task)
-	for i, param := range job.Parameters {
-		// Convert json float to int if the parameter is int
-		if task.InputParameters[i].Kind() == reflect.Int && reflect.TypeOf(param).Kind() == reflect.Float64 {
-			job.Parameters[i] = int(param.(float64))
-		} else if task.InputParameters[i].Kind() != reflect.TypeOf(param).Kind() {
-			return fmt.Errorf("parameter %d of task %s must be of type %s, got %s", i, job.TaskName, task.InputParameters[i].Kind(), reflect.TypeOf(param).Kind())
-		}
-	}
-
 	log.Printf("Job added with ID %v", job.ID)
 
-	// Run the task function with the parameters
-	results := taskFunc.Call(job.Parameters.ToReflectValues())
-	resultValues := []interface{}{}
-	for _, result := range results {
-		resultValues = append(resultValues, result.Interface())
-	}
+	// At this point the task should be available in the queuer
+	task := q.tasks[job.TaskName]
 
-	// Update job status to completed with results
-	job.Status = model.JobStatusSucceeded
-	job.Results = resultValues
-	job, err = q.dbJob.UpdateJobFinal(job)
+	// Run job and update job status to completed with results
+	runner, err := core.NewRunner(task, job)
 	if err != nil {
-		return fmt.Errorf("error updating job status to completed: %v", err)
+		return fmt.Errorf("error creating runner: %v", err)
+	}
+	resultValues, err := runner.Run()
+	if err != nil {
+		job.Status = model.JobStatusFailed
+		job, err = q.dbJob.UpdateJobFinal(job)
+		if err != nil {
+			return fmt.Errorf("error updating job status to failed: %v", err)
+		}
+	} else {
+		job.Status = model.JobStatusSucceeded
+		job.Results = resultValues
+		job, err = q.dbJob.UpdateJobFinal(job)
+		if err != nil {
+			return fmt.Errorf("error updating job status to succeeded: %v", err)
+		}
 	}
 
 	log.Printf("Job finished with ID %v", job.ID)
