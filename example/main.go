@@ -33,7 +33,13 @@ func main() {
 
 	// Example adding a job with options
 	// This job will timeout after 0.1 seconds
-	_, err := q.AddJobWithOptions(MyTask, &model.Options{Timeout: 0.1}, 5, "12")
+	options := &model.Options{
+		Timeout:      0.1,
+		RetryDelay:   1,
+		RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+		MaxRetries:   3,
+	}
+	_, err := q.AddJobWithOptions(MyTask, options, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job: %v", err)
 	}

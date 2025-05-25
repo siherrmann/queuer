@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"queuer/helper"
 	"reflect"
 )
 
@@ -12,7 +13,12 @@ type Task struct {
 	OutputParameters []reflect.Type
 }
 
-func NewTask(taskName string, task interface{}) (*Task, error) {
+func NewTask(task interface{}) (*Task, error) {
+	taskName, err := helper.GetFunctionName(task)
+	if err != nil {
+		return nil, fmt.Errorf("error getting task name: %v", err)
+	}
+
 	if len(taskName) == 0 || len(taskName) > 100 {
 		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
 	}
