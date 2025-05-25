@@ -28,7 +28,7 @@ type Queuer struct {
 	log *log.Logger
 }
 
-func NewQueuer(workerQueue string, workerName string) *Queuer {
+func NewQueuer(name string) *Queuer {
 	// Logger
 	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
 
@@ -75,8 +75,7 @@ func NewQueuer(workerQueue string, workerName string) *Queuer {
 
 	// Inserting worker
 	worker, err := dbWorker.InsertWorker(&model.Worker{
-		QueueName: workerQueue,
-		Name:      workerName,
+		Name: name,
 	})
 	if err != nil {
 		logger.Fatalf("failed to insert worker: %v", err)
@@ -97,7 +96,7 @@ func NewQueuer(workerQueue string, workerName string) *Queuer {
 
 func (q *Queuer) Start() {
 	if q.dbJob == nil || q.dbWorker == nil || q.jobInsertListener == nil || q.jobUpdateListener == nil || q.jobDeleteListener == nil {
-		log.Fatal("worker is not initialized properly")
+		q.log.Fatalln("worker is not initialized properly")
 	}
 
 	go func() {
@@ -164,6 +163,8 @@ func (q *Queuer) AddJob(taskName string, parameters ...interface{}) (*model.Job,
 		return nil, err
 	}
 
+	q.log.Printf("Job added with RID %v", job.RID)
+
 	return job, nil
 }
 
@@ -178,6 +179,8 @@ func (q *Queuer) AddJobWithOptions(taskName string, options *model.Options, para
 		return nil, err
 	}
 
+	q.log.Printf("Job with options added with RID %v", job.RID)
+
 	return job, nil
 }
 
@@ -190,7 +193,7 @@ func (q *Queuer) RunJob() error {
 		return nil
 	}
 
-	q.log.Printf("Job added with RID %v", job.RID)
+	q.log.Printf("Running with RID %v", job.RID)
 
 	// At this point the task should be available in the queuer
 	task := q.tasks[job.TaskName]

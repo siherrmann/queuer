@@ -65,22 +65,21 @@ func (r WorkerDBHandler) CreateTable() error {
 	_, err := r.db.Instance.ExecContext(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS worker (
-            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            rid UUID UNIQUE DEFAULT gen_random_uuid(),
-            queue_name VARCHAR(200) DEFAULT '',
-            name VARCHAR(100) DEFAULT '',
+			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			rid UUID UNIQUE DEFAULT gen_random_uuid(),
+			name VARCHAR(100) DEFAULT '',
 			options JSONB DEFAULT '{}',
 			available_tasks VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
-            status VARCHAR(50) DEFAULT 'RUNNING',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
+			status VARCHAR(50) DEFAULT 'RUNNING',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	)
 	if err != nil {
 		log.Fatalf("error creating worker table: %#v", err)
 	}
 
-	err = r.db.CreateIndexes("worker", "queue_name", "name", "status")
+	err = r.db.CreateIndexes("worker", "name", "status")
 	if err != nil {
 		r.db.Logger.Fatal(err)
 	}
@@ -109,18 +108,16 @@ func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, erro
 	newWorker := &model.Worker{}
 
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO worker (queue_name, name)
-            VALUES ($1, $2)
-        RETURNING
-            id, rid, queue_name, name, status, created_at, updated_at`,
-		worker.QueueName,
+		`INSERT INTO worker (name)
+			VALUES ($1)
+		RETURNING
+			id, rid, name, status, created_at, updated_at`,
 		worker.Name,
 	)
 
 	err := row.Scan(
 		&newWorker.ID,
 		&newWorker.RID,
-		&newWorker.QueueName,
 		&newWorker.Name,
 		&newWorker.Status,
 		&newWorker.CreatedAt,
@@ -137,25 +134,22 @@ func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, erro
 func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, error) {
 	row := r.db.Instance.QueryRow(
 		`UPDATE
-            worker
-        SET
-            queue_name = $1,
-            name = $2,
-			available_tasks = $3,
-            status = $4,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE
-            rid = $5
+			worker
+		SET
+			name = $1,
+			available_tasks = $2,
+			status = $3,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE
+			rid = $4
 		RETURNING
 			id,
 			rid,
-			queue_name,
 			name,
 			available_tasks,
 			status,
 			created_at,
 			updated_at;`,
-		worker.QueueName,
 		worker.Name,
 		pq.Array(worker.AvailableTasks),
 		worker.Status,
@@ -166,7 +160,6 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 	err := row.Scan(
 		&updatedWorker.ID,
 		&updatedWorker.RID,
-		&updatedWorker.QueueName,
 		&updatedWorker.Name,
 		pq.Array(&updatedWorker.AvailableTasks),
 		&updatedWorker.Status,
@@ -184,7 +177,7 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 	_, err := r.db.Instance.Exec(
 		`DELETE FROM worker
-        WHERE rid = $1`,
+		WHERE rid = $1`,
 		rid,
 	)
 	if err != nil {
@@ -200,24 +193,22 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 
 	row := r.db.Instance.QueryRow(
 		`SELECT
-            id,
-            rid,
-            queue_name,
-            name,
+			id,
+			rid,
+			name,
 			available_tasks,
-            status,
-            created_at,
-            updated_at
-        FROM
-            worker
-        WHERE
-            rid = $1`,
+			status,
+			created_at,
+			updated_at
+		FROM
+			worker
+		WHERE
+			rid = $1`,
 		rid,
 	)
 	err := row.Scan(
 		&worker.ID,
 		&worker.RID,
-		&worker.QueueName,
 		&worker.Name,
 		pq.Array(&worker.AvailableTasks),
 		&worker.Status,
@@ -234,27 +225,26 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 
 	rows, err := r.db.Instance.Query(
 		`SELECT
-            id,
-            rid,
-            queue_name,
-            name,
+			id,
+			rid,
+			name,
 			available_tasks,
-            status,
-            created_at,
-            updated_at
-        FROM
-            worker
-        WHERE (0 = $1
-            OR created_at < (
-                SELECT
-                    d.created_at
-                FROM
-                    worker AS d
-                WHERE
-                    d.id = $1))
-        ORDER BY
-            created_at DESC
-        LIMIT $2`,
+			status,
+			created_at,
+			updated_at
+		FROM
+			worker
+		WHERE (0 = $1
+			OR created_at < (
+				SELECT
+					d.created_at
+				FROM
+					worker AS d
+				WHERE
+					d.id = $1))
+		ORDER BY
+			created_at DESC
+		LIMIT $2`,
 		lastID,
 		entries,
 	)
@@ -269,7 +259,6 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 		err := rows.Scan(
 			&worker.ID,
 			&worker.RID,
-			&worker.QueueName,
 			&worker.Name,
 			pq.Array(&worker.AvailableTasks),
 			&worker.Status,
@@ -295,31 +284,29 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 	var workers []*model.Worker
 
 	rows, err := r.db.Instance.Query(`
-        SELECT
-            id,
-            rid,
-            queue_name,
-            name,
+		SELECT
+			id,
+			rid,
+			name,
 			available_tasks,
-            status,
-            created_at,
-            updated_at
-        FROM worker
-        WHERE (queue_name ILIKE '%' || $1 || '%'
-                OR name ILIKE '%' || $1 || '%'
+			status,
+			created_at,
+			updated_at
+		FROM worker
+		WHERE (name ILIKE '%' || $1 || '%'
 				OR array_to_string(available_tasks, ',') ILIKE '%' || $1 || '%'
-                OR status ILIKE '%' || $1 || '%')
-            AND (0 = $2
-                OR created_at < (
-                    SELECT
-                        u.created_at
-                    FROM
-                        worker AS u
-                    WHERE
-                        u.id = $2))
-        ORDER BY
-            created_at DESC
-        LIMIT $3`,
+				OR status ILIKE '%' || $1 || '%')
+			AND (0 = $2
+				OR created_at < (
+					SELECT
+						u.created_at
+					FROM
+						worker AS u
+					WHERE
+						u.id = $2))
+		ORDER BY
+			created_at DESC
+		LIMIT $3`,
 		search,
 		lastID,
 		entries,
@@ -335,7 +322,6 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 		err := rows.Scan(
 			&worker.ID,
 			&worker.RID,
-			&worker.QueueName,
 			&worker.Name,
 			pq.Array(&worker.AvailableTasks),
 			&worker.Status,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"queuer"
 	"queuer/model"
@@ -9,8 +10,12 @@ import (
 )
 
 func main() {
+	// Context with cancel to manage the lifecycle of the example
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Example usage of the Queuer package
-	q := queuer.NewQueuer("exampleQueue", "exampleWorker")
+	q := queuer.NewQueuer("exampleWorker")
 
 	// Add the task to the queuer
 	q.AddTask(myTask, MyTask)
@@ -18,18 +23,24 @@ func main() {
 	// Start the queuer
 	q.Start()
 
-	// Example of how to add a task with parameters
+	// Example adding multiple jobs to the queue
 	for i := 0; i < 10; i++ {
-		_, err := q.AddJob(myTask, 5, "10")
+		_, err := q.AddJob(myTask, []interface{}{5, "10"}...)
 		if err != nil {
 			log.Fatalf("Error adding job: %v", err)
 		}
 	}
 
+	// Example adding a job with options
+	// This job will timeout after 0.1 seconds
 	_, err := q.AddJobWithOptions(myTask, &model.Options{Timeout: 0.1}, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job: %v", err)
 	}
+
+	// Wait for a while to let the jobs process
+	<-ctx.Done()
+	log.Println("All jobs processed, exiting...")
 }
 
 const (
