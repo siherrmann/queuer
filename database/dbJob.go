@@ -72,7 +72,7 @@ func (r JobDBHandler) CreateTable() error {
 			worker_id BIGINT DEFAULT 0,
 			worker_rid UUID DEFAULT NULL,
 			options JSONB DEFAULT '{}',
-			task_name VARCHAR(200) DEFAULT '',
+			task_name VARCHAR(100) DEFAULT '',
 			parameters JSONB DEFAULT '{}',
 			status VARCHAR(50) DEFAULT 'QUEUED',
 			attempts INT DEFAULT 0,

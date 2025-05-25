@@ -18,14 +18,14 @@ func main() {
 	q := queuer.NewQueuer("exampleWorker")
 
 	// Add the task to the queuer
-	q.AddTask(myTask, MyTask)
+	q.AddTask(MyTask)
 
 	// Start the queuer
 	q.Start()
 
 	// Example adding multiple jobs to the queue
 	for i := 0; i < 10; i++ {
-		_, err := q.AddJob(myTask, []interface{}{5, "10"}...)
+		_, err := q.AddJob(MyTask, []interface{}{5, "10"}...)
 		if err != nil {
 			log.Fatalf("Error adding job: %v", err)
 		}
@@ -33,7 +33,7 @@ func main() {
 
 	// Example adding a job with options
 	// This job will timeout after 0.1 seconds
-	_, err := q.AddJobWithOptions(myTask, &model.Options{Timeout: 0.1}, 5, "12")
+	_, err := q.AddJobWithOptions(MyTask, &model.Options{Timeout: 0.1}, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job: %v", err)
 	}
@@ -42,10 +42,6 @@ func main() {
 	<-ctx.Done()
 	log.Println("All jobs processed, exiting...")
 }
-
-const (
-	myTask = "myTask"
-)
 
 // Simple example task function
 func MyTask(param1 int, param2 string) (int, error) {

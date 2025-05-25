@@ -9,7 +9,6 @@ import (
 	"queuer/database"
 	"queuer/helper"
 	"queuer/model"
-	"reflect"
 )
 
 type Queuer struct {
@@ -74,11 +73,14 @@ func NewQueuer(name string) *Queuer {
 	}
 
 	// Inserting worker
-	worker, err := dbWorker.InsertWorker(&model.Worker{
-		Name: name,
-	})
+	newWorker, err := model.NewWorker(name, 10)
 	if err != nil {
-		logger.Fatalf("failed to insert worker: %v", err)
+		logger.Fatalf("error creating new worker: %v", err)
+	}
+
+	worker, err := dbWorker.InsertWorker(newWorker)
+	if err != nil {
+		logger.Fatalf("error inserting worker: %v", err)
 	}
 	logger.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
 
@@ -103,12 +105,12 @@ func (q *Queuer) Start() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) error {
+		go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
+			log.Printf("Received job insert event: %s", data)
 			err := q.RunJob()
 			if err != nil {
-				return fmt.Errorf("error running job: %v", err)
+				q.log.Printf("error running job: %v", err)
 			}
-			return nil
 		})
 
 		// go q.jobUpdateListener.ListenToEvents(ctx, cancel)
@@ -121,46 +123,41 @@ func (q *Queuer) Start() {
 	}()
 }
 
-func (q *Queuer) AddTask(taskName string, task interface{}) {
-	if reflect.ValueOf(task).Kind() != reflect.Func {
-		q.log.Fatalf("task must be a function, got %s", reflect.TypeOf(task).Kind())
+func (q *Queuer) AddTask(task interface{}) {
+	taskName, err := helper.GetFunctionName(task)
+	if err != nil {
+		q.log.Fatalf("error getting task name: %v", err)
 	}
 
-	inputParameters := []reflect.Type{}
-	inputCount := reflect.TypeOf(task).NumIn()
-	for i := 0; i < inputCount; i++ {
-		inputParameters = append(inputParameters, reflect.TypeOf(task).In(i))
+	newTask, err := model.NewTask(taskName, task)
+	if err != nil {
+		q.log.Fatalf("error creating new task: %v", err)
 	}
 
-	outputParameters := []reflect.Type{}
-	outputCount := reflect.TypeOf(task).NumOut()
-	for i := 0; i < outputCount; i++ {
-		outputParameters = append(outputParameters, reflect.TypeOf(task).Out(i))
-	}
-
-	q.tasks[taskName] = &model.Task{
-		Task:             task,
-		Name:             taskName,
-		InputParameters:  inputParameters,
-		OutputParameters: outputParameters,
-	}
-	q.worker.AvailableTasks = append(q.worker.AvailableTasks, taskName)
+	q.tasks[taskName] = newTask
+	q.worker.AvailableTasks = append(q.worker.AvailableTasks, newTask.Name)
 
 	// Update worker in DB
-	_, err := q.dbWorker.UpdateWorker(q.worker)
+	_, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		q.log.Fatalf("failed to update worker: %v", err)
+		q.log.Fatalf("error updating worker: %v", err)
 	}
 }
 
-func (q *Queuer) AddJob(taskName string, parameters ...interface{}) (*model.Job, error) {
-	newJob := &model.Job{
-		TaskName:   taskName,
-		Parameters: parameters,
+func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
+	taskName, err := helper.GetFunctionName(task)
+	if err != nil {
+		return nil, fmt.Errorf("error getting task name: %v", err)
 	}
+
+	newJob, err := model.NewJob(taskName, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating job: %v", err)
+	}
+
 	job, err := q.dbJob.InsertJob(newJob)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error inserting job: %v", err)
 	}
 
 	q.log.Printf("Job added with RID %v", job.RID)
@@ -168,12 +165,17 @@ func (q *Queuer) AddJob(taskName string, parameters ...interface{}) (*model.Job,
 	return job, nil
 }
 
-func (q *Queuer) AddJobWithOptions(taskName string, options *model.Options, parameters ...interface{}) (*model.Job, error) {
-	newJob := &model.Job{
-		TaskName:   taskName,
-		Options:    options,
-		Parameters: parameters,
+func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
+	taskName, err := helper.GetFunctionName(task)
+	if err != nil {
+		return nil, fmt.Errorf("error getting task name: %v", err)
 	}
+
+	newJob, err := model.NewJobWithOptions(taskName, options, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating job: %v", err)
+	}
+
 	job, err := q.dbJob.InsertJob(newJob)
 	if err != nil {
 		return nil, err
@@ -193,24 +195,20 @@ func (q *Queuer) RunJob() error {
 		return nil
 	}
 
-	q.log.Printf("Running with RID %v", job.RID)
-
-	// At this point the task should be available in the queuer
-	task := q.tasks[job.TaskName]
+	q.log.Printf("Running job with RID %v", job.RID)
 
 	// Run job and update job status to completed with results
+	// TODO At this point the task should be available in the queuer,
+	// but we should probably still check if the task is available?
+	task := q.tasks[job.TaskName]
 	runner, err := core.NewRunner(task, job)
 	if err != nil {
-		return fmt.Errorf("error creating runner: %v", err)
+		q.FailJob(job, fmt.Errorf("error creating runner: %v", err))
 	}
+
 	resultValues, err := runner.Run()
 	if err != nil {
-		job.Status = model.JobStatusFailed
-		job, err = q.dbJob.UpdateJobFinal(job)
-		if err != nil {
-			return fmt.Errorf("error updating job status to failed: %v", err)
-		}
-		q.log.Printf("Job failed with RID %v", job.RID)
+		q.FailJob(job, err)
 	} else {
 		job.Status = model.JobStatusSucceeded
 		job.Results = resultValues
@@ -222,4 +220,16 @@ func (q *Queuer) RunJob() error {
 	}
 
 	return nil
+}
+
+func (q *Queuer) FailJob(job *model.Job, jobErr error) {
+	// TODO add big retry for the job itself
+	job.Status = model.JobStatusFailed
+	job.Error = jobErr.Error()
+	_, err := q.dbJob.UpdateJobFinal(job)
+	if err != nil {
+		// TODO probably add retry for updating job to failed
+		q.log.Printf("error updating job status to failed: %v", err)
+	}
+	q.log.Printf("Job failed with RID %v", job.RID)
 }

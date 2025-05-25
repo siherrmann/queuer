@@ -18,6 +18,8 @@ type Options struct {
 	RetryBackoff string  `json:"retry_backoff"`
 }
 
+// TODO add NewOptions function
+
 func (c Options) Value() (driver.Value, error) {
 	return c.Marshal()
 }

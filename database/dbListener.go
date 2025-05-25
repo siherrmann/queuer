@@ -36,7 +36,7 @@ func NewQueuerListener(dbConfig *helper.DatabaseConfiguration, channel string) (
 }
 
 // ListenToEvents listens for events on the specified channel and processes them.
-func (l *QueuerListener) ListenToEvents(ctx context.Context, cancel context.CancelFunc, notifyFunction func(data string) error) {
+func (l *QueuerListener) ListenToEvents(ctx context.Context, cancel context.CancelFunc, notifyFunction func(data string)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -44,15 +44,12 @@ func (l *QueuerListener) ListenToEvents(ctx context.Context, cancel context.Canc
 			l.Listener.Close()
 			return
 		case n := <-l.Listener.Notify:
-			err := notifyFunction(n.Extra)
-			if err != nil {
-				log.Printf("Error processing %v: %v", n.Channel, err)
-			}
+			go notifyFunction(n.Extra)
 		case <-time.After(90 * time.Second):
 			// Checking connection all 90 seconds
 			err := l.Listener.Ping()
 			if err != nil {
-				fmt.Println("Error pinging listener: ", err)
+				log.Println("Error pinging listener: ", err)
 				cancel()
 				return
 			}
