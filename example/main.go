@@ -1,41 +1,35 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
 	"queuer"
+	"queuer/model"
 	"strconv"
 	"time"
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Example usage of the Queuer package
-	worker := queuer.NewQueuer("exampleQueue", "exampleWorker")
+	q := queuer.NewQueuer("exampleQueue", "exampleWorker")
 
 	// Add the task to the queuer
-	worker.AddTask(myTask, MyTask)
+	q.AddTask(myTask, MyTask)
 
 	// Start the queuer
-	worker.Start()
+	q.Start()
 
 	// Example of how to add a task with parameters
-	// IMPORTANT: This is not ensuring a correct order of execution,
-	// normally you would use AddJob without concurrency.
 	for i := 0; i < 10; i++ {
-		go func() {
-			_, err := worker.AddJob(myTask, 5, "10")
-			if err != nil {
-				log.Fatalf("Error adding job: %v", err)
-			}
-		}()
+		_, err := q.AddJob(myTask, 5, "10")
+		if err != nil {
+			log.Fatalf("Error adding job: %v", err)
+		}
 	}
 
-	<-ctx.Done()
-	fmt.Println("Example is done")
+	_, err := q.AddJobWithOptions(myTask, &model.Options{Timeout: 0.1}, 5, "12")
+	if err != nil {
+		log.Fatalf("Error adding job: %v", err)
+	}
 }
 
 const (
@@ -45,7 +39,7 @@ const (
 // Simple example task function
 func MyTask(param1 int, param2 string) (int, error) {
 	// Simulate some work
-	time.Sleep(1000 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	// Example for some error handling
 	param2Int, err := strconv.Atoi(param2)

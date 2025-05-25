@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"queuer/core"
 	"queuer/database"
 	"queuer/helper"
@@ -23,9 +24,14 @@ type Queuer struct {
 	jobDeleteListener *database.QueuerListener
 	// Tasks
 	tasks map[string]*model.Task
+	// Logger
+	log *log.Logger
 }
 
 func NewQueuer(workerQueue string, workerName string) *Queuer {
+	// Logger
+	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
+
 	dbConfig := &helper.DatabaseConfiguration{
 		Host:     helper.GetEnvVariableWithoutDelete("QUEUER_DB_HOST"),
 		Port:     helper.GetEnvVariableWithoutDelete("QUEUER_DB_PORT"),
@@ -46,25 +52,25 @@ func NewQueuer(workerQueue string, workerName string) *Queuer {
 	var dbWorker database.WorkerDBHandlerFunctions
 	dbJob, err = database.NewJobDBHandler(dbConnection)
 	if err != nil {
-		log.Fatalf("failed to create job db handler: %v", err)
+		logger.Fatalf("failed to create job db handler: %v", err)
 	}
 	dbWorker, err = database.NewWorkerDBHandler(dbConnection)
 	if err != nil {
-		log.Fatalf("failed to create worker db handler: %v", err)
+		logger.Fatalf("failed to create worker db handler: %v", err)
 	}
 
 	// Job listeners
 	jobInsertListener, err := database.NewQueuerListener(dbConfig, "job.INSERT")
 	if err != nil {
-		log.Fatalf("failed to create job insert listener: %v", err)
+		logger.Fatalf("failed to create job insert listener: %v", err)
 	}
 	jobUpdateListener, err := database.NewQueuerListener(dbConfig, "job.UPDATE")
 	if err != nil {
-		log.Fatalf("failed to create job update listener: %v", err)
+		logger.Fatalf("failed to create job update listener: %v", err)
 	}
 	jobDeleteListener, err := database.NewQueuerListener(dbConfig, "job.DELETE")
 	if err != nil {
-		log.Fatalf("failed to create job delete listener: %v", err)
+		logger.Fatalf("failed to create job delete listener: %v", err)
 	}
 
 	// Inserting worker
@@ -73,9 +79,9 @@ func NewQueuer(workerQueue string, workerName string) *Queuer {
 		Name:      workerName,
 	})
 	if err != nil {
-		log.Fatalf("failed to insert worker: %v", err)
+		logger.Fatalf("failed to insert worker: %v", err)
 	}
-	log.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
+	logger.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
 
 	return &Queuer{
 		worker:            worker,
@@ -85,6 +91,7 @@ func NewQueuer(workerQueue string, workerName string) *Queuer {
 		jobUpdateListener: jobUpdateListener,
 		jobDeleteListener: jobDeleteListener,
 		tasks:             map[string]*model.Task{},
+		log:               logger,
 	}
 }
 
@@ -108,16 +115,16 @@ func (q *Queuer) Start() {
 		// go q.jobUpdateListener.ListenToEvents(ctx, cancel)
 		// go q.jobDeleteListener.ListenToEvents(ctx, cancel)
 
-		fmt.Println("Queuer started")
+		q.log.Println("Queuer started")
 
 		<-ctx.Done()
-		fmt.Println("Queuer stopped")
+		q.log.Println("Queuer stopped")
 	}()
 }
 
 func (q *Queuer) AddTask(taskName string, task interface{}) {
 	if reflect.ValueOf(task).Kind() != reflect.Func {
-		log.Fatalf("task must be a function, got %s", reflect.TypeOf(task).Kind())
+		q.log.Fatalf("task must be a function, got %s", reflect.TypeOf(task).Kind())
 	}
 
 	inputParameters := []reflect.Type{}
@@ -143,13 +150,27 @@ func (q *Queuer) AddTask(taskName string, task interface{}) {
 	// Update worker in DB
 	_, err := q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		log.Fatalf("failed to update worker: %v", err)
+		q.log.Fatalf("failed to update worker: %v", err)
 	}
 }
 
 func (q *Queuer) AddJob(taskName string, parameters ...interface{}) (*model.Job, error) {
 	newJob := &model.Job{
 		TaskName:   taskName,
+		Parameters: parameters,
+	}
+	job, err := q.dbJob.InsertJob(newJob)
+	if err != nil {
+		return nil, err
+	}
+
+	return job, nil
+}
+
+func (q *Queuer) AddJobWithOptions(taskName string, options *model.Options, parameters ...interface{}) (*model.Job, error) {
+	newJob := &model.Job{
+		TaskName:   taskName,
+		Options:    options,
 		Parameters: parameters,
 	}
 	job, err := q.dbJob.InsertJob(newJob)
@@ -169,7 +190,7 @@ func (q *Queuer) RunJob() error {
 		return nil
 	}
 
-	log.Printf("Job added with ID %v", job.ID)
+	q.log.Printf("Job added with RID %v", job.RID)
 
 	// At this point the task should be available in the queuer
 	task := q.tasks[job.TaskName]
@@ -186,6 +207,7 @@ func (q *Queuer) RunJob() error {
 		if err != nil {
 			return fmt.Errorf("error updating job status to failed: %v", err)
 		}
+		q.log.Printf("Job failed with RID %v", job.RID)
 	} else {
 		job.Status = model.JobStatusSucceeded
 		job.Results = resultValues
@@ -193,9 +215,8 @@ func (q *Queuer) RunJob() error {
 		if err != nil {
 			return fmt.Errorf("error updating job status to succeeded: %v", err)
 		}
+		q.log.Printf("Job succeeded with RID %v", job.RID)
 	}
-
-	log.Printf("Job finished with ID %v", job.ID)
 
 	return nil
 }

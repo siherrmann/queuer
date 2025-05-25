@@ -77,6 +77,7 @@ func (r JobDBHandler) CreateTable() error {
 			status VARCHAR(50) DEFAULT 'QUEUED',
 			attempts INT DEFAULT 0,
 			results JSONB DEFAULT '{}',
+			error TEXT DEFAULT '',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
@@ -199,6 +200,7 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 			rid,
 			worker_id,
 			worker_rid,
+			options,
 			task_name,
 			parameters,
 			status,
@@ -216,6 +218,7 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 		&job.RID,
 		&job.WorkerID,
 		&job.WorkerRID,
+		&job.Options,
 		&job.TaskName,
 		&job.Parameters,
 		&job.Status,
@@ -260,6 +263,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			status,
 			attempts,
 			results,
+			error,
 			created_at,
 			updated_at
 		)
@@ -271,9 +275,10 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			jobs_old.options,
 			jobs_old.task_name,
 			jobs_old.parameters,
-			$2, -- This is your 'status' parameter
+			$2,
 			jobs_old.attempts,
-			$3, -- This is your 'results' parameter
+			$3,
+			$4,
 			jobs_old.created_at,
 			jobs_old.updated_at
 		FROM jobs_old
@@ -288,11 +293,13 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			status,
 			attempts,
 			results,
+			error,
 			created_at,
 			updated_at;`,
 		job.ID,
 		job.Status,
 		job.Results,
+		job.Error,
 	)
 
 	archivedJob := &model.Job{}
@@ -307,6 +314,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 		&archivedJob.Status,
 		&archivedJob.Attempts,
 		&archivedJob.Results,
+		&archivedJob.Error,
 		&archivedJob.CreatedAt,
 		&archivedJob.UpdatedAt,
 	)
@@ -340,11 +348,13 @@ func (r JobDBHandler) SelectJob(rid string) (*model.Job, error) {
 			rid,
 			worker_id,
 			worker_rid,
+			options,
 			task_name,
 			parameters,
 			status,
 			attempts,
 			results,
+			error,
 			created_at,
 			updated_at
 		FROM
@@ -358,11 +368,13 @@ func (r JobDBHandler) SelectJob(rid string) (*model.Job, error) {
 		&job.RID,
 		&job.WorkerID,
 		&job.WorkerRID,
+		&job.Options,
 		&job.TaskName,
 		&job.Parameters,
 		&job.Status,
 		&job.Attempts,
 		&job.Results,
+		&job.Error,
 		&job.CreatedAt,
 		&job.UpdatedAt,
 	)
@@ -383,11 +395,13 @@ func (r JobDBHandler) SelectAllJobs(workerRID string, lastID int, entries int) (
 			rid,
 			worker_id,
 			worker_rid,
+			options,
 			task_name,
 			parameters,
 			status,
 			attempts,
 			results,
+			error,
 			created_at,
 			updated_at
 		FROM
@@ -421,11 +435,13 @@ func (r JobDBHandler) SelectAllJobs(workerRID string, lastID int, entries int) (
 			&job.RID,
 			&job.WorkerID,
 			&job.WorkerRID,
+			&job.Options,
 			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
 			&job.Attempts,
 			&job.Results,
+			&job.Error,
 			&job.CreatedAt,
 			&job.UpdatedAt,
 		)
@@ -450,11 +466,13 @@ func (r JobDBHandler) SelectAllJobsBySearch(workerRID string, search string, las
 			rid,
 			worker_id,
 			worker_rid,
+			options,
 			task_name,
 			parameters,
 			status,
 			attempts,
 			results,
+			error,
 			created_at,
 			updated_at
 		FROM job
@@ -492,11 +510,13 @@ func (r JobDBHandler) SelectAllJobsBySearch(workerRID string, search string, las
 			&job.RID,
 			&job.WorkerID,
 			&job.WorkerRID,
+			&job.Options,
 			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
 			&job.Attempts,
 			&job.Results,
+			&job.Error,
 			&job.CreatedAt,
 			&job.UpdatedAt,
 		)

@@ -60,12 +60,13 @@ type Job struct {
 	RID        uuid.UUID  `json:"rid"`
 	WorkerID   int        `json:"worker_id"`
 	WorkerRID  uuid.UUID  `json:"worker_rid"`
-	Options    Options    `json:"options"`
+	Options    *Options   `json:"options"`
 	TaskName   string     `json:"task_name"`
 	Parameters Parameters `json:"parameters"`
 	Status     string     `json:"status"`
 	Attempts   int        `json:"attempts"`
 	Results    Parameters `json:"result"`
+	Error      string     `json:"error"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 }

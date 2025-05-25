@@ -23,7 +23,7 @@ type Database struct {
 }
 
 func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
-	logger := log.New(os.Stdout, "database "+name+": ", log.LstdFlags)
+	logger := log.New(os.Stdout, "Database "+name+": ", log.Ltime)
 
 	if dbConfig != nil {
 		db := &Database{Name: name, Logger: logger}
