@@ -1,12 +1,10 @@
 package queuer
 
 import (
-	"context"
 	"fmt"
 	"queuer/core"
 	"queuer/helper"
 	"queuer/model"
-	"time"
 )
 
 func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
@@ -15,17 +13,9 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 		return nil, fmt.Errorf("error getting task name: %v", err)
 	}
 
-	var newJob *model.Job
-	if q.worker.Options != nil {
-		newJob, err = model.NewJobWithOptions(taskName, q.worker.Options, parameters...)
-		if err != nil {
-			return nil, fmt.Errorf("error creating job: %v", err)
-		}
-	} else {
-		newJob, err = model.NewJob(taskName, parameters...)
-		if err != nil {
-			return nil, fmt.Errorf("error creating job: %v", err)
-		}
+	newJob, err := model.NewJob(taskName, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating job: %v", err)
 	}
 
 	job, err := q.dbJob.InsertJob(newJob)
@@ -61,7 +51,7 @@ func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, par
 
 func (q *Queuer) RunJob() error {
 	// Update job status to running with worker.
-	job, err := q.StartJob()
+	job, err := q.dbJob.UpdateJobInitial(q.worker)
 	if err != nil {
 		return fmt.Errorf("error updating job status to running: %v", err)
 	} else if job == nil {
@@ -111,21 +101,14 @@ func (q *Queuer) RetryingJob(job *model.Job) error {
 }
 
 func (q *Queuer) SucceedJob(job *model.Job, results []interface{}) {
-	// Update job status to succeeded with results
 	job.Status = model.JobStatusSucceeded
 	job.Results = results
-	err := q.FinishJob(job)
+	_, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
-		q.log.Printf("error finishing job: %v", err)
-		return
+		// TODO probably add retry for updating job to succeeded
+		q.log.Printf("error updating job status to succeeded: %v", err)
 	}
-
 	q.log.Printf("Job succeeded with RID %v", job.RID)
-
-	// Run new job if available
-	if err := q.RunJob(); err != nil {
-		q.log.Printf("error running new job after success: %v", err)
-	}
 }
 
 func (q *Queuer) FailJob(job *model.Job, jobErr error) {
@@ -146,90 +129,12 @@ func (q *Queuer) FailJob(job *model.Job, jobErr error) {
 		}
 	}
 
-	// Update job status to failed with error
 	job.Status = model.JobStatusFailed
 	job.Error = jobErr.Error()
-	err := q.FinishJob(job)
+	_, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
-		q.log.Printf("error finishing job after failure: %v", err)
-		return
+		// TODO probably add retry for updating job to failed
+		q.log.Printf("error updating job status to failed: %v", err)
 	}
-
 	q.log.Printf("Job failed with RID %v", job.RID)
-
-	// Run new job if available
-	if err := q.RunJob(); err != nil {
-		q.log.Printf("error running new job after failure: %v", err)
-	}
-}
-
-// Transactions
-func (q *Queuer) StartJob() (*model.Job, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Create new sql transaction to update worker and job status
-	tx, err := q.dbJob.CreateTransaction(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error creating transaction: %v", err)
-	}
-	defer tx.Rollback()
-
-	// Update worker current concurrency
-	worker, err := q.dbWorker.UpdateWorkerInitialTx(tx, q.worker)
-	if err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("error updating worker initial: %v", err)
-	} else if worker == nil {
-		tx.Rollback()
-		return nil, nil
-	}
-
-	// Update job status to running with worker
-	job, err := q.dbJob.UpdateJobInitialTx(tx, q.worker)
-	if err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("error updating job status to running: %v", err)
-	} else if job == nil {
-		tx.Rollback()
-		return nil, nil
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return nil, fmt.Errorf("error committing transaction for job start: %v", err)
-	}
-
-	return job, nil
-}
-
-func (q *Queuer) FinishJob(job *model.Job) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Create new sql transaction to update worker and job status
-	tx, err := q.dbJob.CreateTransaction(ctx)
-	if err != nil {
-		return fmt.Errorf("error creating transaction: %v", err)
-	}
-	defer tx.Rollback()
-
-	// Update worker current concurrency
-	_, err = q.dbWorker.UpdateWorkerFinalTx(tx, q.worker)
-	if err != nil {
-		return fmt.Errorf("error updating worker final: %v", err)
-	}
-
-	// Update job status to succeeded and set results
-	_, err = q.dbJob.UpdateJobFinalTx(tx, job)
-	if err != nil {
-		return fmt.Errorf("error updating job status to succeeded: %v", err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return fmt.Errorf("error committing transaction for job success: %v", err)
-	}
-
-	return nil
 }

@@ -25,7 +25,7 @@ type Queuer struct {
 	log *log.Logger
 }
 
-func NewQueuer(name string, maxConcurrency int, options ...*model.Options) *Queuer {
+func NewQueuer(name string) *Queuer {
 	// Logger
 	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
 
@@ -71,17 +71,9 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.Options) *Queu
 	}
 
 	// Inserting worker
-	var newWorker *model.Worker
-	if len(options) > 0 {
-		newWorker, err = model.NewWorkerWithOptions(name, maxConcurrency, options[0])
-		if err != nil {
-			logger.Fatalf("error creating new worker with options: %v", err)
-		}
-	} else {
-		newWorker, err = model.NewWorker(name, maxConcurrency)
-		if err != nil {
-			logger.Fatalf("error creating new worker: %v", err)
-		}
+	newWorker, err := model.NewWorker(name, 10)
+	if err != nil {
+		logger.Fatalf("error creating new worker: %v", err)
 	}
 
 	worker, err := dbWorker.InsertWorker(newWorker)
@@ -126,4 +118,22 @@ func (q *Queuer) Start() {
 		<-ctx.Done()
 		q.log.Println("Queuer stopped")
 	}()
+}
+
+func (q *Queuer) AddTask(task interface{}) {
+	newTask, err := model.NewTask(task)
+	if err != nil {
+		q.log.Fatalf("error creating new task: %v", err)
+	}
+
+	q.tasks[newTask.Name] = newTask
+	q.worker.AvailableTasks = append(q.worker.AvailableTasks, newTask.Name)
+
+	// Update worker in DB
+	_, err = q.dbWorker.UpdateWorker(q.worker)
+	if err != nil {
+		q.log.Fatalf("error updating worker: %v", err)
+	}
+
+	q.log.Printf("Task added with name %v", newTask.Name)
 }

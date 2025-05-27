@@ -15,36 +15,16 @@ func main() {
 	defer cancel()
 
 	// Example usage of the Queuer package
-	q := queuer.NewQueuer(
-		"exampleWorker",
-		100,
-		&model.Options{
-			Timeout:      2,
-			RetryDelay:   1,
-			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
-			MaxRetries:   3,
-		},
-	)
-	q2 := queuer.NewQueuer(
-		"exampleWorker2",
-		100,
-		&model.Options{
-			Timeout:      2,
-			RetryDelay:   1,
-			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
-			MaxRetries:   3,
-		},
-	)
+	q := queuer.NewQueuer("exampleWorker")
 
 	// Add the task to the queuer
 	q.AddTask(MyTask)
 
 	// Start the queuer
 	q.Start()
-	q2.Start()
 
 	// Example adding multiple jobs to the queue
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10; i++ {
 		_, err := q.AddJob(MyTask, []interface{}{5, "10"}...)
 		if err != nil {
 			log.Fatalf("Error adding job: %v", err)

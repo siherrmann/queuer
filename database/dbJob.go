@@ -17,10 +17,9 @@ type JobDBHandlerFunctions interface {
 	CheckTableExistance() (bool, error)
 	CreateTable() error
 	DropTable() error
-	CreateTransaction(ctx context.Context) (*sql.Tx, error)
 	InsertJob(job *model.Job) (*model.Job, error)
-	UpdateJobInitialTx(tx *sql.Tx, worker *model.Worker) (*model.Job, error)
-	UpdateJobFinalTx(tx *sql.Tx, job *model.Job) (*model.Job, error)
+	UpdateJobInitial(worker *model.Worker) (*model.Job, error)
+	UpdateJobFinal(job *model.Job) (*model.Job, error)
 	DeleteJob(rid string) error
 	SelectJob(rid string) (*model.Job, error)
 	SelectAllJobs(workerRID string, lastID int, entries int) ([]*model.Job, error)
@@ -57,15 +56,6 @@ func (r JobDBHandler) CheckTableExistance() (bool, error) {
 	exists := false
 	exists, err := r.db.CheckTableExistance("job")
 	return exists, err
-}
-
-func (r JobDBHandler) CreateTransaction(ctx context.Context) (*sql.Tx, error) {
-	tx, err := r.db.Instance.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error starting transaction: %w", err)
-	}
-
-	return tx, nil
 }
 
 // CreateTable creates the 'job' table in the database if it doesn't already exist.
@@ -144,6 +134,7 @@ func (r JobDBHandler) DropTable() error {
 
 // InsertJob inserts a new job record into the database.
 func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
+	newJob := &model.Job{}
 	row := r.db.Instance.QueryRow(
 		`INSERT INTO job (options, task_name, parameters)
 			VALUES ($1, $2, $3)
@@ -164,7 +155,6 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 		job.Parameters,
 	)
 
-	newJob := &model.Job{}
 	err := row.Scan(
 		&newJob.ID,
 		&newJob.RID,
@@ -187,7 +177,7 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 
 // UpdateJobInitial updates an existing queued non locked job record in the database.
 // Checks if the job is in 'QUEUED' or 'FAILED' status and if the worker can handle the task.
-func (r JobDBHandler) UpdateJobInitialTx(tx *sql.Tx, worker *model.Worker) (*model.Job, error) {
+func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
 		`UPDATE job SET 
 			worker_id = $1,
@@ -196,10 +186,11 @@ func (r JobDBHandler) UpdateJobInitialTx(tx *sql.Tx, worker *model.Worker) (*mod
 			attempts = attempts + 1,
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = (
-			SELECT id FROM job
+			SELECT id FROM job 
 			WHERE 
 				task_name = ANY($3::VARCHAR[])
-				AND status = 'QUEUED'
+				AND (status = 'QUEUED'
+				OR status = 'FAILED')
 			ORDER BY created_at ASC
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
@@ -236,7 +227,7 @@ func (r JobDBHandler) UpdateJobInitialTx(tx *sql.Tx, worker *model.Worker) (*mod
 		&job.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil // No job available for the worker, return nil
+		return nil, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("error updating initial job for worker id %v: %w", job.WorkerRID, err)
 	}
@@ -245,8 +236,8 @@ func (r JobDBHandler) UpdateJobInitialTx(tx *sql.Tx, worker *model.Worker) (*mod
 }
 
 // UpdateJobFinal updates an existing job record in the database to state 'FAILED' or 'SUCCEEDED'.
-func (r JobDBHandler) UpdateJobFinalTx(tx *sql.Tx, job *model.Job) (*model.Job, error) {
-	row := tx.QueryRow(
+func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
+	row := r.db.Instance.QueryRow(
 		`WITH jobs_old AS (
 			DELETE FROM job
 			WHERE id = $1
