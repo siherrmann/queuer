@@ -7,11 +7,14 @@ import (
 	"queuer/database"
 	"queuer/helper"
 	"queuer/model"
+	"sync"
 )
 
 type Queuer struct {
 	// Context
 	ctx context.Context
+	// Runners
+	activeRunners sync.Map
 	// Worker
 	worker *model.Worker
 	// DBs
@@ -116,7 +119,7 @@ func (q *Queuer) Start(ctx context.Context) {
 		defer cancel()
 
 		go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
-			err := q.runJob()
+			err := q.runJobInitial()
 			if err != nil {
 				q.log.Printf("error running job: %v", err)
 			}

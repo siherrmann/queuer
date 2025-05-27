@@ -10,7 +10,7 @@ import (
 )
 
 type Runner struct {
-	Cancel context.CancelFunc
+	cancel context.CancelFunc
 	task   *model.Task
 	job    *model.Job
 	// Result channel to return results
@@ -40,15 +40,15 @@ func NewRunner(task *model.Task, job *model.Job) (*Runner, error) {
 	}, nil
 }
 
-func (r *Runner) Run() ([]interface{}, error) {
-	var ctx context.Context
+func (r *Runner) Run(ctx context.Context) ([]interface{}, error) {
+	var ctxRunner context.Context
 	if r.job.Options != nil && r.job.Options.Timeout > 0 {
-		ctx, r.Cancel = context.WithTimeout(
-			context.Background(),
+		ctxRunner, r.cancel = context.WithTimeout(
+			ctx,
 			time.Duration(math.Round(r.job.Options.Timeout*1000))*time.Millisecond,
 		)
 	} else {
-		ctx, r.Cancel = context.WithCancel(context.Background())
+		ctxRunner, r.cancel = context.WithCancel(ctx)
 	}
 	defer r.Cancel()
 
@@ -82,8 +82,23 @@ func (r *Runner) Run() ([]interface{}, error) {
 		case results := <-r.resultsChannel:
 			r.Cancel()
 			return results, nil
-		case <-ctx.Done():
-			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, ctx.Err())
+		case <-ctxRunner.Done():
+			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, ctxRunner.Err())
 		}
+	}
+}
+
+func (r *Runner) Cancel(onCancel ...func()) {
+	if len(onCancel) > 0 {
+		for _, cancelFunc := range onCancel {
+			if cancelFunc != nil {
+				cancelFunc()
+			}
+		}
+	}
+
+	// Cancel the context if it exists
+	if r.cancel != nil {
+		r.cancel()
 	}
 }
