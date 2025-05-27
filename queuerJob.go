@@ -5,6 +5,8 @@ import (
 	"queuer/core"
 	"queuer/helper"
 	"queuer/model"
+
+	"github.com/google/uuid"
 )
 
 func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
@@ -39,6 +41,7 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 type BatchJob struct {
 	Task       interface{}
 	Parameters []interface{}
+	Options    *model.Options
 }
 
 func (q *Queuer) AddJobs(batchJobs []BatchJob) error {
@@ -50,10 +53,15 @@ func (q *Queuer) AddJobs(batchJobs []BatchJob) error {
 		}
 
 		var newJob *model.Job
-		if q.worker.Options != nil {
+		if batchJob.Options != nil {
+			newJob, err = model.NewJobWithOptions(taskName, batchJob.Options, batchJob.Parameters...)
+			if err != nil {
+				return fmt.Errorf("error creating job with job options: %v", err)
+			}
+		} else if q.worker.Options != nil {
 			newJob, err = model.NewJobWithOptions(taskName, q.worker.Options, batchJob.Parameters...)
 			if err != nil {
-				return fmt.Errorf("error creating job: %v", err)
+				return fmt.Errorf("error creating job with worker options: %v", err)
 			}
 		} else {
 			newJob, err = model.NewJob(taskName, batchJob.Parameters...)
@@ -96,7 +104,7 @@ func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, par
 	return job, nil
 }
 
-func (q *Queuer) RunJob() error {
+func (q *Queuer) runJob() error {
 	// Update job status to running with worker.
 	job, err := q.dbJob.UpdateJobInitial(q.worker)
 	if err != nil {
@@ -113,20 +121,20 @@ func (q *Queuer) RunJob() error {
 	task := q.tasks[job.TaskName]
 	runner, err := core.NewRunner(task, job)
 	if err != nil {
-		q.FailJob(job, fmt.Errorf("error creating runner: %v", err))
+		q.failJob(job, fmt.Errorf("error creating runner: %v", err))
 	}
 
 	resultValues, err := runner.Run()
 	if err != nil {
-		q.FailJob(job, err)
+		q.failJob(job, err)
 	} else {
-		q.SucceedJob(job, resultValues)
+		q.succeedJob(job, resultValues)
 	}
 
 	return nil
 }
 
-func (q *Queuer) RetryingJob(job *model.Job) error {
+func (q *Queuer) retryJob(job *model.Job) error {
 	q.log.Printf("Retrying job with RID %v", job.RID)
 
 	// Run job and update job status to completed with results
@@ -143,11 +151,11 @@ func (q *Queuer) RetryingJob(job *model.Job) error {
 		return fmt.Errorf("error running job: %v", err)
 	}
 
-	q.SucceedJob(job, resultValues)
+	q.succeedJob(job, resultValues)
 	return nil
 }
 
-func (q *Queuer) SucceedJob(job *model.Job, results []interface{}) {
+func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 	job.Status = model.JobStatusSucceeded
 	job.Results = results
 	_, err := q.dbJob.UpdateJobFinal(job)
@@ -159,17 +167,17 @@ func (q *Queuer) SucceedJob(job *model.Job, results []interface{}) {
 	q.log.Printf("Job succeeded with RID %v", job.RID)
 
 	// Try running next job if available
-	err = q.RunJob()
+	err = q.runJob()
 	if err != nil {
 		q.log.Printf("error running next job: %v", err)
 	}
 }
 
-func (q *Queuer) FailJob(job *model.Job, jobErr error) {
+func (q *Queuer) failJob(job *model.Job, jobErr error) {
 	if job.Options != nil && job.Options.MaxRetries > 0 {
 		retryer, err := core.NewRetryer(
 			func() error {
-				return q.RetryingJob(job)
+				return q.retryJob(job)
 			},
 			job.Options,
 		)
@@ -194,8 +202,29 @@ func (q *Queuer) FailJob(job *model.Job, jobErr error) {
 	q.log.Printf("Job failed with RID %v", job.RID)
 
 	// Try running next job if available
-	err = q.RunJob()
+	err = q.runJob()
 	if err != nil {
 		q.log.Printf("error running next job: %v", err)
 	}
+}
+
+func (q *Queuer) CancelJob(jobRid uuid.UUID) error {
+	job, err := q.dbJob.SelectJob(jobRid)
+	if err != nil {
+		return fmt.Errorf("error getting job by RID %v: %v", jobRid, err)
+	}
+
+	if job.Status != model.JobStatusRunning {
+		return fmt.Errorf("job with RID %v is not running, cannot cancel", jobRid)
+	}
+
+	job.Status = model.JobStatusCancelled
+	_, err = q.dbJob.UpdateJobFinal(job)
+	if err != nil {
+		return fmt.Errorf("error updating job status to cancelled: %v", err)
+	}
+
+	q.log.Printf("Job with RID %v cancelled", job.RID)
+
+	return nil
 }

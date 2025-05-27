@@ -10,6 +10,8 @@ import (
 )
 
 type Queuer struct {
+	// Context
+	ctx context.Context
 	// Worker
 	worker *model.Worker
 	// DBs
@@ -102,17 +104,19 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.Options) *Queu
 	}
 }
 
-func (q *Queuer) Start() {
+func (q *Queuer) Start(ctx context.Context) {
 	if q.dbJob == nil || q.dbWorker == nil || q.jobInsertListener == nil || q.jobUpdateListener == nil || q.jobDeleteListener == nil {
 		q.log.Fatalln("worker is not initialized properly")
 	}
 
+	q.ctx = ctx
+
 	go func() {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(q.ctx)
 		defer cancel()
 
 		go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
-			err := q.RunJob()
+			err := q.runJob()
 			if err != nil {
 				q.log.Printf("error running job: %v", err)
 			}
@@ -126,4 +130,18 @@ func (q *Queuer) Start() {
 		<-ctx.Done()
 		q.log.Println("Queuer stopped")
 	}()
+}
+
+func (q *Queuer) Stop() {
+	if q.jobInsertListener != nil {
+		q.jobInsertListener.Listener.Close()
+	}
+	if q.jobUpdateListener != nil {
+		q.jobUpdateListener.Listener.Close()
+	}
+	if q.jobDeleteListener != nil {
+		q.jobDeleteListener.Listener.Close()
+	}
+
+	q.log.Println("Queuer stopped")
 }

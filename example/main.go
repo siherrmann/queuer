@@ -29,7 +29,7 @@ func main() {
 	q.AddTask(MyTask)
 
 	// Start the queuer
-	q.Start()
+	q.Start(ctx)
 
 	// Example adding a single job to the queue
 	_, err := q.AddJob(MyTask, 5, "12")

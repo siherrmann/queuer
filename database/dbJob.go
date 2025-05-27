@@ -9,6 +9,7 @@ import (
 	"queuer/model"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -21,10 +22,10 @@ type JobDBHandlerFunctions interface {
 	BatchInsertJobs(jobs []*model.Job) error
 	UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 	UpdateJobFinal(job *model.Job) (*model.Job, error)
-	DeleteJob(rid string) error
-	SelectJob(rid string) (*model.Job, error)
-	SelectAllJobs(workerRID string, lastID int, entries int) ([]*model.Job, error)
-	SelectAllJobsBySearch(workerRID string, search string, lastID int, entries int) ([]*model.Job, error)
+	DeleteJob(rid uuid.UUID) error
+	SelectJob(rid uuid.UUID) (*model.Job, error)
+	SelectAllJobs(lastID int, entries int) ([]*model.Job, error)
+	SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error)
 }
 
 // JobDBHandler implements JobDBHandlerFunctions and holds the database connection.
@@ -390,7 +391,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 }
 
 // DeleteJob deletes a job record from the database based on its RID.
-func (r JobDBHandler) DeleteJob(rid string) error {
+func (r JobDBHandler) DeleteJob(rid uuid.UUID) error {
 	_, err := r.db.Instance.Exec(
 		`DELETE FROM job
 		WHERE rid = $1`,
@@ -404,7 +405,7 @@ func (r JobDBHandler) DeleteJob(rid string) error {
 }
 
 // SelectJob retrieves a single job record from the database based on its RID.
-func (r JobDBHandler) SelectJob(rid string) (*model.Job, error) {
+func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 	job := &model.Job{}
 	row := r.db.Instance.QueryRow(
 		`SELECT
@@ -450,7 +451,7 @@ func (r JobDBHandler) SelectJob(rid string) (*model.Job, error) {
 }
 
 // SelectAllJobs retrieves a paginated list of jobs for a specific worker.
-func (r JobDBHandler) SelectAllJobs(workerRID string, lastID int, entries int) ([]*model.Job, error) {
+func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, error) {
 	var jobs []*model.Job
 
 	rows, err := r.db.Instance.Query(
@@ -470,19 +471,17 @@ func (r JobDBHandler) SelectAllJobs(workerRID string, lastID int, entries int) (
 			updated_at
 		FROM
 			job
-		WHERE worker_rid = $1
-		AND (0 = $2
+		WHERE (0 = $1
 			OR created_at < (
 				SELECT
 					d.created_at
 				FROM
 					job AS d
 				WHERE
-					d.id = $2))
+					d.id = $1))
 		ORDER BY
 			created_at DESC
-		LIMIT $3`,
-		workerRID,
+		LIMIT $2;`,
 		lastID,
 		entries,
 	)
@@ -521,7 +520,7 @@ func (r JobDBHandler) SelectAllJobs(workerRID string, lastID int, entries int) (
 
 // SelectAllJobsBySearch retrieves a paginated list of jobs for a worker, filtered by search string.
 // It searches across 'rid', 'worker_id', and 'status' fields.
-func (r JobDBHandler) SelectAllJobsBySearch(workerRID string, search string, lastID int, entries int) ([]*model.Job, error) {
+func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error) {
 	var jobs []*model.Job
 
 	rows, err := r.db.Instance.Query(`
@@ -540,23 +539,21 @@ func (r JobDBHandler) SelectAllJobsBySearch(workerRID string, search string, las
 			created_at,
 			updated_at
 		FROM job
-		WHERE worker_rid = $1
-		AND (rid ILIKE '%' || $2 || '%'
-				OR worker_id ILIKE '%' || $2 || '%'
-				OR task_name ILIKE '%' || $2 || '%'
-				OR status ILIKE '%' || $2 || '%')
-			AND (0 = $3
+		WHERE (rid ILIKE '%' || $1 || '%'
+				OR worker_id ILIKE '%' || $1 || '%'
+				OR task_name ILIKE '%' || $1 || '%'
+				OR status ILIKE '%' || $1 || '%')
+			AND (0 = $2
 				OR created_at < (
 					SELECT
 						u.created_at
 					FROM
 						job AS u
 					WHERE
-						u.id = $3))
+						u.id = $2))
 		ORDER BY
 			created_at DESC
-		LIMIT $4`,
-		workerRID,
+		LIMIT $3`,
 		search,
 		lastID,
 		entries,
