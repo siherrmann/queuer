@@ -13,9 +13,17 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 		return nil, fmt.Errorf("error getting task name: %v", err)
 	}
 
-	newJob, err := model.NewJob(taskName, parameters...)
-	if err != nil {
-		return nil, fmt.Errorf("error creating job: %v", err)
+	var newJob *model.Job
+	if q.worker.Options != nil {
+		newJob, err = model.NewJobWithOptions(taskName, q.worker.Options, parameters...)
+		if err != nil {
+			return nil, fmt.Errorf("error creating job: %v", err)
+		}
+	} else {
+		newJob, err = model.NewJob(taskName, parameters...)
+		if err != nil {
+			return nil, fmt.Errorf("error creating job: %v", err)
+		}
 	}
 
 	job, err := q.dbJob.InsertJob(newJob)
@@ -26,6 +34,45 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 	q.log.Printf("Job added with RID %v", job.RID)
 
 	return job, nil
+}
+
+type BatchJob struct {
+	Task       interface{}
+	Parameters []interface{}
+}
+
+func (q *Queuer) AddJobs(batchJobs []BatchJob) error {
+	var jobs []*model.Job
+	for _, batchJob := range batchJobs {
+		taskName, err := helper.GetFunctionName(batchJob.Task)
+		if err != nil {
+			return fmt.Errorf("error getting task name: %v", err)
+		}
+
+		var newJob *model.Job
+		if q.worker.Options != nil {
+			newJob, err = model.NewJobWithOptions(taskName, q.worker.Options, batchJob.Parameters...)
+			if err != nil {
+				return fmt.Errorf("error creating job: %v", err)
+			}
+		} else {
+			newJob, err = model.NewJob(taskName, batchJob.Parameters...)
+			if err != nil {
+				return fmt.Errorf("error creating job: %v", err)
+			}
+		}
+
+		jobs = append(jobs, newJob)
+	}
+
+	err := q.dbJob.BatchInsertJobs(jobs)
+	if err != nil {
+		return fmt.Errorf("error inserting jobs: %v", err)
+	}
+
+	q.log.Printf("%v jobs added", len(jobs))
+
+	return nil
 }
 
 func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
@@ -108,7 +155,14 @@ func (q *Queuer) SucceedJob(job *model.Job, results []interface{}) {
 		// TODO probably add retry for updating job to succeeded
 		q.log.Printf("error updating job status to succeeded: %v", err)
 	}
+
 	q.log.Printf("Job succeeded with RID %v", job.RID)
+
+	// Try running next job if available
+	err = q.RunJob()
+	if err != nil {
+		q.log.Printf("error running next job: %v", err)
+	}
 }
 
 func (q *Queuer) FailJob(job *model.Job, jobErr error) {
@@ -136,5 +190,12 @@ func (q *Queuer) FailJob(job *model.Job, jobErr error) {
 		// TODO probably add retry for updating job to failed
 		q.log.Printf("error updating job status to failed: %v", err)
 	}
+
 	q.log.Printf("Job failed with RID %v", job.RID)
+
+	// Try running next job if available
+	err = q.RunJob()
+	if err != nil {
+		q.log.Printf("error running next job: %v", err)
+	}
 }

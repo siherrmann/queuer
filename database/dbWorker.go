@@ -70,6 +70,8 @@ func (r WorkerDBHandler) CreateTable() error {
 			name VARCHAR(100) DEFAULT '',
 			options JSONB DEFAULT '{}',
 			available_tasks VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
+			current_concurrency INT DEFAULT 0,
+			max_concurrency INT DEFAULT 1,
 			status VARCHAR(50) DEFAULT 'RUNNING',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -105,20 +107,23 @@ func (r WorkerDBHandler) DropTable() error {
 
 // InsertWorker inserts a new worker record into the database.
 func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, error) {
-	newWorker := &model.Worker{}
-
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO worker (name)
-			VALUES ($1)
+		`INSERT INTO worker (name, options, max_concurrency)
+		VALUES ($1, $2, $3)
 		RETURNING
-			id, rid, name, status, created_at, updated_at`,
+		id, rid, name, options, max_concurrency, status, created_at, updated_at`,
 		worker.Name,
+		worker.Options,
+		worker.MaxConcurrency,
 	)
 
+	newWorker := &model.Worker{}
 	err := row.Scan(
 		&newWorker.ID,
 		&newWorker.RID,
 		&newWorker.Name,
+		&newWorker.Options,
+		&newWorker.MaxConcurrency,
 		&newWorker.Status,
 		&newWorker.CreatedAt,
 		&newWorker.UpdatedAt,
@@ -137,21 +142,27 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 			worker
 		SET
 			name = $1,
-			available_tasks = $2,
-			status = $3,
+			options = $2,
+			available_tasks = $3,
+			max_concurrency = $4,
+			status = $5,
 			updated_at = CURRENT_TIMESTAMP
 		WHERE
-			rid = $4
+			rid = $6
 		RETURNING
 			id,
 			rid,
 			name,
+			options,
 			available_tasks,
+			max_concurrency,
 			status,
 			created_at,
 			updated_at;`,
 		worker.Name,
+		worker.Options,
 		pq.Array(worker.AvailableTasks),
+		worker.MaxConcurrency,
 		worker.Status,
 		worker.RID,
 	)
@@ -161,7 +172,9 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 		&updatedWorker.ID,
 		&updatedWorker.RID,
 		&updatedWorker.Name,
+		&updatedWorker.Options,
 		pq.Array(&updatedWorker.AvailableTasks),
+		&updatedWorker.MaxConcurrency,
 		&updatedWorker.Status,
 		&updatedWorker.CreatedAt,
 		&updatedWorker.UpdatedAt,
@@ -196,7 +209,9 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 			id,
 			rid,
 			name,
+			options,
 			available_tasks,
+			max_concurrency,
 			status,
 			created_at,
 			updated_at
@@ -210,7 +225,9 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 		&worker.ID,
 		&worker.RID,
 		&worker.Name,
+		&worker.Options,
 		pq.Array(&worker.AvailableTasks),
+		&worker.MaxConcurrency,
 		&worker.Status,
 		&worker.CreatedAt,
 		&worker.UpdatedAt,
@@ -228,7 +245,9 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 			id,
 			rid,
 			name,
+			options,
 			available_tasks,
+			max_concurrency,
 			status,
 			created_at,
 			updated_at
@@ -260,7 +279,9 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 			&worker.ID,
 			&worker.RID,
 			&worker.Name,
+			&worker.Options,
 			pq.Array(&worker.AvailableTasks),
+			&worker.MaxConcurrency,
 			&worker.Status,
 			&worker.CreatedAt,
 			&worker.UpdatedAt,
@@ -288,7 +309,9 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 			id,
 			rid,
 			name,
+			options,
 			available_tasks,
+			max_concurrency,
 			status,
 			created_at,
 			updated_at
@@ -323,7 +346,9 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 			&worker.ID,
 			&worker.RID,
 			&worker.Name,
+			&worker.Options,
 			pq.Array(&worker.AvailableTasks),
+			&worker.MaxConcurrency,
 			&worker.Status,
 			&worker.CreatedAt,
 			&worker.UpdatedAt,

@@ -18,6 +18,7 @@ type JobDBHandlerFunctions interface {
 	CreateTable() error
 	DropTable() error
 	InsertJob(job *model.Job) (*model.Job, error)
+	BatchInsertJobs(jobs []*model.Job) error
 	UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 	UpdateJobFinal(job *model.Job) (*model.Job, error)
 	DeleteJob(rid string) error
@@ -102,7 +103,7 @@ func (r JobDBHandler) CreateTable() error {
 		log.Fatalf("error creating notify trigger on job table: %#v", err)
 	}
 
-	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "updated_at") // Indexes on common search/filter fields
+	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "created_at", "updated_at") // Indexes on common search/filter fields
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -175,41 +176,104 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	return newJob, nil
 }
 
+func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.Instance.Begin()
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %w", err)
+	}
+
+	stmt, err := tx.Prepare(pq.CopyIn("job", "options", "task_name", "parameters"))
+	if err != nil {
+		return fmt.Errorf("error preparing statement for batch insert: %w", err)
+	}
+
+	for _, job := range jobs {
+		optionsJSON, err := job.Options.Marshal()
+		if err != nil {
+			return fmt.Errorf("error marshaling job options for batch insert: %w", err)
+		}
+		parametersJSON, err := job.Parameters.Marshal()
+		if err != nil {
+			return fmt.Errorf("error marshaling job parameters for batch insert: %v", err)
+		}
+
+		_, err = stmt.Exec(
+			string(optionsJSON),
+			job.TaskName,
+			string(parametersJSON),
+		)
+		if err != nil {
+			return fmt.Errorf("error executing batch insert for job %s: %w", job.RID, err)
+		}
+	}
+
+	_, err = stmt.Exec()
+	if err != nil {
+		return fmt.Errorf("error executing final batch insert: %w", err)
+	}
+
+	err = stmt.Close()
+	if err != nil {
+		return fmt.Errorf("error closing prepared statement: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("error committing transaction: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateJobInitial updates an existing queued non locked job record in the database.
 // Checks if the job is in 'QUEUED' or 'FAILED' status and if the worker can handle the task.
 func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
-		`UPDATE job SET 
-			worker_id = $1,
-			worker_rid = $2,
+		`WITH current_worker AS (
+			SELECT id, rid, available_tasks
+			FROM worker
+			WHERE id = $1
+			AND max_concurrency > (
+				SELECT COUNT(*)
+				FROM job
+				WHERE worker_id = $1
+				AND status = 'RUNNING'
+			)
+		)
+		UPDATE job SET 
+			worker_id = cw.id,
+			worker_rid = cw.rid,
 			status = 'RUNNING',
 			attempts = attempts + 1,
 			updated_at = CURRENT_TIMESTAMP
-		WHERE id = (
+		FROM current_worker AS cw
+		WHERE job.id = (
 			SELECT id FROM job 
 			WHERE 
-				task_name = ANY($3::VARCHAR[])
-				AND (status = 'QUEUED'
-				OR status = 'FAILED')
+				task_name = ANY(cw.available_tasks::VARCHAR[])
+				AND status = 'QUEUED'
 			ORDER BY created_at ASC
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		)
+		AND EXISTS (SELECT 1 FROM current_worker)
 		RETURNING
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			attempts,
-			created_at,
-			updated_at;`,
+			job.id,
+			job.rid,
+			job.worker_id,
+			job.worker_rid,
+			job.options,
+			job.task_name,
+			job.parameters,
+			job.status,
+			job.attempts,
+			job.created_at,
+			job.updated_at;`,
 		worker.ID,
-		worker.RID,
-		pq.Array(worker.AvailableTasks),
 	)
 
 	job := &model.Job{}

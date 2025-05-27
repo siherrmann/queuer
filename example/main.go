@@ -6,7 +6,6 @@ import (
 	"queuer"
 	"queuer/model"
 	"strconv"
-	"time"
 )
 
 func main() {
@@ -15,7 +14,16 @@ func main() {
 	defer cancel()
 
 	// Example usage of the Queuer package
-	q := queuer.NewQueuer("exampleWorker")
+	q := queuer.NewQueuer(
+		"exampleWorker",
+		10,
+		&model.Options{
+			Timeout:      2,
+			RetryDelay:   1,
+			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+			MaxRetries:   3,
+		},
+	)
 
 	// Add the task to the queuer
 	q.AddTask(MyTask)
@@ -23,15 +31,26 @@ func main() {
 	// Start the queuer
 	q.Start()
 
-	// Example adding multiple jobs to the queue
-	for i := 0; i < 10; i++ {
-		_, err := q.AddJob(MyTask, []interface{}{5, "10"}...)
-		if err != nil {
-			log.Fatalf("Error adding job: %v", err)
-		}
+	// Example adding a single job to the queue
+	_, err := q.AddJob(MyTask, 5, "12")
+	if err != nil {
+		log.Fatalf("Error adding job: %v", err)
 	}
 
-	// Example adding a job with options
+	// Example adding multiple jobs to the queue
+	batchedJobs := make([]queuer.BatchJob, 0, 10)
+	for i := 0; i < 10; i++ {
+		batchedJobs = append(batchedJobs, queuer.BatchJob{
+			Task:       MyTask,
+			Parameters: []interface{}{i, "12"},
+		})
+	}
+	err = q.AddJobs(batchedJobs)
+	if err != nil {
+		log.Fatalf("Error adding jobs: %v", err)
+	}
+
+	// Example adding a single job with options
 	// This job will timeout after 0.1 seconds
 	options := &model.Options{
 		Timeout:      0.1,
@@ -39,9 +58,9 @@ func main() {
 		RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
 		MaxRetries:   3,
 	}
-	_, err := q.AddJobWithOptions(MyTask, options, 5, "12")
+	_, err = q.AddJobWithOptions(MyTask, options, 5, "12")
 	if err != nil {
-		log.Fatalf("Error adding job: %v", err)
+		log.Fatalf("Error adding job with options: %v", err)
 	}
 
 	// Wait for a while to let the jobs process
@@ -52,7 +71,7 @@ func main() {
 // Simple example task function
 func MyTask(param1 int, param2 string) (int, error) {
 	// Simulate some work
-	time.Sleep(1 * time.Second)
+	// time.Sleep(1 * time.Second)
 
 	// Example for some error handling
 	param2Int, err := strconv.Atoi(param2)
