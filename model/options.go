@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	RETRY_BACKOFF_NONE        = "none"
 	RETRY_BACKOFF_LINEAR      = "linear"
 	RETRY_BACKOFF_EXPONENTIAL = "exponential"
 )

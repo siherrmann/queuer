@@ -1,0 +1,208 @@
+package core
+
+import (
+	"errors"
+	"log"
+	"queuer/model" // Assuming model.Options and model.RetryBackoff are defined here
+	"sync/atomic"  // For atomic counter in mock function
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// Mock function to simulate a task that might fail
+type mockFunction struct {
+	failCount   *atomic.Int32 // How many times it should fail before succeeding
+	callCount   *atomic.Int32 // Tracks how many times it has been called
+	returnErr   error         // The error it returns when failing
+	actualSleep time.Duration // To capture the actual sleep duration for backoff tests
+}
+
+func newMockFunction(failBeforeSuccess int32, errToReturn error) *mockFunction {
+	m := &mockFunction{
+		returnErr: errToReturn,
+		failCount: new(atomic.Int32),
+		callCount: new(atomic.Int32),
+	}
+	m.failCount.Store(failBeforeSuccess) // Initialize atomic.Int32
+	m.callCount.Store(0)                 // Initialize atomic.Int32
+	return m
+}
+
+func (m *mockFunction) Call() error {
+	m.callCount.Add(1)
+	log.Printf("Mock function called (attempt %d)", m.callCount.Load())
+
+	if m.callCount.Load() <= m.failCount.Load() {
+		return m.returnErr
+	}
+	return nil // Succeed after failCount attempts
+}
+
+// TestNewRetryer tests the constructor's validation
+func TestNewRetryer(t *testing.T) {
+	tests := []struct {
+		name    string
+		options *model.Options
+		wantErr bool
+	}{
+		{
+			name: "Valid Options",
+			options: &model.Options{
+				MaxRetries:   3,
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_NONE,
+			},
+			wantErr: false,
+		},
+		{
+			name: "MaxRetries Zero",
+			options: &model.Options{
+				MaxRetries:   0,
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_NONE,
+			},
+			wantErr: true,
+		},
+		{
+			name: "MaxRetries Negative",
+			options: &model.Options{
+				MaxRetries:   -1,
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_NONE,
+			},
+			wantErr: true,
+		},
+		{
+			name: "RetryDelay Negative",
+			options: &model.Options{
+				MaxRetries:   3,
+				RetryDelay:   -1,
+				RetryBackoff: model.RETRY_BACKOFF_NONE,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Nil Options",
+			options: nil,
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := NewRetryer(func() error { return nil }, test.options)
+			if test.wantErr {
+				assert.Error(t, err, "NewRetryer should return an error for invalid options")
+			} else {
+				assert.NoError(t, err, "NewRetryer should not return an error for valid options")
+			}
+		})
+	}
+}
+
+// TestRetrySuccessFirstAttempt tests a function that succeeds immediately
+func TestRetrySuccessFirstAttempt(t *testing.T) {
+	mockFn := newMockFunction(0, errors.New("initial error")) // Succeeds on 1st call
+
+	options := &model.Options{
+		MaxRetries:   3,
+		RetryDelay:   1,
+		RetryBackoff: model.RETRY_BACKOFF_NONE,
+	}
+	retryer, err := NewRetryer(mockFn.Call, options)
+	if err != nil {
+		t.Fatalf("NewRetryer failed: %v", err)
+	}
+
+	err = retryer.Retry()
+	if err != nil {
+		t.Errorf("Retry() got unexpected error = %v, want nil", err)
+	}
+	if mockFn.callCount.Load() != 1 {
+		t.Errorf("Retry() called mock function %d times, want 1", mockFn.callCount.Load())
+	}
+}
+
+// TestRetrySuccessAfterRetries tests a function that succeeds after some failures
+func TestRetrySuccessAfterRetries(t *testing.T) {
+	mockFn := newMockFunction(2, errors.New("temporary error")) // Fails 2 times, succeeds on 3rd
+
+	options := &model.Options{
+		MaxRetries:   5,
+		RetryDelay:   1,
+		RetryBackoff: model.RETRY_BACKOFF_NONE,
+	}
+	retryer, err := NewRetryer(mockFn.Call, options)
+	assert.NoError(t, err, "NewRetryer should not return an error for valid options")
+
+	err = retryer.Retry()
+	assert.NoError(t, err, "Retry() should not return an error on success after retries")
+	assert.Equal(t, int32(3), mockFn.callCount.Load(), "Retry() should call mock function 3 times")
+}
+
+// TestRetryFailureMaxRetries tests a function that always fails
+func TestRetryFailureMaxRetries(t *testing.T) {
+	expectedErr := errors.New("permanent error")
+	mockFn := newMockFunction(5, expectedErr) // Fails 5 times
+
+	options := &model.Options{
+		MaxRetries:   5,
+		RetryDelay:   1,
+		RetryBackoff: model.RETRY_BACKOFF_NONE,
+	}
+	retryer, err := NewRetryer(mockFn.Call, options)
+	assert.NoError(t, err, "NewRetryer should not return an error for valid options")
+
+	err = retryer.Retry()
+	assert.Error(t, err, "Retry() should return an error after max retries")
+	assert.Equal(t, expectedErr, err, "Retry() should return the expected error after max retries")
+	assert.Equal(t, int32(5), mockFn.callCount.Load(), "Retry() should call mock function 5 times")
+}
+
+// TestRetryLinearBackoff tests linear backoff
+func TestRetryLinearBackoff(t *testing.T) {
+	expectedErr := errors.New("test error")
+	mockFn := newMockFunction(3, expectedErr) // Fails 3 times
+
+	options := &model.Options{
+		MaxRetries:   3,
+		RetryDelay:   1,
+		RetryBackoff: model.RETRY_BACKOFF_LINEAR,
+	}
+	retryer, err := NewRetryer(mockFn.Call, options)
+	assert.NoError(t, err, "NewRetryer should not return an error for valid options")
+
+	start := time.Now()
+	err = retryer.Retry()
+	duration := time.Since(start)
+
+	assert.Error(t, err, "Retry() should return an error after retries")
+	assert.Equal(t, expectedErr, err, "Retry() should return the expected error after retries")
+	assert.Equal(t, int32(3), mockFn.callCount.Load(), "Retry() should call mock function 3 times")
+	assert.GreaterOrEqual(t, duration, 6*time.Second, "Retry() duration should be at least 6 seconds")
+}
+
+// TestRetryExponentialBackoff tests exponential backoff
+func TestRetryExponentialBackoff(t *testing.T) {
+	expectedErr := errors.New("test error")
+	mockFn := newMockFunction(3, expectedErr) // Fails 3 times
+
+	options := &model.Options{
+		MaxRetries:   3,
+		RetryDelay:   1,
+		RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+	}
+	retryer, err := NewRetryer(mockFn.Call, options)
+	assert.NoError(t, err, "NewRetryer should not return an error for valid options")
+
+	start := time.Now()
+	err = retryer.Retry()
+	duration := time.Since(start)
+
+	assert.Error(t, err, "Retry() should return an error after retries")
+	assert.Equal(t, expectedErr, err, "Retry() should return the expected error after retries")
+	assert.Equal(t, int32(3), mockFn.callCount.Load(), "Retry() should call mock function 3 times")
+	assert.GreaterOrEqual(t, duration, 7*time.Second, "Retry() duration should be at least 7 seconds")
+}

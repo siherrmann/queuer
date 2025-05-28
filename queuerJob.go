@@ -11,7 +11,7 @@ import (
 
 // AddJob adds a job to the queue with the given task and parameters.
 func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
-	taskName, err := helper.GetFunctionName(task)
+	taskName, err := helper.GetTaskNameFromInterface(task)
 	if err != nil {
 		return nil, fmt.Errorf("error getting task name: %v", err)
 	}
@@ -49,7 +49,7 @@ type BatchJob struct {
 func (q *Queuer) AddJobs(batchJobs []BatchJob) error {
 	var jobs []*model.Job
 	for _, batchJob := range batchJobs {
-		taskName, err := helper.GetFunctionName(batchJob.Task)
+		taskName, err := helper.GetTaskNameFromInterface(batchJob.Task)
 		if err != nil {
 			return fmt.Errorf("error getting task name: %v", err)
 		}
@@ -87,7 +87,7 @@ func (q *Queuer) AddJobs(batchJobs []BatchJob) error {
 
 // AddJobWithOptions adds a job with the given task, options, and parameters.
 func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
-	taskName, err := helper.GetFunctionName(task)
+	taskName, err := helper.GetTaskNameFromInterface(task)
 	if err != nil {
 		return nil, fmt.Errorf("error getting task name: %v", err)
 	}
@@ -129,6 +129,24 @@ func (q *Queuer) CancelJob(jobRid uuid.UUID) error {
 
 		q.log.Printf("Job cancelled with RID %v", job.RID)
 	})
+
+	return nil
+}
+
+// ReaddJobFromArchive readds a job from the archive back to the queue.
+func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) error {
+	job, err := q.dbJob.SelectJobFromArchive(jobRid)
+	if err != nil {
+		return fmt.Errorf("error selecting job from archive with rid %v: %v", jobRid, err)
+	}
+
+	// Readd the job to the queue
+	newJob, err := q.AddJobWithOptions(job.TaskName, job.Options, job.Parameters...)
+	if err != nil {
+		return fmt.Errorf("error readding job: %v", err)
+	}
+
+	q.log.Printf("Job readded with RID %v", newJob.RID)
 
 	return nil
 }

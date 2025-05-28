@@ -26,6 +26,10 @@ type JobDBHandlerFunctions interface {
 	SelectJob(rid uuid.UUID) (*model.Job, error)
 	SelectAllJobs(lastID int, entries int) ([]*model.Job, error)
 	SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error)
+	// Job Archive
+	SelectJobFromArchive(rid uuid.UUID) (*model.Job, error)
+	SelectAllJobsFromArchive(lastID int, entries int) ([]*model.Job, error)
+	SelectAllJobsFromArchiveBySearch(search string, lastID int, entries int) ([]*model.Job, error)
 }
 
 // JobDBHandler implements JobDBHandlerFunctions and holds the database connection.
@@ -406,7 +410,6 @@ func (r JobDBHandler) DeleteJob(rid uuid.UUID) error {
 
 // SelectJob retrieves a single job record from the database based on its RID.
 func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
-	job := &model.Job{}
 	row := r.db.Instance.QueryRow(
 		`SELECT
 			id,
@@ -428,6 +431,8 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 			rid = $1`,
 		rid,
 	)
+
+	job := &model.Job{}
 	err := row.Scan(
 		&job.ID,
 		&job.RID,
@@ -452,8 +457,6 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 
 // SelectAllJobs retrieves a paginated list of jobs for a specific worker.
 func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, error) {
-	var jobs []*model.Job
-
 	rows, err := r.db.Instance.Query(
 		`SELECT
 			id,
@@ -491,6 +494,7 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 
 	defer rows.Close()
 
+	var jobs []*model.Job
 	for rows.Next() {
 		job := &model.Job{}
 		err := rows.Scan(
@@ -521,8 +525,6 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 // SelectAllJobsBySearch retrieves a paginated list of jobs for a worker, filtered by search string.
 // It searches across 'rid', 'worker_id', and 'status' fields.
 func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error) {
-	var jobs []*model.Job
-
 	rows, err := r.db.Instance.Query(`
 		SELECT
 			id,
@@ -564,6 +566,7 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 
 	defer rows.Close()
 
+	var jobs []*model.Job
 	for rows.Next() {
 		job := &model.Job{}
 		err := rows.Scan(
@@ -583,6 +586,193 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 		)
 		if err != nil {
 			return []*model.Job{}, fmt.Errorf("error scanning job row during search: %w", err)
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	if err = rows.Err(); err != nil {
+		return []*model.Job{}, fmt.Errorf("error after iterating rows during search: %w", err)
+	}
+
+	return jobs, nil
+}
+
+// Job Archive
+func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
+	row := r.db.Instance.QueryRow(
+		`SELECT
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			attempts,
+			results,
+			error,
+			created_at,
+			updated_at
+		FROM
+			job_archive
+		WHERE
+			rid = $1`,
+		rid,
+	)
+
+	job := &model.Job{}
+	err := row.Scan(
+		&job.ID,
+		&job.RID,
+		&job.WorkerID,
+		&job.WorkerRID,
+		&job.Options,
+		&job.TaskName,
+		&job.Parameters,
+		&job.Status,
+		&job.Attempts,
+		&job.Results,
+		&job.Error,
+		&job.CreatedAt,
+		&job.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error scanning archived job with RID %s: %w", rid, err)
+	}
+
+	return job, nil
+}
+
+func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*model.Job, error) {
+	rows, err := r.db.Instance.Query(
+		`SELECT
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			attempts,
+			results,
+			error,
+			created_at,
+			updated_at
+		FROM
+			job_archive
+		WHERE (0 = $1
+			OR created_at < (
+				SELECT
+					d.created_at
+				FROM
+					job_archive AS d
+				WHERE
+					d.id = $1))
+		ORDER BY
+			created_at DESC
+		LIMIT $2;`,
+		lastID,
+		entries,
+	)
+	if err != nil {
+		return []*model.Job{}, fmt.Errorf("error querying all archived jobs: %w", err)
+	}
+
+	defer rows.Close()
+
+	var jobs []*model.Job
+	for rows.Next() {
+		job := &model.Job{}
+		err := rows.Scan(
+			&job.ID,
+			&job.RID,
+			&job.WorkerID,
+			&job.WorkerRID,
+			&job.Options,
+			&job.TaskName,
+			&job.Parameters,
+			&job.Status,
+			&job.Attempts,
+			&job.Results,
+			&job.Error,
+			&job.CreatedAt,
+			&job.UpdatedAt,
+		)
+		if err != nil {
+			return []*model.Job{}, fmt.Errorf("error scanning archived job row: %w", err)
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
+}
+
+func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int, entries int) ([]*model.Job, error) {
+	rows, err := r.db.Instance.Query(`
+		SELECT
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			attempts,
+			results,
+			error,
+			created_at,
+			updated_at
+		FROM job_archive
+		WHERE (rid ILIKE '%' || $1 || '%'
+				OR worker_id ILIKE '%' || $1 || '%'
+				OR task_name ILIKE '%' || $1 || '%'
+				OR status ILIKE '%' || $1 || '%')
+			AND (0 = $2
+				OR created_at < (
+					SELECT
+						u.created_at
+					FROM
+						job_archive AS u
+					WHERE
+						u.id = $2))
+		ORDER BY
+			created_at DESC
+		LIMIT $3`,
+		search,
+		lastID,
+		entries,
+	)
+	if err != nil {
+		return []*model.Job{}, fmt.Errorf("error querying archived jobs by search: %w", err)
+	}
+
+	defer rows.Close()
+
+	var jobs []*model.Job
+	for rows.Next() {
+		job := &model.Job{}
+		err := rows.Scan(
+			&job.ID,
+			&job.RID,
+			&job.WorkerID,
+			&job.WorkerRID,
+			&job.Options,
+			&job.TaskName,
+			&job.Parameters,
+			&job.Status,
+			&job.Attempts,
+			&job.Results,
+			&job.Error,
+			&job.CreatedAt,
+			&job.UpdatedAt,
+		)
+		if err != nil {
+			return []*model.Job{}, fmt.Errorf("error scanning archived job row during search: %w", err)
 		}
 
 		jobs = append(jobs, job)
