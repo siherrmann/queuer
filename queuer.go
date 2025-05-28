@@ -137,13 +137,22 @@ func (q *Queuer) Start(ctx context.Context) {
 
 func (q *Queuer) Stop() {
 	if q.jobInsertListener != nil {
-		q.jobInsertListener.Listener.Close()
+		err := q.jobInsertListener.Listener.Close()
+		if err != nil {
+			q.log.Printf("error closing job insert listener: %v", err)
+		}
 	}
 	if q.jobUpdateListener != nil {
-		q.jobUpdateListener.Listener.Close()
+		err := q.jobUpdateListener.Listener.Close()
+		if err != nil {
+			q.log.Printf("error closing job update listener: %v", err)
+		}
 	}
 	if q.jobDeleteListener != nil {
-		q.jobDeleteListener.Listener.Close()
+		err := q.jobDeleteListener.Listener.Close()
+		if err != nil {
+			q.log.Printf("error closing job delete listener: %v", err)
+		}
 	}
 
 	q.log.Println("Queuer stopped")
