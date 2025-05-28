@@ -23,8 +23,8 @@ func newMockFunction(failBeforeSuccess int32, errToReturn error) *mockFunction {
 		failCount:   new(atomic.Int32),
 		callCount:   new(atomic.Int32),
 	}
-	m.failCount.Store(failBeforeSuccess) // Initialize atomic.Int32
-	m.callCount.Store(0)                 // Initialize atomic.Int32
+	m.failCount.Store(failBeforeSuccess)
+	m.callCount.Store(0)
 	return m
 }
 
