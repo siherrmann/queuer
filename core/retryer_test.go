@@ -11,14 +11,14 @@ import (
 )
 
 // Mock function to simulate a task that might fail
-type mockFunction struct {
+type funcRetryer struct {
 	failCount   *atomic.Int32 // How many times it should fail before succeeding
 	callCount   *atomic.Int32 // Tracks how many times it has been called
 	errExpected error         // The error it returns when failing
 }
 
-func newMockFunction(failBeforeSuccess int32, errToReturn error) *mockFunction {
-	m := &mockFunction{
+func newFuncRetryer(failBeforeSuccess int32, errToReturn error) *funcRetryer {
+	m := &funcRetryer{
 		errExpected: errToReturn,
 		failCount:   new(atomic.Int32),
 		callCount:   new(atomic.Int32),
@@ -28,7 +28,7 @@ func newMockFunction(failBeforeSuccess int32, errToReturn error) *mockFunction {
 	return m
 }
 
-func (m *mockFunction) Call() error {
+func (m *funcRetryer) Call() error {
 	m.callCount.Add(1)
 	if m.callCount.Load() <= m.failCount.Load() {
 		return m.errExpected
@@ -100,7 +100,7 @@ func TestNewRetryer(t *testing.T) {
 
 // TestRetrySuccessFirstAttempt tests a function that succeeds immediately
 func TestRetrySuccessFirstAttempt(t *testing.T) {
-	mockFn := newMockFunction(0, errors.New("initial error")) // Succeeds on 1st call
+	mockFn := newFuncRetryer(0, errors.New("initial error")) // Succeeds on 1st call
 
 	options := &model.Options{
 		MaxRetries:   3,
@@ -117,7 +117,7 @@ func TestRetrySuccessFirstAttempt(t *testing.T) {
 
 // TestRetrySuccessAfterRetries tests a function that succeeds after some failures
 func TestRetrySuccessAfterRetries(t *testing.T) {
-	mockFn := newMockFunction(2, errors.New("temporary error")) // Fails 2 times, succeeds on 3rd
+	mockFn := newFuncRetryer(2, errors.New("temporary error")) // Fails 2 times, succeeds on 3rd
 
 	options := &model.Options{
 		MaxRetries:   5,
@@ -135,7 +135,7 @@ func TestRetrySuccessAfterRetries(t *testing.T) {
 // TestRetryFailureMaxRetries tests a function that always fails
 func TestRetryFailureMaxRetries(t *testing.T) {
 	expectedErr := errors.New("permanent error")
-	mockFn := newMockFunction(5, expectedErr) // Fails 5 times
+	mockFn := newFuncRetryer(5, expectedErr) // Fails 5 times
 
 	options := &model.Options{
 		MaxRetries:   5,
@@ -154,7 +154,7 @@ func TestRetryFailureMaxRetries(t *testing.T) {
 // TestRetryLinearBackoff tests linear backoff
 func TestRetryLinearBackoff(t *testing.T) {
 	expectedErr := errors.New("test error")
-	mockFn := newMockFunction(3, expectedErr) // Fails 3 times
+	mockFn := newFuncRetryer(3, expectedErr) // Fails 3 times
 
 	options := &model.Options{
 		MaxRetries:   3,
@@ -177,7 +177,7 @@ func TestRetryLinearBackoff(t *testing.T) {
 // TestRetryExponentialBackoff tests exponential backoff
 func TestRetryExponentialBackoff(t *testing.T) {
 	expectedErr := errors.New("test error")
-	mockFn := newMockFunction(3, expectedErr) // Fails 3 times
+	mockFn := newFuncRetryer(3, expectedErr) // Fails 3 times
 
 	options := &model.Options{
 		MaxRetries:   3,

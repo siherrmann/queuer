@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"log"
+	"queuer/model"
 	"reflect"
 	"time"
 )
@@ -28,11 +30,12 @@ func NewScheduler(task interface{}, startTime *time.Time) (*Scheduler, error) {
 	}, nil
 }
 
-func (s *Scheduler) Go() {
+func (s *Scheduler) Go(parameters model.Parameters) {
 	go func() {
-		timer := time.AfterFunc(s.After, func() {
-			reflect.ValueOf(s.Task).Call([]reflect.Value{})
+		log.Printf("Scheduler will run task after %v", s.After)
+		time.AfterFunc(s.After, func() {
+			log.Printf("Running task %s with parameters: %v", reflect.TypeOf(s.Task).Name(), parameters)
+			reflect.ValueOf(s.Task).Call(parameters.ToReflectValues())
 		})
-		defer timer.Stop()
 	}()
 }

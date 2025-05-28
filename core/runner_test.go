@@ -14,15 +14,15 @@ import (
 )
 
 // Mock function to simulate a task that might succeed or fail
-type mockTaskFunc struct {
+type funcRunner struct {
 	ctx          context.Context // Context for manual cancellation
 	panic        bool            // If true, it will panic on call
 	workDuration time.Duration   // How long each call should simulate work
 	returnErr    error           // The error it returns when failing
 }
 
-func newMockTaskFunc(ctx context.Context, panic bool, workDuration time.Duration, errToReturn error) *mockTaskFunc {
-	return &mockTaskFunc{
+func newFuncRunner(ctx context.Context, panic bool, workDuration time.Duration, errToReturn error) *funcRunner {
+	return &funcRunner{
 		ctx:          ctx,
 		panic:        panic,
 		workDuration: workDuration,
@@ -30,9 +30,9 @@ func newMockTaskFunc(ctx context.Context, panic bool, workDuration time.Duration
 	}
 }
 
-func (m *mockTaskFunc) Call(param1 int, param2 string) (int, error) {
+func (m *funcRunner) Call(param1 int, param2 string) (int, error) {
 	if m.panic {
-		panic(fmt.Sprintf("MockTaskFunc panicked on call"))
+		panic(fmt.Sprintf("FuncRunner panicked on call"))
 	}
 
 	// Simulate work duration
@@ -57,7 +57,7 @@ func (m *mockTaskFunc) Call(param1 int, param2 string) (int, error) {
 
 // TestNewRunner tests the constructor's validation and parameter handling
 func TestNewRunner(t *testing.T) {
-	mockFn := newMockTaskFunc(context.Background(), false, 100*time.Millisecond, nil).Call
+	mockFn := newFuncRunner(context.Background(), false, 100*time.Millisecond, nil).Call
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
@@ -119,7 +119,7 @@ func TestNewRunner(t *testing.T) {
 
 // TestRunSuccess tests a task that completes successfully within timeout
 func TestRunSuccess(t *testing.T) {
-	mockFn := newMockTaskFunc(context.Background(), false, 100*time.Millisecond, nil).Call // Succeeds immediately, short work
+	mockFn := newFuncRunner(context.Background(), false, 100*time.Millisecond, nil).Call // Succeeds immediately, short work
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
@@ -145,7 +145,7 @@ func TestRunSuccess(t *testing.T) {
 // TestRunFailure tests a task that fails within timeout
 func TestRunFailure(t *testing.T) {
 	expectedErr := fmt.Errorf("invalid int string")
-	mockFn := newMockTaskFunc(context.Background(), false, 100*time.Millisecond, expectedErr).Call // Fails once
+	mockFn := newFuncRunner(context.Background(), false, 100*time.Millisecond, expectedErr).Call // Fails once
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
@@ -169,7 +169,7 @@ func TestRunFailure(t *testing.T) {
 
 // TestRunTimeout tests a task that exceeds its timeout
 func TestRunTimeout(t *testing.T) {
-	mockFn := newMockTaskFunc(context.Background(), false, 3*time.Second, nil).Call // Task takes 3 seconds
+	mockFn := newFuncRunner(context.Background(), false, 3*time.Second, nil).Call // Task takes 3 seconds
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
@@ -198,7 +198,7 @@ func TestRunTimeout(t *testing.T) {
 
 // TestRunParentContextCancel tests if Run respects parent context cancellation
 func TestRunParentContextCancel(t *testing.T) {
-	mockFn := newMockTaskFunc(context.Background(), false, 5*time.Second, nil).Call // Task takes 5 seconds
+	mockFn := newFuncRunner(context.Background(), false, 5*time.Second, nil).Call // Task takes 5 seconds
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
@@ -235,7 +235,7 @@ func TestRunParentContextCancel(t *testing.T) {
 
 // TestRunTaskPanic tests a task that panics
 func TestRunTaskPanic(t *testing.T) {
-	mockFn := newMockTaskFunc(context.Background(), true, 5*time.Second, nil).Call // Panics on 1st call
+	mockFn := newFuncRunner(context.Background(), true, 5*time.Second, nil).Call // Panics on 1st call
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
@@ -259,7 +259,7 @@ func TestRunTaskPanic(t *testing.T) {
 
 // TestCancelMethodWithOnCancelFunc tests the onCancel callback
 func TestCancelMethodWithOnCancelFunc(t *testing.T) {
-	mockFn := newMockTaskFunc(context.Background(), true, 5*time.Second, nil).Call // Panics on 1st call
+	mockFn := newFuncRunner(context.Background(), true, 5*time.Second, nil).Call // Panics on 1st call
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
