@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"log"
 	"queuer/model" // Assuming model.Options and model.RetryBackoff are defined here
 	"sync/atomic"  // For atomic counter in mock function
 	"testing"
@@ -15,15 +14,14 @@ import (
 type mockFunction struct {
 	failCount   *atomic.Int32 // How many times it should fail before succeeding
 	callCount   *atomic.Int32 // Tracks how many times it has been called
-	returnErr   error         // The error it returns when failing
-	actualSleep time.Duration // To capture the actual sleep duration for backoff tests
+	errExpected error         // The error it returns when failing
 }
 
 func newMockFunction(failBeforeSuccess int32, errToReturn error) *mockFunction {
 	m := &mockFunction{
-		returnErr: errToReturn,
-		failCount: new(atomic.Int32),
-		callCount: new(atomic.Int32),
+		errExpected: errToReturn,
+		failCount:   new(atomic.Int32),
+		callCount:   new(atomic.Int32),
 	}
 	m.failCount.Store(failBeforeSuccess) // Initialize atomic.Int32
 	m.callCount.Store(0)                 // Initialize atomic.Int32
@@ -32,12 +30,10 @@ func newMockFunction(failBeforeSuccess int32, errToReturn error) *mockFunction {
 
 func (m *mockFunction) Call() error {
 	m.callCount.Add(1)
-	log.Printf("Mock function called (attempt %d)", m.callCount.Load())
-
 	if m.callCount.Load() <= m.failCount.Load() {
-		return m.returnErr
+		return m.errExpected
 	}
-	return nil // Succeed after failCount attempts
+	return nil
 }
 
 // TestNewRetryer tests the constructor's validation
@@ -112,17 +108,11 @@ func TestRetrySuccessFirstAttempt(t *testing.T) {
 		RetryBackoff: model.RETRY_BACKOFF_NONE,
 	}
 	retryer, err := NewRetryer(mockFn.Call, options)
-	if err != nil {
-		t.Fatalf("NewRetryer failed: %v", err)
-	}
+	assert.NoError(t, err, "NewRetryer should not return an error for valid options")
 
 	err = retryer.Retry()
-	if err != nil {
-		t.Errorf("Retry() got unexpected error = %v, want nil", err)
-	}
-	if mockFn.callCount.Load() != 1 {
-		t.Errorf("Retry() called mock function %d times, want 1", mockFn.callCount.Load())
-	}
+	assert.NoError(t, err, "Retry() should not return an error on success")
+	assert.Equal(t, int32(1), mockFn.callCount.Load(), "Retry() should call mock function 1 time")
 }
 
 // TestRetrySuccessAfterRetries tests a function that succeeds after some failures
