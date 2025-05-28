@@ -2,8 +2,8 @@ package core
 
 import (
 	"errors"
-	"queuer/model" // Assuming model.Options and model.RetryBackoff are defined here
-	"sync/atomic"  // For atomic counter in mock function
+	"queuer/model"
+	"sync/atomic"
 	"testing"
 	"time"
 

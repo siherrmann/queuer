@@ -52,7 +52,15 @@ func (r *Runner) Run(ctx context.Context) ([]interface{}, error) {
 	}
 	defer r.Cancel()
 
+	panicChan := make(chan interface{}, 1)
+
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				panicChan <- p
+			}
+		}()
+
 		// Run the task function with the parameters
 		taskFunc := reflect.ValueOf(r.task.Task)
 		results := taskFunc.Call(r.job.Parameters.ToReflectValues())
@@ -63,7 +71,7 @@ func (r *Runner) Run(ctx context.Context) ([]interface{}, error) {
 
 		var err error
 		var ok bool
-		if err, ok = resultValues[len(resultValues)-1].(error); ok && len(resultValues) > 0 {
+		if err, ok = resultValues[len(resultValues)-1].(error); len(resultValues) > 0 && (ok || (len(r.task.OutputParameters) > 0 && r.task.OutputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil)) {
 			resultValues = resultValues[:len(resultValues)-1]
 		}
 
@@ -79,6 +87,9 @@ func (r *Runner) Run(ctx context.Context) ([]interface{}, error) {
 		case err := <-r.errorChannel:
 			r.Cancel()
 			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, err)
+		case p := <-panicChan:
+			r.Cancel()
+			return nil, fmt.Errorf("task %s panicked: %v", r.job.TaskName, p)
 		case results := <-r.resultsChannel:
 			r.Cancel()
 			return results, nil
