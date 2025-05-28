@@ -31,12 +31,15 @@ func (r *Retryer) Retry() (err error) {
 		err = r.function()
 		if err != nil {
 			time.Sleep(r.sleep)
-			if r.options.RetryBackoff == model.RETRY_BACKOFF_LINEAR {
+			if r.options.RetryBackoff == model.RETRY_BACKOFF_NONE {
+				continue
+			} else if r.options.RetryBackoff == model.RETRY_BACKOFF_LINEAR {
 				r.sleep += time.Duration(r.options.RetryDelay) * time.Second
+				continue
 			} else if r.options.RetryBackoff == model.RETRY_BACKOFF_EXPONENTIAL {
 				r.sleep *= 2
+				continue
 			}
-			continue
 		}
 		break
 	}
