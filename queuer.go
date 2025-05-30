@@ -30,7 +30,7 @@ type Queuer struct {
 	log *log.Logger
 }
 
-func NewQueuer(name string, maxConcurrency int, options ...*model.Options) *Queuer {
+func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queuer {
 	// Logger
 	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
 

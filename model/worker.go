@@ -16,7 +16,7 @@ type Worker struct {
 	ID             int       `json:"id"`
 	RID            uuid.UUID `json:"rid"`
 	Name           string    `json:"name"`
-	Options        *Options  `json:"options,omitempty"`
+	Options        *OnError  `json:"options,omitempty"`
 	MaxConcurrency int       `json:"max_concurrency"`
 	AvailableTasks []string  `json:"available_tasks"`
 	Status         string    `json:"status"`
@@ -40,7 +40,7 @@ func NewWorker(name string, maxConcurrency int) (*Worker, error) {
 	}, nil
 }
 
-func NewWorkerWithOptions(name string, maxConcurrency int, options *Options) (*Worker, error) {
+func NewWorkerWithOptions(name string, maxConcurrency int, options *OnError) (*Worker, error) {
 	if len(name) == 0 || len(name) > 100 {
 		return nil, fmt.Errorf("name must have a length between 1 and 100")
 	}

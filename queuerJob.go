@@ -11,30 +11,29 @@ import (
 
 // AddJob adds a job to the queue with the given task and parameters.
 func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
-	taskName, err := helper.GetTaskNameFromInterface(task)
-	if err != nil {
-		return nil, fmt.Errorf("error getting task name: %v", err)
-	}
-
-	var newJob *model.Job
+	var options *model.Options
 	if q.worker.Options != nil {
-		newJob, err = model.NewJobWithOptions(taskName, q.worker.Options, parameters...)
-		if err != nil {
-			return nil, fmt.Errorf("error creating job: %v", err)
-		}
-	} else {
-		newJob, err = model.NewJob(taskName, parameters...)
-		if err != nil {
-			return nil, fmt.Errorf("error creating job: %v", err)
-		}
+		options = &model.Options{OnError: q.worker.Options}
 	}
 
-	job, err := q.dbJob.InsertJob(newJob)
+	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error inserting job: %v", err)
+		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
 	q.log.Printf("Job added with RID %v", job.RID)
+
+	return job, nil
+}
+
+// AddJobWithOptions adds a job with the given task, options, and parameters.
+func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
+	job, err := q.addJob(task, options, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error adding job: %v", err)
+	}
+
+	q.log.Printf("Job with options added with RID %v", job.RID)
 
 	return job, nil
 }
@@ -48,22 +47,16 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 			return fmt.Errorf("error getting task name: %v", err)
 		}
 
-		var newJob *model.Job
+		var options *model.Options
 		if batchJob.Options != nil {
-			newJob, err = model.NewJobWithOptions(taskName, batchJob.Options, batchJob.Parameters...)
-			if err != nil {
-				return fmt.Errorf("error creating job with job options: %v", err)
-			}
+			options = batchJob.Options
 		} else if q.worker.Options != nil {
-			newJob, err = model.NewJobWithOptions(taskName, q.worker.Options, batchJob.Parameters...)
-			if err != nil {
-				return fmt.Errorf("error creating job with worker options: %v", err)
-			}
-		} else {
-			newJob, err = model.NewJob(taskName, batchJob.Parameters...)
-			if err != nil {
-				return fmt.Errorf("error creating job: %v", err)
-			}
+			options = &model.Options{OnError: q.worker.Options}
+		}
+
+		newJob, err := model.NewJob(taskName, options, batchJob.Parameters...)
+		if err != nil {
+			return fmt.Errorf("error creating job with job options: %v", err)
 		}
 
 		jobs = append(jobs, newJob)
@@ -77,28 +70,6 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	q.log.Printf("%v jobs added", len(jobs))
 
 	return nil
-}
-
-// AddJobWithOptions adds a job with the given task, options, and parameters.
-func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
-	taskName, err := helper.GetTaskNameFromInterface(task)
-	if err != nil {
-		return nil, fmt.Errorf("error getting task name: %v", err)
-	}
-
-	newJob, err := model.NewJobWithOptions(taskName, options, parameters...)
-	if err != nil {
-		return nil, fmt.Errorf("error creating job: %v", err)
-	}
-
-	job, err := q.dbJob.InsertJob(newJob)
-	if err != nil {
-		return nil, err
-	}
-
-	q.log.Printf("Job with options added with RID %v", job.RID)
-
-	return job, nil
 }
 
 // CancelJob cancels a job with the given job RID.
@@ -177,6 +148,26 @@ func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int
 
 // Internal
 
+// addJob adds a job to the queue with all necessary parameters.
+func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
+	taskName, err := helper.GetTaskNameFromInterface(task)
+	if err != nil {
+		return nil, fmt.Errorf("error getting task name: %v", err)
+	}
+
+	newJob, err := model.NewJob(taskName, options, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating job: %v", err)
+	}
+
+	job, err := q.dbJob.InsertJob(newJob)
+	if err != nil {
+		return nil, fmt.Errorf("error inserting job: %v", err)
+	}
+
+	return job, nil
+}
+
 // runJobInitial is called to run the next job in the queue.
 func (q *Queuer) runJobInitial() error {
 	// Update job status to running with worker.
@@ -254,12 +245,12 @@ func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 
 // failJob updates the job status to failed and retries if configured.
 func (q *Queuer) failJob(job *model.Job, jobErr error) {
-	if job.Options != nil && job.Options.MaxRetries > 0 {
+	if job.Options != nil && job.Options.OnError.MaxRetries > 0 {
 		retryer, err := core.NewRetryer(
 			func() error {
 				return q.retryJob(job)
 			},
-			job.Options,
+			job.Options.OnError,
 		)
 		if err != nil {
 			jobErr = fmt.Errorf("error creating retryer: %v, initial error: %v", err, jobErr)

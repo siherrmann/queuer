@@ -42,10 +42,10 @@ func NewRunner(task *model.Task, job *model.Job) (*Runner, error) {
 
 func (r *Runner) Run(ctx context.Context) ([]interface{}, error) {
 	var ctxRunner context.Context
-	if r.job.Options != nil && r.job.Options.Timeout > 0 {
+	if r.job.Options != nil && r.job.Options.OnError.Timeout > 0 {
 		ctxRunner, r.cancel = context.WithTimeout(
 			ctx,
-			time.Duration(math.Round(r.job.Options.Timeout*1000))*time.Millisecond,
+			time.Duration(math.Round(r.job.Options.OnError.Timeout*1000))*time.Millisecond,
 		)
 	} else {
 		ctxRunner, r.cancel = context.WithCancel(ctx)

@@ -10,10 +10,10 @@ import (
 type Retryer struct {
 	function func() error
 	sleep    time.Duration
-	options  *model.Options
+	options  *model.OnError
 }
 
-func NewRetryer(function func() error, options *model.Options) (*Retryer, error) {
+func NewRetryer(function func() error, options *model.OnError) (*Retryer, error) {
 	if options == nil || options.MaxRetries <= 0 || options.RetryDelay < 0 {
 		return nil, fmt.Errorf("no valid retry options provided")
 	}

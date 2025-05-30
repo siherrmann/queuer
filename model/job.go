@@ -56,33 +56,24 @@ func (r *Parameters) ToReflectValues() []reflect.Value {
 }
 
 type Job struct {
-	ID         int        `json:"id"`
-	RID        uuid.UUID  `json:"rid"`
-	WorkerID   int        `json:"worker_id"`
-	WorkerRID  uuid.UUID  `json:"worker_rid"`
-	Options    *Options   `json:"options"`
-	TaskName   string     `json:"task_name"`
-	Parameters Parameters `json:"parameters"`
-	Status     string     `json:"status"`
-	Attempts   int        `json:"attempts"`
-	Results    Parameters `json:"result"`
-	Error      string     `json:"error"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID          int        `json:"id"`
+	RID         uuid.UUID  `json:"rid"`
+	WorkerID    int        `json:"worker_id"`
+	WorkerRID   uuid.UUID  `json:"worker_rid"`
+	Options     *Options   `json:"options"`
+	TaskName    string     `json:"task_name"`
+	Parameters  Parameters `json:"parameters"`
+	Status      string     `json:"status"`
+	ScheduledAt *time.Time `json:"scheduled_at"`
+	StartedAt   *time.Time `json:"started_at"`
+	Attempts    int        `json:"attempts"`
+	Results     Parameters `json:"result"`
+	Error       string     `json:"error"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-func NewJob(taskName string, parameters ...interface{}) (*Job, error) {
-	if len(taskName) == 0 || len(taskName) > 100 {
-		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
-	}
-
-	return &Job{
-		TaskName:   taskName,
-		Parameters: parameters,
-	}, nil
-}
-
-func NewJobWithOptions(taskName string, options *Options, parameters ...interface{}) (*Job, error) {
+func NewJob(taskName string, options *Options, parameters ...interface{}) (*Job, error) {
 	if len(taskName) == 0 || len(taskName) > 100 {
 		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
 	}

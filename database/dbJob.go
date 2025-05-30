@@ -83,6 +83,7 @@ func (r JobDBHandler) CreateTable() error {
 			parameters JSONB DEFAULT '{}',
 			status VARCHAR(50) DEFAULT 'QUEUED',
 			scheduled_at TIMESTAMP DEFAULT NULL,
+			started_at TIMESTAMP DEFAULT NULL,
 			attempts INT DEFAULT 0,
 			results JSONB DEFAULT '{}',
 			error TEXT DEFAULT '',
@@ -144,8 +145,8 @@ func (r JobDBHandler) DropTable() error {
 func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO job (options, task_name, parameters)
-			VALUES ($1, $2, $3)
+		`INSERT INTO job (options, task_name, parameters, status)
+			VALUES ($1, $2, $3, $4)
 		RETURNING
 			id,
 			rid,
@@ -155,12 +156,14 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
 			attempts,
 			created_at,
 			updated_at;`,
 		job.Options,
 		job.TaskName,
 		job.Parameters,
+		job.Status,
 	)
 
 	err := row.Scan(
@@ -172,6 +175,7 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 		&newJob.TaskName,
 		&newJob.Parameters,
 		&newJob.Status,
+		&newJob.ScheduledAt,
 		&newJob.Attempts,
 		&newJob.CreatedAt,
 		&newJob.UpdatedAt,
@@ -193,7 +197,7 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 		return fmt.Errorf("error starting transaction: %w", err)
 	}
 
-	stmt, err := tx.Prepare(pq.CopyIn("job", "options", "task_name", "parameters"))
+	stmt, err := tx.Prepare(pq.CopyIn("job", "options", "task_name", "parameters", "scheduled_at"))
 	if err != nil {
 		return fmt.Errorf("error preparing statement for batch insert: %w", err)
 	}
@@ -212,6 +216,7 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 			string(optionsJSON),
 			job.TaskName,
 			string(parametersJSON),
+			job.ScheduledAt,
 		)
 		if err != nil {
 			return fmt.Errorf("error executing batch insert for job %s: %w", job.RID, err)
@@ -255,6 +260,7 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 			worker_id = cw.id,
 			worker_rid = cw.rid,
 			status = 'RUNNING',
+			started_at = CURRENT_TIMESTAMP,
 			attempts = attempts + 1,
 			updated_at = CURRENT_TIMESTAMP
 		FROM current_worker AS cw
@@ -277,6 +283,8 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 			job.task_name,
 			job.parameters,
 			job.status,
+			job.scheduled_at,
+			job.started_at,
 			job.attempts,
 			job.created_at,
 			job.updated_at;`,
@@ -293,6 +301,8 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 		&job.TaskName,
 		&job.Parameters,
 		&job.Status,
+		&job.ScheduledAt,
+		&job.StartedAt,
 		&job.Attempts,
 		&job.CreatedAt,
 		&job.UpdatedAt,
@@ -320,6 +330,8 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 				options,
 				task_name,
 				parameters,
+				scheduled_at,
+				started_at,
 				attempts,
 				created_at,
 				updated_at
@@ -332,6 +344,8 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -347,6 +361,8 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			jobs_old.task_name,
 			jobs_old.parameters,
 			$2,
+			jobs_old.scheduled_at,
+			jobs_old.started_at,
 			jobs_old.attempts,
 			$3,
 			$4,
@@ -362,6 +378,8 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -383,6 +401,8 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 		&archivedJob.TaskName,
 		&archivedJob.Parameters,
 		&archivedJob.Status,
+		&archivedJob.ScheduledAt,
+		&archivedJob.StartedAt,
 		&archivedJob.Attempts,
 		&archivedJob.Results,
 		&archivedJob.Error,
@@ -422,6 +442,8 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -444,6 +466,8 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 		&job.TaskName,
 		&job.Parameters,
 		&job.Status,
+		&job.ScheduledAt,
+		&job.StartedAt,
 		&job.Attempts,
 		&job.Results,
 		&job.Error,
@@ -469,6 +493,8 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -508,6 +534,8 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
+			&job.ScheduledAt,
+			&job.StartedAt,
 			&job.Attempts,
 			&job.Results,
 			&job.Error,
@@ -536,6 +564,8 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -575,6 +605,8 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
+			&job.ScheduledAt,
+			&job.StartedAt,
 			&job.Attempts,
 			&job.Results,
 			&job.Error,
@@ -604,6 +636,8 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -647,6 +681,8 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
+			&job.ScheduledAt,
+			&job.StartedAt,
 			&job.Attempts,
 			&job.Results,
 			&job.Error,
@@ -679,6 +715,8 @@ func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -701,6 +739,8 @@ func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 		&job.TaskName,
 		&job.Parameters,
 		&job.Status,
+		&job.ScheduledAt,
+		&job.StartedAt,
 		&job.Attempts,
 		&job.Results,
 		&job.Error,
@@ -725,6 +765,8 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -764,6 +806,8 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
+			&job.ScheduledAt,
+			&job.StartedAt,
 			&job.Attempts,
 			&job.Results,
 			&job.Error,
@@ -791,6 +835,8 @@ func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int
 			task_name,
 			parameters,
 			status,
+			scheduled_at,
+			started_at,
 			attempts,
 			results,
 			error,
@@ -834,6 +880,8 @@ func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int
 			&job.TaskName,
 			&job.Parameters,
 			&job.Status,
+			&job.ScheduledAt,
+			&job.StartedAt,
 			&job.Attempts,
 			&job.Results,
 			&job.Error,

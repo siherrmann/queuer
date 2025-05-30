@@ -6,6 +6,7 @@ import (
 	"queuer"
 	"queuer/model"
 	"strconv"
+	"time"
 )
 
 func main() {
@@ -17,7 +18,7 @@ func main() {
 	q := queuer.NewQueuer(
 		"exampleWorker",
 		10,
-		&model.Options{
+		&model.OnError{
 			Timeout:      2,
 			RetryDelay:   1,
 			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
@@ -53,10 +54,15 @@ func main() {
 	// Example adding a single job with options
 	// This job will timeout after 0.1 seconds
 	options := &model.Options{
-		Timeout:      0.1,
-		RetryDelay:   1,
-		RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
-		MaxRetries:   3,
+		OnError: &model.OnError{
+			Timeout:      0.1,
+			RetryDelay:   1,
+			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+			MaxRetries:   3,
+		},
+		Schedule: &model.Schedule{
+			Start: time.Now().Add(time.Second * 5),
+		},
 	}
 	_, err = q.AddJobWithOptions(MyTask, options, 5, "12")
 	if err != nil {

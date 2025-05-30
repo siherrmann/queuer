@@ -40,12 +40,12 @@ func (m *funcRetryer) Call() error {
 func TestNewRetryer(t *testing.T) {
 	tests := []struct {
 		name    string
-		options *model.Options
+		options *model.OnError
 		wantErr bool
 	}{
 		{
 			name: "Valid Options",
-			options: &model.Options{
+			options: &model.OnError{
 				MaxRetries:   3,
 				RetryDelay:   1,
 				RetryBackoff: model.RETRY_BACKOFF_NONE,
@@ -54,7 +54,7 @@ func TestNewRetryer(t *testing.T) {
 		},
 		{
 			name: "MaxRetries Zero",
-			options: &model.Options{
+			options: &model.OnError{
 				MaxRetries:   0,
 				RetryDelay:   1,
 				RetryBackoff: model.RETRY_BACKOFF_NONE,
@@ -63,7 +63,7 @@ func TestNewRetryer(t *testing.T) {
 		},
 		{
 			name: "MaxRetries Negative",
-			options: &model.Options{
+			options: &model.OnError{
 				MaxRetries:   -1,
 				RetryDelay:   1,
 				RetryBackoff: model.RETRY_BACKOFF_NONE,
@@ -72,7 +72,7 @@ func TestNewRetryer(t *testing.T) {
 		},
 		{
 			name: "RetryDelay Negative",
-			options: &model.Options{
+			options: &model.OnError{
 				MaxRetries:   3,
 				RetryDelay:   -1,
 				RetryBackoff: model.RETRY_BACKOFF_NONE,
@@ -102,7 +102,7 @@ func TestNewRetryer(t *testing.T) {
 func TestRetrySuccessFirstAttempt(t *testing.T) {
 	mockFn := newFuncRetryer(0, errors.New("initial error")) // Succeeds on 1st call
 
-	options := &model.Options{
+	options := &model.OnError{
 		MaxRetries:   3,
 		RetryDelay:   1,
 		RetryBackoff: model.RETRY_BACKOFF_NONE,
@@ -119,7 +119,7 @@ func TestRetrySuccessFirstAttempt(t *testing.T) {
 func TestRetrySuccessAfterRetries(t *testing.T) {
 	mockFn := newFuncRetryer(2, errors.New("temporary error")) // Fails 2 times, succeeds on 3rd
 
-	options := &model.Options{
+	options := &model.OnError{
 		MaxRetries:   5,
 		RetryDelay:   1,
 		RetryBackoff: model.RETRY_BACKOFF_NONE,
@@ -137,7 +137,7 @@ func TestRetryFailureMaxRetries(t *testing.T) {
 	expectedErr := errors.New("permanent error")
 	mockFn := newFuncRetryer(5, expectedErr) // Fails 5 times
 
-	options := &model.Options{
+	options := &model.OnError{
 		MaxRetries:   5,
 		RetryDelay:   1,
 		RetryBackoff: model.RETRY_BACKOFF_NONE,
@@ -156,7 +156,7 @@ func TestRetryLinearBackoff(t *testing.T) {
 	expectedErr := errors.New("test error")
 	mockFn := newFuncRetryer(3, expectedErr) // Fails 3 times
 
-	options := &model.Options{
+	options := &model.OnError{
 		MaxRetries:   3,
 		RetryDelay:   1,
 		RetryBackoff: model.RETRY_BACKOFF_LINEAR,
@@ -179,7 +179,7 @@ func TestRetryExponentialBackoff(t *testing.T) {
 	expectedErr := errors.New("test error")
 	mockFn := newFuncRetryer(3, expectedErr) // Fails 3 times
 
-	options := &model.Options{
+	options := &model.OnError{
 		MaxRetries:   3,
 		RetryDelay:   1,
 		RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,

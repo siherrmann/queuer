@@ -129,7 +129,11 @@ func TestRunSuccess(t *testing.T) {
 			5,
 			"10",
 		},
-		Options: &model.Options{Timeout: 5.0},
+		Options: &model.Options{
+			OnError: &model.OnError{
+				Timeout: 5.0,
+			},
+		},
 	}
 
 	runner, err := NewRunner(mockTask, job)
@@ -155,7 +159,11 @@ func TestRunFailure(t *testing.T) {
 			1,
 			"string",
 		},
-		Options: &model.Options{Timeout: 5.0},
+		Options: &model.Options{
+			OnError: &model.OnError{
+				Timeout: 5.0,
+			},
+		},
 	}
 
 	runner, err := NewRunner(mockTask, job)
@@ -179,7 +187,11 @@ func TestRunTimeout(t *testing.T) {
 			1,
 			"2",
 		},
-		Options: &model.Options{Timeout: 0.5},
+		Options: &model.Options{
+			OnError: &model.OnError{
+				Timeout: 0.5,
+			},
+		},
 	}
 
 	runner, err := NewRunner(mockTask, job)
@@ -208,7 +220,11 @@ func TestRunParentContextCancel(t *testing.T) {
 			1,
 			"2",
 		},
-		Options: &model.Options{Timeout: 10.0},
+		Options: &model.Options{
+			OnError: &model.OnError{
+				Timeout: 10.0,
+			},
+		},
 	}
 
 	runner, err := NewRunner(mockTask, job)
@@ -245,7 +261,11 @@ func TestRunTaskPanic(t *testing.T) {
 			5,
 			"5",
 		},
-		Options: &model.Options{Timeout: 5.0},
+		Options: &model.Options{
+			OnError: &model.OnError{
+				Timeout: 5.0,
+			},
+		},
 	}
 
 	runner, err := NewRunner(mockTask, job)
@@ -269,7 +289,11 @@ func TestCancelMethodWithOnCancelFunc(t *testing.T) {
 			1,
 			"1",
 		},
-		Options: &model.Options{Timeout: 1.0},
+		Options: &model.Options{
+			OnError: &model.OnError{
+				Timeout: 1.0,
+			},
+		},
 	}
 
 	runner, err := NewRunner(mockTask, job)
