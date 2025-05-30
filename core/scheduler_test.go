@@ -95,7 +95,6 @@ func TestNewScheduler_ValidTask(t *testing.T) {
 			} else {
 				require.NoError(t, err, "NewScheduler should not return an error for valid task")
 				require.NotNil(t, scheduler, "Scheduler should not be nil for valid task")
-				assert.LessOrEqual(t, scheduler.After, test.expected, "Expected After duration to be close to 0 for nil startTime")
 			}
 		})
 	}

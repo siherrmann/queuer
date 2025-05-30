@@ -71,7 +71,7 @@ func main() {
 
 	// Wait for a while to let the jobs process
 	<-ctx.Done()
-	log.Println("All jobs processed, exiting...")
+	log.Println("Exiting...")
 }
 
 // Simple example task function

@@ -9,8 +9,8 @@ import (
 )
 
 type Scheduler struct {
-	Task  interface{}
-	After time.Duration
+	Task      interface{}
+	StartTime *time.Time
 }
 
 func NewScheduler(task interface{}, startTime *time.Time) (*Scheduler, error) {
@@ -18,22 +18,21 @@ func NewScheduler(task interface{}, startTime *time.Time) (*Scheduler, error) {
 		return nil, fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
 	}
 
-	var duration time.Duration
-	now := time.Now()
-	if startTime != nil {
-		duration = startTime.Sub(now)
-	}
-
 	return &Scheduler{
-		After: duration,
-		Task:  task,
+		StartTime: startTime,
+		Task:      task,
 	}, nil
 }
 
 func (s *Scheduler) Go(parameters model.Parameters) {
+	var duration time.Duration
+	if s.StartTime != nil {
+		duration = s.StartTime.Sub(time.Now())
+	}
+
 	go func() {
-		log.Printf("Scheduler will run task after %v", s.After)
-		time.AfterFunc(s.After, func() {
+		log.Printf("Scheduler will run task after %v", duration)
+		time.AfterFunc(duration, func() {
 			log.Printf("Running task %s with parameters: %v", reflect.TypeOf(s.Task).Name(), parameters)
 			reflect.ValueOf(s.Task).Call(parameters.ToReflectValues())
 		})
