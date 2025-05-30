@@ -25,6 +25,7 @@ type JobDBHandlerFunctions interface {
 	DeleteJob(rid uuid.UUID) error
 	SelectJob(rid uuid.UUID) (*model.Job, error)
 	SelectAllJobs(lastID int, entries int) ([]*model.Job, error)
+	SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, entries int) ([]*model.Job, error)
 	SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error)
 	// Job Archive
 	SelectJobFromArchive(rid uuid.UUID) (*model.Job, error)
@@ -81,6 +82,7 @@ func (r JobDBHandler) CreateTable() error {
 			task_name VARCHAR(100) DEFAULT '',
 			parameters JSONB DEFAULT '{}',
 			status VARCHAR(50) DEFAULT 'QUEUED',
+			scheduled_at TIMESTAMP DEFAULT NULL,
 			attempts INT DEFAULT 0,
 			results JSONB DEFAULT '{}',
 			error TEXT DEFAULT '',
@@ -514,6 +516,73 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 		)
 		if err != nil {
 			return []*model.Job{}, fmt.Errorf("error scanning job row: %w", err)
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
+}
+
+// SelectAllJobsByWorkerRID retrieves a paginated list of jobs for a specific worker, filtered by worker RID.
+func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, entries int) ([]*model.Job, error) {
+	rows, err := r.db.Instance.Query(
+		`SELECT
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			attempts,
+			results,
+			error,
+			created_at,
+			updated_at
+		FROM job
+		WHERE worker_rid = $1
+			AND (0 = $2
+				OR created_at < (
+					SELECT
+						d.created_at
+					FROM
+						job AS d
+					WHERE
+						d.id = $2))
+		ORDER BY created_at DESC
+		LIMIT $3;`,
+		workerRid,
+		lastID,
+		entries,
+	)
+	if err != nil {
+		return []*model.Job{}, fmt.Errorf("error querying jobs by worker RID: %w", err)
+	}
+
+	defer rows.Close()
+
+	var jobs []*model.Job
+	for rows.Next() {
+		job := &model.Job{}
+		err := rows.Scan(
+			&job.ID,
+			&job.RID,
+			&job.WorkerID,
+			&job.WorkerRID,
+			&job.Options,
+			&job.TaskName,
+			&job.Parameters,
+			&job.Status,
+			&job.Attempts,
+			&job.Results,
+			&job.Error,
+			&job.CreatedAt,
+			&job.UpdatedAt,
+		)
+		if err != nil {
+			return []*model.Job{}, fmt.Errorf("error scanning job row for worker: %w", err)
 		}
 
 		jobs = append(jobs, job)

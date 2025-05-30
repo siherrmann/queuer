@@ -39,14 +39,8 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 	return job, nil
 }
 
-type BatchJob struct {
-	Task       interface{}
-	Parameters []interface{}
-	Options    *model.Options
-}
-
 // AddJobs adds a batch of jobs to the queue.
-func (q *Queuer) AddJobs(batchJobs []BatchJob) error {
+func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	var jobs []*model.Job
 	for _, batchJob := range batchJobs {
 		taskName, err := helper.GetTaskNameFromInterface(batchJob.Task)
@@ -149,6 +143,36 @@ func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) error {
 	q.log.Printf("Job readded with RID %v", newJob.RID)
 
 	return nil
+}
+
+// GetJob retrieves a job by its RID.
+func (q *Queuer) GetJob(jobRid uuid.UUID) (*model.Job, error) {
+	job, err := q.dbJob.SelectJob(jobRid)
+	if err != nil {
+		return nil, fmt.Errorf("error selecting job with rid %v: %v", jobRid, err)
+	}
+
+	return job, nil
+}
+
+// GetJobs retrieves all jobs in the queue.
+func (q *Queuer) GetJobs(lastId int, entries int) ([]*model.Job, error) {
+	jobs, err := q.dbJob.SelectAllJobs(lastId, entries)
+	if err != nil {
+		return nil, fmt.Errorf("error selecting all jobs: %v", err)
+	}
+
+	return jobs, nil
+}
+
+// GetJobsByWorkerRID retrieves jobs assigned to a specific worker by its RID.
+func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int) ([]*model.Job, error) {
+	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, lastId, entries)
+	if err != nil {
+		return nil, fmt.Errorf("error selecting jobs by worker RID %v: %v", workerRid, err)
+	}
+
+	return jobs, nil
 }
 
 // Internal

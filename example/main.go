@@ -38,9 +38,9 @@ func main() {
 	}
 
 	// Example adding multiple jobs to the queue
-	batchedJobs := make([]queuer.BatchJob, 0, 10)
+	batchedJobs := make([]model.BatchJob, 0, 10)
 	for i := 0; i < 10; i++ {
-		batchedJobs = append(batchedJobs, queuer.BatchJob{
+		batchedJobs = append(batchedJobs, model.BatchJob{
 			Task:       MyTask,
 			Parameters: []interface{}{i, "12"},
 		})
