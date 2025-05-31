@@ -78,10 +78,29 @@ func NewJob(taskName string, options *Options, parameters ...interface{}) (*Job,
 		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
 	}
 
+	if options != nil && options.OnError != nil {
+		err := options.OnError.IsValid()
+		if err != nil {
+			return nil, fmt.Errorf("invalid OnError options: %v", err)
+		}
+	}
+	if options != nil && options.Schedule != nil {
+		err := options.Schedule.IsValid()
+		if err != nil {
+			return nil, fmt.Errorf("invalid Schedule options: %v", err)
+		}
+	}
+
+	var scheduledAt time.Time
+	if options != nil && options.Schedule != nil {
+		scheduledAt = options.Schedule.Start
+	}
+
 	return &Job{
-		TaskName:   taskName,
-		Options:    options,
-		Parameters: parameters,
+		TaskName:    taskName,
+		ScheduledAt: &scheduledAt,
+		Options:     options,
+		Parameters:  parameters,
 	}, nil
 }
 
