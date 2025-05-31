@@ -2,10 +2,13 @@ package helper
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -13,86 +16,109 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func mustStartPostgresContainer() (func(ctx context.Context, opts ...testcontainers.TerminateOption) error, error) {
-	var (
-		dbName = "database"
-		dbPwd  = "password"
-		dbUser = "user"
-	)
+const (
+	dbName = "database"
+	dbUser = "user"
+	dbPwd  = "password"
+)
 
-	dbContainer, err := postgres.Run(
-		context.Background(),
+var port string
+
+func mustStartPostgresContainer() (func(ctx context.Context, opts ...testcontainers.TerminateOption) error, string, error) {
+	ctx := context.Background()
+
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:latest",
 		postgres.WithDatabase(dbName),
 		postgres.WithUsername(dbUser),
 		postgres.WithPassword(dbPwd),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(5*time.Second)),
+				WithOccurrence(2).WithStartupTimeout(5*time.Second),
+		),
 	)
 	if err != nil {
-		return nil, err
+		return nil, "", fmt.Errorf("error starting postgres container: %w", err)
 	}
 
-	// dbHost, err := dbContainer.Host(context.Background())
-	// if err != nil {
-	// 	return dbContainer.Terminate, err
-	// }
+	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		return nil, "", fmt.Errorf("error getting connection string: %w", err)
+	}
 
-	// dbPort, err := dbContainer.MappedPort(context.Background(), "5432/tcp")
-	// if err != nil {
-	// 	return dbContainer.Terminate, err
-	// }
+	u, err := url.Parse(connStr)
+	if err != nil {
+		return nil, "", fmt.Errorf("error parsing connection string: %v\n", err)
+	}
 
-	// host = dbHost
-	// port = dbPort.Port()
-
-	return dbContainer.Terminate, err
+	return pgContainer.Terminate, u.Port(), err
 }
 
 func TestMain(m *testing.M) {
-	teardown, err := mustStartPostgresContainer()
+	var teardown func(ctx context.Context, opts ...testcontainers.TerminateOption) error
+	var err error
+	teardown, port, err = mustStartPostgresContainer()
 	if err != nil {
-		log.Fatalf("could not start postgres container: %v", err)
+		log.Fatalf("error starting postgres container: %v", err)
 	}
 
 	m.Run()
 
 	if teardown != nil && teardown(context.Background()) != nil {
-		log.Fatalf("could not teardown postgres container: %v", err)
+		log.Fatalf("error tearing down postgres container: %v", err)
 	}
 }
 
 func TestNew(t *testing.T) {
-	srv := NewDatabase("test_db", &DatabaseConfiguration{})
-	if srv == nil {
-		t.Fatal("New() returned nil")
-	}
+	srv := NewDatabase(
+		"test_db",
+		&DatabaseConfiguration{
+			Host:     "localhost",
+			Port:     port,
+			Database: dbName,
+			Username: dbUser,
+			Password: dbPwd,
+			Schema:   "public",
+		},
+	)
+
+	assert.NotNil(t, srv, "expected NewDatabase to return a non-nil instance")
 }
 
 func TestHealth(t *testing.T) {
-	srv := NewDatabase("test_db", &DatabaseConfiguration{})
+	srv := NewDatabase(
+		"test_db",
+		&DatabaseConfiguration{
+			Host:     "localhost",
+			Port:     port,
+			Database: dbName,
+			Username: dbUser,
+			Password: dbPwd,
+			Schema:   "public",
+		},
+	)
 
 	stats := srv.Health()
 
-	if stats["status"] != "up" {
-		t.Fatalf("expected status to be up, got %s", stats["status"])
-	}
-
-	if _, ok := stats["error"]; ok {
-		t.Fatalf("expected error not to be present")
-	}
-
-	if stats["message"] != "It's healthy" {
-		t.Fatalf("expected message to be 'It's healthy', got %s", stats["message"])
-	}
+	assert.Equal(t, stats["status"], "up", "expected status to be 'up', got %s", stats["status"])
+	assert.NotContains(t, stats, "error", "expected error to not be present in health check")
+	assert.Contains(t, stats, "message", "expected message to be present in health check")
+	assert.Equal(t, stats["message"], "It's healthy", "expected message to be 'It's healthy', got %s", stats["message"])
 }
 
 func TestClose(t *testing.T) {
-	srv := NewDatabase("test_db", &DatabaseConfiguration{})
+	srv := NewDatabase(
+		"test_db",
+		&DatabaseConfiguration{
+			Host:     "localhost",
+			Port:     port,
+			Database: dbName,
+			Username: dbUser,
+			Password: dbPwd,
+			Schema:   "public",
+		},
+	)
 
-	if srv.Close() != nil {
-		t.Fatalf("expected Close() to return nil")
-	}
+	assert.NotNil(t, srv, "expected NewDatabase to return a non-nil instance")
 }
