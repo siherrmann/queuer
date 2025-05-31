@@ -181,18 +181,14 @@ func (q *Queuer) runJobInitial() error {
 
 	for _, job := range jobs {
 		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
-			// TODO rewrite
 			scheduler, err := core.NewScheduler(
-				func() error {
-					return q.retryJob(job)
-				},
+				q.retryJob,
 				&job.Options.Schedule.Start,
 			)
 			if err != nil {
 				return fmt.Errorf("error creating scheduler: %v", err)
 			}
-			scheduler.Go(model.Parameters{})
-			q.log.Printf("Job with RID %v scheduled to run at %v", job.RID, job.Options.Schedule.Start)
+			scheduler.Go(q.ctx)
 		} else {
 			go func() {
 				q.log.Printf("Running job with RID %v", job.RID)
@@ -232,7 +228,7 @@ func (q *Queuer) runJob(job *model.Job) ([]interface{}, error) {
 
 // retryJob retries the job.
 func (q *Queuer) retryJob(job *model.Job) error {
-	q.log.Printf("Retrying job with RID %v", job.RID)
+	q.log.Printf("Retrying/running scheduled job with RID %v", job.RID)
 
 	resultValues, err := q.runJob(job)
 	if err != nil {

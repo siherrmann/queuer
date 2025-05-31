@@ -61,7 +61,7 @@ func main() {
 			MaxRetries:   3,
 		},
 		Schedule: &model.Schedule{
-			Start: time.Now().Add(time.Second * 5),
+			Start: time.Now().Add(time.Minute * 20),
 		},
 	}
 	_, err := q.AddJobWithOptions(MyTask, options, 5, "12")

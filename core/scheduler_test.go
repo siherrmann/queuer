@@ -1,8 +1,8 @@
 package core
 
 import (
+	"context"
 	"log"
-	"queuer/model"
 	"sync"
 	"testing"
 	"time"
@@ -37,8 +37,8 @@ func (m *funcScheduler) Call() {
 	m.wg.Done()
 }
 
-// TestNewScheduler_ValidTask tests the NewScheduler constructor with valid inputs.
-func TestNewScheduler_ValidTask(t *testing.T) {
+// TestNewScheduler tests the NewScheduler constructor with valid inputs.
+func TestNewScheduler(t *testing.T) {
 	mockFn := func() {}
 	now := time.Now()
 
@@ -111,7 +111,7 @@ func TestScheduleWithDelay(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
-	scheduler.Go(model.Parameters{})
+	scheduler.Go(context.Background())
 
 	done := make(chan bool)
 	go func() {
@@ -139,7 +139,7 @@ func TestScheduleTimeInPast(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
-	scheduler.Go(model.Parameters{})
+	scheduler.Go(context.Background())
 
 	done := make(chan bool)
 	go func() {
@@ -166,7 +166,7 @@ func TestScheduleNoDelay(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
-	scheduler.Go(model.Parameters{})
+	scheduler.Go(context.Background())
 
 	done := make(chan bool)
 	go func() {
@@ -195,7 +195,7 @@ func TestScheduleWithWorkDuration(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
-	scheduler.Go(model.Parameters{})
+	scheduler.Go(context.Background())
 
 	done := make(chan bool)
 	go func() {

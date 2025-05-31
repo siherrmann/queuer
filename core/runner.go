@@ -41,60 +41,48 @@ func NewRunner(task *model.Task, job *model.Job) (*Runner, error) {
 }
 
 func (r *Runner) Run(ctx context.Context) ([]interface{}, error) {
-	var ctxRunner context.Context
 	if r.job.Options != nil && r.job.Options.OnError.Timeout > 0 {
-		ctxRunner, r.cancel = context.WithTimeout(
+		ctx, r.cancel = context.WithTimeout(
 			ctx,
 			time.Duration(math.Round(r.job.Options.OnError.Timeout*1000))*time.Millisecond,
 		)
-	} else {
-		ctxRunner, r.cancel = context.WithCancel(ctx)
 	}
-	defer r.Cancel()
 
-	panicChan := make(chan interface{}, 1)
-
-	go func() {
-		defer func() {
-			if p := recover(); p != nil {
-				panicChan <- p
+	go CancelableGo(
+		ctx,
+		func() {
+			taskFunc := reflect.ValueOf(r.task.Task)
+			results := taskFunc.Call(r.job.Parameters.ToReflectValues())
+			resultValues := []interface{}{}
+			for _, result := range results {
+				resultValues = append(resultValues, result.Interface())
 			}
-		}()
 
-		// Run the task function with the parameters
-		taskFunc := reflect.ValueOf(r.task.Task)
-		results := taskFunc.Call(r.job.Parameters.ToReflectValues())
-		resultValues := []interface{}{}
-		for _, result := range results {
-			resultValues = append(resultValues, result.Interface())
-		}
+			var err error
+			var ok bool
+			if err, ok = resultValues[len(resultValues)-1].(error); len(resultValues) > 0 && (ok || (len(r.task.OutputParameters) > 0 && r.task.OutputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil)) {
+				resultValues = resultValues[:len(resultValues)-1]
+			}
 
-		var err error
-		var ok bool
-		if err, ok = resultValues[len(resultValues)-1].(error); len(resultValues) > 0 && (ok || (len(r.task.OutputParameters) > 0 && r.task.OutputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil)) {
-			resultValues = resultValues[:len(resultValues)-1]
-		}
-
-		if err != nil {
-			r.errorChannel <- fmt.Errorf("task %s failed with error: %v", r.job.TaskName, err)
-		} else {
-			r.resultsChannel <- resultValues
-		}
-	}()
+			if err != nil {
+				r.errorChannel <- fmt.Errorf("task %s failed with error: %v", r.job.TaskName, err)
+			} else {
+				r.resultsChannel <- resultValues
+			}
+		},
+		r.errorChannel,
+	)
 
 	for {
 		select {
 		case err := <-r.errorChannel:
 			r.Cancel()
 			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, err)
-		case p := <-panicChan:
-			r.Cancel()
-			return nil, fmt.Errorf("task %s panicked: %v", r.job.TaskName, p)
 		case results := <-r.resultsChannel:
 			r.Cancel()
 			return results, nil
-		case <-ctxRunner.Done():
-			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, ctxRunner.Err())
+		case <-ctx.Done():
+			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, ctx.Err())
 		}
 	}
 }

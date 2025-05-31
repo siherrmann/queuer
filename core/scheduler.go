@@ -1,40 +1,46 @@
 package core
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"queuer/helper"
 	"queuer/model"
 	"reflect"
 	"time"
 )
 
 type Scheduler struct {
-	Task      interface{}
-	StartTime *time.Time
+	Task       interface{}
+	Parameters model.Parameters
+	StartTime  *time.Time
 }
 
-func NewScheduler(task interface{}, startTime *time.Time) (*Scheduler, error) {
-	if reflect.ValueOf(task).Kind() != reflect.Func {
-		return nil, fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
+func NewScheduler(task interface{}, startTime *time.Time, parameters ...interface{}) (*Scheduler, error) {
+	if !helper.IsValidTaskWithParameters(task, parameters...) {
+		return nil, fmt.Errorf("task must be a function and prameters must match the function signature")
 	}
 
 	return &Scheduler{
-		StartTime: startTime,
-		Task:      task,
+		Task:       task,
+		Parameters: model.Parameters(parameters),
+		StartTime:  startTime,
 	}, nil
 }
 
-func (s *Scheduler) Go(parameters model.Parameters) {
+func (s *Scheduler) Go(ctx context.Context) {
 	var duration time.Duration
 	if s.StartTime != nil {
 		duration = s.StartTime.Sub(time.Now())
 	}
 
-	go func() {
-		log.Printf("Scheduler will run task after %v", duration)
-		time.AfterFunc(duration, func() {
-			log.Printf("Running task %s with parameters: %v", reflect.TypeOf(s.Task).Name(), parameters)
-			reflect.ValueOf(s.Task).Call(parameters.ToReflectValues())
-		})
-	}()
+	errorChan := make(chan error, 1)
+	go CancelableGo(
+		ctx,
+		func() {
+			time.AfterFunc(duration, func() {
+				reflect.ValueOf(s.Task).Call(s.Parameters.ToReflectValues())
+			})
+		},
+		errorChan,
+	)
 }

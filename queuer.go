@@ -2,12 +2,15 @@ package queuer
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"queuer/core"
 	"queuer/database"
 	"queuer/helper"
 	"queuer/model"
 	"sync"
+	"time"
 )
 
 type Queuer struct {
@@ -128,6 +131,13 @@ func (q *Queuer) Start(ctx context.Context) {
 		// go q.jobUpdateListener.ListenToEvents(ctx, cancel)
 		// go q.jobDeleteListener.ListenToEvents(ctx, cancel)
 
+		// q.listen(ctx, cancel)
+		err := q.pollJobTicker(ctx)
+		if err != nil {
+			q.log.Printf("error starting job poll ticker: %v", err)
+			return
+		}
+
 		q.log.Println("Queuer started")
 
 		<-ctx.Done()
@@ -156,4 +166,35 @@ func (q *Queuer) Stop() {
 	}
 
 	q.log.Println("Queuer stopped")
+}
+
+func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
+	go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
+		err := q.runJobInitial()
+		if err != nil {
+			q.log.Printf("error running job: %v", err)
+		}
+	})
+
+	// go q.jobUpdateListener.ListenToEvents(ctx, cancel)
+	// go q.jobDeleteListener.ListenToEvents(ctx, cancel)
+}
+
+func (q *Queuer) pollJobTicker(ctx context.Context) error {
+	ticker, err := core.NewTicker(func() {
+		err := q.runJobInitial()
+		if err != nil {
+			q.log.Printf("error running job: %v", err)
+		}
+	}, 5*time.Minute)
+	if err != nil {
+		return fmt.Errorf("error creating ticker: %v", err)
+	}
+
+	q.log.Println("Starting job poll ticker...")
+	err = ticker.Go(ctx)
+	if err != nil {
+		return fmt.Errorf("error starting ticker: %v", err)
+	}
+	return nil
 }
