@@ -13,8 +13,12 @@ import (
 )
 
 const (
+	// Job statuses before processing
 	JobStatusQueued    = "QUEUED"
-	JobStatusRunning   = "RUNNING"
+	JobStatusScheduled = "SCHEDULED"
+	// Running status is used when the job is being processed by a worker.
+	JobStatusRunning = "RUNNING"
+	// Job statuses after processing
 	JobStatusFailed    = "FAILED"
 	JobStatusSucceeded = "SUCCEEDED"
 	JobStatusCancelled = "CANCELLED"
@@ -91,13 +95,16 @@ func NewJob(taskName string, options *Options, parameters ...interface{}) (*Job,
 		}
 	}
 
+	status := JobStatusQueued
 	var scheduledAt time.Time
 	if options != nil && options.Schedule != nil {
+		status = JobStatusScheduled
 		scheduledAt = options.Schedule.Start
 	}
 
 	return &Job{
 		TaskName:    taskName,
+		Status:      status,
 		ScheduledAt: &scheduledAt,
 		Options:     options,
 		Parameters:  parameters,

@@ -17,7 +17,7 @@ func main() {
 	// Example usage of the Queuer package
 	q := queuer.NewQueuer(
 		"exampleWorker",
-		10,
+		3,
 		&model.OnError{
 			Timeout:      2,
 			RetryDelay:   1,
@@ -60,9 +60,9 @@ func main() {
 			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
 			MaxRetries:   3,
 		},
-		Schedule: &model.Schedule{
-			Start: time.Now().Add(time.Second * 5),
-		},
+		// Schedule: &model.Schedule{
+		// 	Start: time.Now().Add(time.Second * 5),
+		// },
 	}
 	_, err = q.AddJobWithOptions(MyTask, options, 5, "12")
 	if err != nil {
@@ -77,7 +77,7 @@ func main() {
 // Simple example task function
 func MyTask(param1 int, param2 string) (int, error) {
 	// Simulate some work
-	// time.Sleep(1 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// Example for some error handling
 	param2Int, err := strconv.Atoi(param2)

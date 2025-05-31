@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"queuer/helper"
@@ -20,7 +19,7 @@ type JobDBHandlerFunctions interface {
 	DropTable() error
 	InsertJob(job *model.Job) (*model.Job, error)
 	BatchInsertJobs(jobs []*model.Job) error
-	UpdateJobInitial(worker *model.Worker) (*model.Job, error)
+	UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error)
 	UpdateJobFinal(job *model.Job) (*model.Job, error)
 	DeleteJob(rid uuid.UUID) error
 	SelectJob(rid uuid.UUID) (*model.Job, error)
@@ -145,8 +144,8 @@ func (r JobDBHandler) DropTable() error {
 func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO job (options, task_name, parameters, status)
-			VALUES ($1, $2, $3, $4)
+		`INSERT INTO job (options, task_name, parameters, status, scheduled_at)
+			VALUES ($1, $2, $3, $4, $5)
 		RETURNING
 			id,
 			rid,
@@ -164,6 +163,7 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 		job.TaskName,
 		job.Parameters,
 		job.Status,
+		job.ScheduledAt,
 	)
 
 	err := row.Scan(
@@ -241,20 +241,36 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 	return nil
 }
 
-// UpdateJobInitial updates an existing queued non locked job record in the database.
+// UpdateJobsInitial updates an existing queued non locked job record in the database.
 // Checks if the job is in 'QUEUED' or 'FAILED' status and if the worker can handle the task.
-func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error) {
-	row := r.db.Instance.QueryRow(
-		`WITH current_worker AS (
-			SELECT id, rid, available_tasks
-			FROM worker
+func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error) {
+	rows, err := r.db.Instance.Query(
+		`WITH current_concurrency AS (
+			SELECT COUNT(*)
+			FROM job
+			WHERE worker_id = $1
+			AND status = 'RUNNING'
+		),
+		current_worker AS (
+			SELECT id, rid, available_tasks, max_concurrency, COALESCE(current_concurrency, 0) AS current_concurrency
+			FROM worker, current_concurrency
 			WHERE id = $1
-			AND max_concurrency > (
-				SELECT COUNT(*)
+			AND (max_concurrency > COALESCE(current_concurrency, 0))
+			FOR UPDATE
+		),
+		job_ids AS (
+			SELECT j.id
+			FROM current_worker AS cw,
+			LATERAL (
+				SELECT job.id
 				FROM job
-				WHERE worker_id = $1
-				AND status = 'RUNNING'
-			)
+				WHERE
+					job.task_name = ANY(cw.available_tasks::VARCHAR[])
+					AND job.status = 'QUEUED'
+				ORDER BY job.created_at ASC
+				LIMIT (cw.max_concurrency - cw.current_concurrency)
+				FOR UPDATE SKIP LOCKED
+			) AS j
 		)
 		UPDATE job SET 
 			worker_id = cw.id,
@@ -263,16 +279,8 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 			started_at = CURRENT_TIMESTAMP,
 			attempts = attempts + 1,
 			updated_at = CURRENT_TIMESTAMP
-		FROM current_worker AS cw
-		WHERE job.id = (
-			SELECT id FROM job 
-			WHERE 
-				task_name = ANY(cw.available_tasks::VARCHAR[])
-				AND status = 'QUEUED'
-			ORDER BY created_at ASC
-			LIMIT 1
-			FOR UPDATE SKIP LOCKED
-		)
+		FROM current_worker AS cw, job_ids
+		WHERE job.id = ANY(SELECT id FROM job_ids)
 		AND EXISTS (SELECT 1 FROM current_worker)
 		RETURNING
 			job.id,
@@ -290,30 +298,38 @@ func (r JobDBHandler) UpdateJobInitial(worker *model.Worker) (*model.Job, error)
 			job.updated_at;`,
 		worker.ID,
 	)
-
-	job := &model.Job{}
-	err := row.Scan(
-		&job.ID,
-		&job.RID,
-		&job.WorkerID,
-		&job.WorkerRID,
-		&job.Options,
-		&job.TaskName,
-		&job.Parameters,
-		&job.Status,
-		&job.ScheduledAt,
-		&job.StartedAt,
-		&job.Attempts,
-		&job.CreatedAt,
-		&job.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("error updating initial job for worker id %v: %w", job.WorkerRID, err)
+	if err != nil {
+		return nil, fmt.Errorf("error querying job for worker id %v: %w", worker.ID, err)
 	}
 
-	return job, nil
+	defer rows.Close()
+
+	var jobs []*model.Job
+	for rows.Next() {
+		job := &model.Job{}
+		err := rows.Scan(
+			&job.ID,
+			&job.RID,
+			&job.WorkerID,
+			&job.WorkerRID,
+			&job.Options,
+			&job.TaskName,
+			&job.Parameters,
+			&job.Status,
+			&job.ScheduledAt,
+			&job.StartedAt,
+			&job.Attempts,
+			&job.CreatedAt,
+			&job.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error updating initial job for worker id %v: %w", job.WorkerRID, err)
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
 }
 
 // UpdateJobFinal updates an existing job record in the database to state 'FAILED' or 'SUCCEEDED'.

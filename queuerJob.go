@@ -2,6 +2,7 @@ package queuer
 
 import (
 	"fmt"
+	"log"
 	"queuer/core"
 	"queuer/helper"
 	"queuer/model"
@@ -171,20 +172,25 @@ func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...
 // runJobInitial is called to run the next job in the queue.
 func (q *Queuer) runJobInitial() error {
 	// Update job status to running with worker.
-	job, err := q.dbJob.UpdateJobInitial(q.worker)
+	jobs, err := q.dbJob.UpdateJobsInitial(q.worker)
 	if err != nil {
 		return fmt.Errorf("error updating job status to running: %v", err)
-	} else if job == nil {
+	} else if len(jobs) == 0 {
 		return nil
 	}
 
-	q.log.Printf("Running job with RID %v", job.RID)
+	log.Printf("Running %v jobs", len(jobs))
 
-	resultValues, err := q.runJob(job)
-	if err != nil {
-		q.failJob(job, err)
-	} else {
-		q.succeedJob(job, resultValues)
+	for _, job := range jobs {
+		go func() {
+			q.log.Printf("Running job with RID %v", job.RID)
+			resultValues, err := q.runJob(job)
+			if err != nil {
+				q.failJob(job, err)
+			} else {
+				q.succeedJob(job, resultValues)
+			}
+		}()
 	}
 
 	return nil
