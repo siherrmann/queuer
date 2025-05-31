@@ -266,7 +266,10 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 				FROM job
 				WHERE
 					job.task_name = ANY(cw.available_tasks::VARCHAR[])
-					AND job.status = 'QUEUED'
+					AND (
+						job.status = 'QUEUED'
+						OR (job.status = 'SCHEDULED' AND CURRENT_TIMESTAMP >= (job.scheduled_at - '10 minutes'::INTERVAL))
+					)
 				ORDER BY job.created_at ASC
 				LIMIT (cw.max_concurrency - cw.current_concurrency)
 				FOR UPDATE SKIP LOCKED

@@ -2,10 +2,10 @@ package queuer
 
 import (
 	"fmt"
-	"log"
 	"queuer/core"
 	"queuer/helper"
 	"queuer/model"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -179,18 +179,31 @@ func (q *Queuer) runJobInitial() error {
 		return nil
 	}
 
-	log.Printf("Running %v jobs", len(jobs))
-
 	for _, job := range jobs {
-		go func() {
-			q.log.Printf("Running job with RID %v", job.RID)
-			resultValues, err := q.runJob(job)
+		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
+			// TODO rewrite
+			scheduler, err := core.NewScheduler(
+				func() error {
+					return q.retryJob(job)
+				},
+				&job.Options.Schedule.Start,
+			)
 			if err != nil {
-				q.failJob(job, err)
-			} else {
-				q.succeedJob(job, resultValues)
+				return fmt.Errorf("error creating scheduler: %v", err)
 			}
-		}()
+			scheduler.Go(model.Parameters{})
+			q.log.Printf("Job with RID %v scheduled to run at %v", job.RID, job.Options.Schedule.Start)
+		} else {
+			go func() {
+				q.log.Printf("Running job with RID %v", job.RID)
+				resultValues, err := q.runJob(job)
+				if err != nil {
+					q.failJob(job, err)
+				} else {
+					q.succeedJob(job, resultValues)
+				}
+			}()
+		}
 	}
 
 	return nil

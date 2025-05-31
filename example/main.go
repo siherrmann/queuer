@@ -33,23 +33,23 @@ func main() {
 	q.Start(ctx)
 
 	// Example adding a single job to the queue
-	_, err := q.AddJob(MyTask, 5, "12")
-	if err != nil {
-		log.Fatalf("Error adding job: %v", err)
-	}
+	// _, err := q.AddJob(MyTask, 5, "12")
+	// if err != nil {
+	// 	log.Fatalf("Error adding job: %v", err)
+	// }
 
 	// Example adding multiple jobs to the queue
-	batchedJobs := make([]model.BatchJob, 0, 10)
-	for i := 0; i < 10; i++ {
-		batchedJobs = append(batchedJobs, model.BatchJob{
-			Task:       MyTask,
-			Parameters: []interface{}{i, "12"},
-		})
-	}
-	err = q.AddJobs(batchedJobs)
-	if err != nil {
-		log.Fatalf("Error adding jobs: %v", err)
-	}
+	// batchedJobs := make([]model.BatchJob, 0, 10)
+	// for i := 0; i < 10; i++ {
+	// 	batchedJobs = append(batchedJobs, model.BatchJob{
+	// 		Task:       MyTask,
+	// 		Parameters: []interface{}{i, "12"},
+	// 	})
+	// }
+	// err = q.AddJobs(batchedJobs)
+	// if err != nil {
+	// 	log.Fatalf("Error adding jobs: %v", err)
+	// }
 
 	// Example adding a single job with options
 	// This job will timeout after 0.1 seconds
@@ -60,11 +60,11 @@ func main() {
 			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
 			MaxRetries:   3,
 		},
-		// Schedule: &model.Schedule{
-		// 	Start: time.Now().Add(time.Second * 5),
-		// },
+		Schedule: &model.Schedule{
+			Start: time.Now().Add(time.Second * 5),
+		},
 	}
-	_, err = q.AddJobWithOptions(MyTask, options, 5, "12")
+	_, err := q.AddJobWithOptions(MyTask, options, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job with options: %v", err)
 	}

@@ -99,7 +99,7 @@ func NewJob(taskName string, options *Options, parameters ...interface{}) (*Job,
 	var scheduledAt time.Time
 	if options != nil && options.Schedule != nil {
 		status = JobStatusScheduled
-		scheduledAt = options.Schedule.Start
+		scheduledAt = options.Schedule.Start.UTC()
 	}
 
 	return &Job{
