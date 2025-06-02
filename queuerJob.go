@@ -247,7 +247,7 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 	var results []interface{}
 	retryer, err := core.NewRetryer(
 		func() error {
-			q.log.Printf("Running job with RID %v", job.RID)
+			q.log.Printf("Trying/retrying job with RID %v", job.RID)
 			results, err = q.waitForJob(job)
 			if err != nil {
 				return fmt.Errorf("error retrying job: %v", err)
