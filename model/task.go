@@ -27,7 +27,8 @@ func NewTaskWithName(task interface{}, taskName string) (*Task, error) {
 		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
 	}
 
-	if !helper.IsValidTask(task) {
+	err := helper.CheckValidTask(task)
+	if err != nil {
 		return nil, fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
 	}
 

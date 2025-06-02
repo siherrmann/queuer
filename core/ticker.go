@@ -23,8 +23,9 @@ func NewTicker(task interface{}, interval time.Duration, parameters ...interface
 		return nil, fmt.Errorf("ticker interval must be greater than zero")
 	}
 
-	if helper.IsValidTaskWithParameters(task, parameters...) {
-		return nil, fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
+	err := helper.CheckValidTaskWithParameters(task, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error checking task: %s", reflect.TypeOf(task).Kind())
 	}
 
 	return &Ticker{
@@ -37,14 +38,12 @@ func NewTicker(task interface{}, interval time.Duration, parameters ...interface
 // Go starts the Ticker. It runs the task at the specified interval
 // until the provided context is cancelled.
 func (t *Ticker) Go(ctx context.Context) error {
-	errorChan := make(chan error, 1)
-	go CancelableGo(
-		ctx,
-		func() {
-			reflect.ValueOf(t.task).Call(t.parameters.ToReflectValues())
-		},
-		errorChan,
-	)
+	runner, err := NewRunner(nil, t.task, t.parameters...)
+	if err != nil {
+		return fmt.Errorf("error creating runner: %v", err)
+	}
+
+	runner.Run(ctx)
 
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
@@ -55,14 +54,8 @@ func (t *Ticker) Go(ctx context.Context) error {
 			return fmt.Errorf("context cancelled: %w", ctx.Err())
 		case <-ticker.C:
 			log.Printf("Ticker ticked. Running task...")
-			go CancelableGo(
-				ctx,
-				func() {
-					reflect.ValueOf(t.task).Call(t.parameters.ToReflectValues())
-				},
-				errorChan,
-			)
-		case err := <-errorChan:
+			runner.Run(ctx)
+		case err := <-runner.ErrorChannel:
 			if err != nil {
 				return fmt.Errorf("error running task: %w", err)
 			}

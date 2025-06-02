@@ -4,85 +4,134 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"queuer/helper"
 	"queuer/model"
 	"reflect"
 	"time"
 )
 
 type Runner struct {
-	cancel context.CancelFunc
-	task   *model.Task
-	job    *model.Job
+	cancel     context.CancelFunc
+	Options    *model.Options
+	Task       interface{}
+	Parameters model.Parameters
 	// Result channel to return results
-	resultsChannel chan []interface{}
-	errorChannel   chan error
+	ResultsChannel chan []interface{}
+	ErrorChannel   chan error
 }
 
-func NewRunner(task *model.Task, job *model.Job) (*Runner, error) {
-	if len(job.Parameters) != len(task.InputParameters) {
-		return nil, fmt.Errorf("task %s requires %d parameters, got %d", job.TaskName, len(task.InputParameters), len(job.Parameters))
+func NewRunner(options *model.Options, task interface{}, parameters ...interface{}) (*Runner, error) {
+	taskInputParameters, err := helper.GetInputParametersFromTask(task)
+	if err != nil {
+		return nil, fmt.Errorf("error getting input parameters of task: %v", err)
+	} else if len(taskInputParameters) != len(parameters) {
+		return nil, fmt.Errorf("task expects %d parameters, got %d", len(taskInputParameters), len(parameters))
 	}
 
-	for i, param := range job.Parameters {
+	for i, param := range parameters {
 		// Convert json float to int if the parameter is int
-		if task.InputParameters[i].Kind() == reflect.Int && reflect.TypeOf(param).Kind() == reflect.Float64 {
-			job.Parameters[i] = int(param.(float64))
-		} else if task.InputParameters[i].Kind() != reflect.TypeOf(param).Kind() {
-			return nil, fmt.Errorf("parameter %d of task %s must be of type %s, got %s", i, job.TaskName, task.InputParameters[i].Kind(), reflect.TypeOf(param).Kind())
+		if taskInputParameters[i].Kind() == reflect.Int && reflect.TypeOf(param).Kind() == reflect.Float64 {
+			parameters[i] = int(param.(float64))
+		} else if taskInputParameters[i].Kind() != reflect.TypeOf(param).Kind() {
+			return nil, fmt.Errorf("parameter %d of task must be of type %s, got %s", i, taskInputParameters[i].Kind(), reflect.TypeOf(param).Kind())
 		}
 	}
 
+	err = helper.CheckValidTaskWithParameters(task, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error checking task: %v", err)
+	}
+
 	return &Runner{
-		task:           task,
-		job:            job,
-		resultsChannel: make(chan []interface{}, 1),
-		errorChannel:   make(chan error, 1),
+		Task:           task,
+		Parameters:     model.Parameters(parameters),
+		Options:        options,
+		ResultsChannel: make(chan []interface{}, 1),
+		ErrorChannel:   make(chan error, 1),
 	}, nil
 }
 
-func (r *Runner) Run(ctx context.Context) ([]interface{}, error) {
-	if r.job.Options != nil && r.job.Options.OnError.Timeout > 0 {
-		ctx, r.cancel = context.WithTimeout(
-			ctx,
-			time.Duration(math.Round(r.job.Options.OnError.Timeout*1000))*time.Millisecond,
-		)
+func NewRunnerFromJob(task *model.Task, job *model.Job) (*Runner, error) {
+	if task == nil || job == nil {
+		return nil, fmt.Errorf("task and job cannot be nil")
 	}
 
-	go CancelableGo(
-		ctx,
-		func() {
-			taskFunc := reflect.ValueOf(r.task.Task)
-			results := taskFunc.Call(r.job.Parameters.ToReflectValues())
-			resultValues := []interface{}{}
-			for _, result := range results {
-				resultValues = append(resultValues, result.Interface())
-			}
+	parameters := make([]interface{}, len(job.Parameters))
+	for i, param := range job.Parameters {
+		parameters[i] = param
+	}
 
-			var err error
-			var ok bool
-			if err, ok = resultValues[len(resultValues)-1].(error); len(resultValues) > 0 && (ok || (len(r.task.OutputParameters) > 0 && r.task.OutputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil)) {
-				resultValues = resultValues[:len(resultValues)-1]
-			}
+	runner, err := NewRunner(job.Options, task.Task, job.Parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating runner from job: %v", err)
+	}
 
-			if err != nil {
-				r.errorChannel <- fmt.Errorf("task %s failed with error: %v", r.job.TaskName, err)
-			} else {
-				r.resultsChannel <- resultValues
+	return runner, nil
+}
+
+// Run executes the task with the provided parameters.
+// It will return results on ResultsChannel and errors on ErrorChannel.
+// If the task panics, it will send the panic value to ErrorChannel.
+// The main intended use of this function is to run the task in a separate goroutine
+func (r *Runner) Run(ctx context.Context) {
+	if r.Options != nil && r.Options.OnError.Timeout > 0 {
+		ctx, r.cancel = context.WithTimeout(
+			ctx,
+			time.Duration(math.Round(r.Options.OnError.Timeout*1000))*time.Millisecond,
+		)
+	} else {
+		ctx, r.cancel = context.WithCancel(ctx)
+	}
+
+	resultsChannel := make(chan []interface{}, 1)
+	errorChannel := make(chan error, 1)
+	panicChan := make(chan interface{})
+
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				panicChan <- p
 			}
-		},
-		r.errorChannel,
-	)
+		}()
+
+		taskFunc := reflect.ValueOf(r.Task)
+		results := taskFunc.Call(r.Parameters.ToReflectValues())
+		resultValues := []interface{}{}
+		for _, result := range results {
+			resultValues = append(resultValues, result.Interface())
+		}
+
+		outputParameters, err := helper.GetOutputParametersFromTask(r.Task)
+		if err != nil {
+			errorChannel <- fmt.Errorf("error getting output parameters of task: %v", err)
+			return
+		}
+
+		var ok bool
+		if err, ok = resultValues[len(resultValues)-1].(error); len(resultValues) > 0 && (ok || (len(outputParameters) > 0 && outputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil)) {
+			resultValues = resultValues[:len(resultValues)-1]
+		}
+
+		if err != nil {
+			errorChannel <- fmt.Errorf("runner failed with error: %v", err)
+		} else {
+			resultsChannel <- resultValues
+		}
+	}()
 
 	for {
 		select {
-		case err := <-r.errorChannel:
+		case p := <-panicChan:
+			r.cancel()
+			r.ErrorChannel <- fmt.Errorf("panic running task: %v", p)
+		case err := <-errorChannel:
 			r.Cancel()
-			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, err)
-		case results := <-r.resultsChannel:
+			r.ErrorChannel <- fmt.Errorf("error running task: %v", err)
+		case results := <-resultsChannel:
 			r.Cancel()
-			return results, nil
+			r.ResultsChannel <- results
 		case <-ctx.Done():
-			return nil, fmt.Errorf("error running task %s: %v", r.job.TaskName, ctx.Err())
+			r.ErrorChannel <- fmt.Errorf("error running task: %v", ctx.Err())
 		}
 	}
 }

@@ -1,6 +1,9 @@
 package helper
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 func GetTaskNameFromInterface(task interface{}) (string, error) {
 	if taskNameString, ok := task.(string); ok {
@@ -10,29 +13,50 @@ func GetTaskNameFromInterface(task interface{}) (string, error) {
 	return GetFunctionName(task)
 }
 
-func IsValidTask(task interface{}) bool {
+func CheckValidTask(task interface{}) error {
 	if reflect.ValueOf(task).Kind() != reflect.Func {
-		return false
+		return fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
 	}
 
-	return true
+	return nil
 }
 
-func IsValidTaskWithParameters(task interface{}, parameters ...interface{}) bool {
-	if !IsValidTask(task) {
-		return false
+func CheckValidTaskWithParameters(task interface{}, parameters ...interface{}) error {
+	err := CheckValidTask(task)
+	if err != nil {
+		return err
 	}
 
 	taskType := reflect.TypeOf(task)
 	if taskType.NumIn() != len(parameters) {
-		return false
+		return fmt.Errorf("task expects %d parameters, got %d", taskType.NumIn(), len(parameters))
 	}
 
 	for i, param := range parameters {
 		if !taskType.In(i).AssignableTo(reflect.TypeOf(param)) {
-			return false
+			return fmt.Errorf("parameter %d of task must be of type %s, got %s", i, taskType.In(i).Kind(), reflect.TypeOf(param).Kind())
 		}
 	}
 
-	return true
+	return nil
+}
+
+func GetInputParametersFromTask(task interface{}) ([]reflect.Type, error) {
+	inputCount := reflect.TypeOf(task).NumIn()
+	inputParameters := []reflect.Type{}
+	for i := 0; i < inputCount; i++ {
+		inputParameters = append(inputParameters, reflect.TypeOf(task).In(i))
+	}
+
+	return inputParameters, nil
+}
+
+func GetOutputParametersFromTask(task interface{}) ([]reflect.Type, error) {
+	outputCount := reflect.TypeOf(task).NumOut()
+	outputParameters := []reflect.Type{}
+	for i := 0; i < outputCount; i++ {
+		outputParameters = append(outputParameters, reflect.TypeOf(task).Out(i))
+	}
+
+	return outputParameters, nil
 }

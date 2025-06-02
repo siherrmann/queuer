@@ -106,7 +106,7 @@ func TestNewRunner(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runner, err := NewRunner(test.task, test.job)
+			runner, err := NewRunnerFromJob(test.task, test.job)
 			if test.wantErr {
 				assert.Error(t, err, "NewRunner should return an error")
 			} else {
@@ -136,14 +136,25 @@ func TestRunSuccess(t *testing.T) {
 		},
 	}
 
-	runner, err := NewRunner(mockTask, job)
+	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
-	results, err := runner.Run(context.Background())
-	assert.NoError(t, err)
-	assert.NotNil(t, results)
-	assert.Len(t, results, 1)       // TODO
-	assert.Equal(t, 15, results[0]) // 5 + 10 = 15
+	go runner.Run(context.Background())
+
+outerLoop:
+	for {
+		select {
+		case err := <-runner.ErrorChannel:
+			assert.NoError(t, err, "Runner should not return an error")
+			break outerLoop
+		case results := <-runner.ResultsChannel:
+			assert.NoError(t, err)
+			assert.NotNil(t, results)
+			assert.Len(t, results, 1)
+			assert.Equal(t, 15, results[0])
+			break outerLoop
+		}
+	}
 }
 
 // TestRunFailure tests a task that fails within timeout
@@ -166,13 +177,23 @@ func TestRunFailure(t *testing.T) {
 		},
 	}
 
-	runner, err := NewRunner(mockTask, job)
+	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
-	results, err := runner.Run(context.Background())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), expectedErr.Error())
-	assert.Nil(t, results)
+	go runner.Run(context.Background())
+
+outerLoop:
+	for {
+		select {
+		case err := <-runner.ErrorChannel:
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), expectedErr.Error())
+			break outerLoop
+		case results := <-runner.ResultsChannel:
+			assert.Nil(t, results)
+			break outerLoop
+		}
+	}
 }
 
 // TestRunTimeout tests a task that exceeds its timeout
@@ -194,18 +215,27 @@ func TestRunTimeout(t *testing.T) {
 		},
 	}
 
-	runner, err := NewRunner(mockTask, job)
+	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
 	start := time.Now()
-	results, err := runner.Run(context.Background())
-	duration := time.Since(start)
+	go runner.Run(context.Background())
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "context deadline exceeded")
-	assert.Nil(t, results)
-	assert.GreaterOrEqual(t, duration, 500*time.Millisecond)
-	assert.Less(t, duration, 3*time.Second) // Should stop before task completes
+outerLoop:
+	for {
+		select {
+		case err := <-runner.ErrorChannel:
+			duration := time.Since(start)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "context deadline exceeded")
+			assert.GreaterOrEqual(t, duration, 500*time.Millisecond)
+			assert.Less(t, duration, 3*time.Second) // Should stop before task completes
+			break outerLoop
+		case results := <-runner.ResultsChannel:
+			assert.Nil(t, results)
+			break outerLoop
+		}
+	}
 }
 
 // TestRunParentContextCancel tests if Run respects parent context cancellation
@@ -227,7 +257,7 @@ func TestRunParentContextCancel(t *testing.T) {
 		},
 	}
 
-	runner, err := NewRunner(mockTask, job)
+	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
 	parentCtx, parentCancel := context.WithCancel(context.Background())
@@ -239,14 +269,23 @@ func TestRunParentContextCancel(t *testing.T) {
 	}()
 
 	start := time.Now()
-	results, err := runner.Run(parentCtx) // Pass the cancellable parent context
-	duration := time.Since(start)
+	go runner.Run(parentCtx) // Pass the cancellable parent context
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "context canceled")
-	assert.Nil(t, results)
-	assert.GreaterOrEqual(t, duration, 1*time.Second)
-	assert.Less(t, duration, 5*time.Second) // Should stop before task completes
+outerLoop:
+	for {
+		select {
+		case err := <-runner.ErrorChannel:
+			duration := time.Since(start)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "context canceled")
+			assert.GreaterOrEqual(t, duration, 1*time.Second)
+			assert.Less(t, duration, 5*time.Second) // Should stop before task completes
+			break outerLoop
+		case results := <-runner.ResultsChannel:
+			assert.Nil(t, results)
+			break outerLoop
+		}
+	}
 }
 
 // TestRunTaskPanic tests a task that panics
@@ -268,13 +307,23 @@ func TestRunTaskPanic(t *testing.T) {
 		},
 	}
 
-	runner, err := NewRunner(mockTask, job)
+	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
-	results, err := runner.Run(context.Background())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "panicked")
-	assert.Nil(t, results)
+	go runner.Run(context.Background())
+
+outerLoop:
+	for {
+		select {
+		case err := <-runner.ErrorChannel:
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "panicked")
+			break outerLoop
+		case results := <-runner.ResultsChannel:
+			assert.Nil(t, results)
+			break outerLoop
+		}
+	}
 }
 
 // TestCancelMethodWithOnCancelFunc tests the onCancel callback
@@ -296,7 +345,7 @@ func TestCancelMethodWithOnCancelFunc(t *testing.T) {
 		},
 	}
 
-	runner, err := NewRunner(mockTask, job)
+	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
 	called := make(chan bool, 1)
@@ -309,9 +358,20 @@ func TestCancelMethodWithOnCancelFunc(t *testing.T) {
 		runner.Cancel(onCancelFunc) // Call with callback
 	}()
 
-	results, err := runner.Run(context.Background())
-	assert.Error(t, err)
-	assert.Nil(t, results)
+	go runner.Run(context.Background())
+
+outerLoop:
+	for {
+		select {
+		case err := <-runner.ErrorChannel:
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "panicked")
+			break outerLoop
+		case results := <-runner.ResultsChannel:
+			assert.Nil(t, results)
+			break outerLoop
+		}
+	}
 
 	select {
 	case <-called:

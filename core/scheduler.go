@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"log"
 	"queuer/helper"
 	"queuer/model"
 	"reflect"
@@ -16,8 +17,9 @@ type Scheduler struct {
 }
 
 func NewScheduler(task interface{}, startTime *time.Time, parameters ...interface{}) (*Scheduler, error) {
-	if !helper.IsValidTaskWithParameters(task, parameters...) {
-		return nil, fmt.Errorf("task must be a function and prameters must match the function signature")
+	err := helper.CheckValidTaskWithParameters(task, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error checking task: %s", reflect.TypeOf(task).Kind())
 	}
 
 	return &Scheduler{
@@ -33,14 +35,18 @@ func (s *Scheduler) Go(ctx context.Context) {
 		duration = s.StartTime.Sub(time.Now())
 	}
 
-	errorChan := make(chan error, 1)
-	go CancelableGo(
-		ctx,
+	runner, err := NewRunner(
+		nil,
 		func() {
 			time.AfterFunc(duration, func() {
 				reflect.ValueOf(s.Task).Call(s.Parameters.ToReflectValues())
 			})
 		},
-		errorChan,
 	)
+	if err != nil {
+		log.Printf("Error creating runner: %v", err)
+		return
+	}
+
+	go runner.Run(ctx)
 }
