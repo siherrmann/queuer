@@ -12,11 +12,7 @@ import (
 
 // AddJob adds a job to the queue with the given task and parameters.
 func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
-	var options *model.Options
-	if q.worker.Options != nil {
-		options = &model.Options{OnError: q.worker.Options}
-	}
-
+	options := q.mergeOptions(nil)
 	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
 		return nil, fmt.Errorf("error adding job: %v", err)
@@ -29,6 +25,7 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 
 // AddJobWithOptions adds a job with the given task, options, and parameters.
 func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
+	q.mergeOptions(options)
 	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
 		return nil, fmt.Errorf("error adding job: %v", err)
@@ -48,14 +45,7 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 			return fmt.Errorf("error getting task name: %v", err)
 		}
 
-		var options *model.Options
-		if batchJob.Options != nil {
-			options = batchJob.Options
-		}
-		if batchJob.Options.OnError == nil {
-			options.OnError = q.worker.Options
-		}
-
+		options := q.mergeOptions(batchJob.Options)
 		newJob, err := model.NewJob(taskName, options, batchJob.Parameters...)
 		if err != nil {
 			return fmt.Errorf("error creating job with job options: %v", err)
@@ -149,6 +139,16 @@ func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int
 }
 
 // Internal
+
+// mergeOptions merges the worker options with optional job options.
+func (q *Queuer) mergeOptions(options *model.Options) *model.Options {
+	if options != nil && options.OnError == nil {
+		options.OnError = q.worker.Options
+	} else if options == nil && q.worker.Options != nil {
+		options = &model.Options{OnError: q.worker.Options}
+	}
+	return options
+}
 
 // addJob adds a job to the queue with all necessary parameters.
 func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
