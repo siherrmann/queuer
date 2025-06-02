@@ -51,8 +51,9 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 		var options *model.Options
 		if batchJob.Options != nil {
 			options = batchJob.Options
-		} else if q.worker.Options != nil {
-			options = &model.Options{OnError: q.worker.Options}
+		}
+		if batchJob.Options.OnError == nil {
+			options.OnError = q.worker.Options
 		}
 
 		newJob, err := model.NewJob(taskName, options, batchJob.Parameters...)

@@ -74,7 +74,7 @@ func NewRunnerFromJob(task *model.Task, job *model.Job) (*Runner, error) {
 // If the task panics, it will send the panic value to ErrorChannel.
 // The main intended use of this function is to run the task in a separate goroutine
 func (r *Runner) Run(ctx context.Context) {
-	if r.Options != nil && r.Options.OnError.Timeout > 0 {
+	if r.Options != nil && r.Options.OnError != nil && r.Options.OnError.Timeout > 0 {
 		ctx, r.cancel = context.WithTimeout(
 			ctx,
 			time.Duration(math.Round(r.Options.OnError.Timeout*1000))*time.Millisecond,
