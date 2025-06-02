@@ -33,10 +33,10 @@ func main() {
 	q.Start(ctx)
 
 	// Example adding a single job to the queue
-	// _, err := q.AddJob(MyTask, 5, "12")
-	// if err != nil {
-	// 	log.Fatalf("Error adding job: %v", err)
-	// }
+	_, err := q.AddJob(MyTask, 5, "12")
+	if err != nil {
+		log.Fatalf("Error adding job: %v", err)
+	}
 
 	// Example adding multiple jobs to the queue
 	// batchedJobs := make([]model.BatchJob, 0, 10)
@@ -61,10 +61,10 @@ func main() {
 			MaxRetries:   3,
 		},
 		Schedule: &model.Schedule{
-			Start: time.Now().Add(time.Minute * 20),
+			Start: time.Now().Add(time.Second * 10),
 		},
 	}
-	_, err := q.AddJobWithOptions(MyTask, options, 5, "12")
+	_, err = q.AddJobWithOptions(MyTask, options, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job with options: %v", err)
 	}

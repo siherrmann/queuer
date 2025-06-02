@@ -19,7 +19,7 @@ type Scheduler struct {
 func NewScheduler(task interface{}, startTime *time.Time, parameters ...interface{}) (*Scheduler, error) {
 	err := helper.CheckValidTaskWithParameters(task, parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error checking task: %s", reflect.TypeOf(task).Kind())
+		return nil, fmt.Errorf("error checking task: %v", err)
 	}
 
 	return &Scheduler{

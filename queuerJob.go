@@ -182,8 +182,9 @@ func (q *Queuer) runJobInitial() error {
 	for _, job := range jobs {
 		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
 			scheduler, err := core.NewScheduler(
-				q.retryJob,
+				q.scheduleJob,
 				&job.Options.Schedule.Start,
+				job,
 			)
 			if err != nil {
 				return fmt.Errorf("error creating scheduler: %v", err)
@@ -192,9 +193,9 @@ func (q *Queuer) runJobInitial() error {
 		} else {
 			go func() {
 				q.log.Printf("Running job with RID %v", job.RID)
-				resultValues, err := q.runJob(job)
+				resultValues, err := q.waitForJob(job)
 				if err != nil {
-					q.failJob(job, err)
+					q.retryJob(job, err)
 				} else {
 					q.succeedJob(job, resultValues)
 				}
@@ -205,38 +206,78 @@ func (q *Queuer) runJobInitial() error {
 	return nil
 }
 
-// runJob executes the job and returns the results or an error.
-func (q *Queuer) runJob(job *model.Job) ([]interface{}, error) {
+// waitForJob executes the job and returns the results or an error.
+func (q *Queuer) waitForJob(job *model.Job) ([]interface{}, error) {
 	// Run job and update job status to completed with results
 	// TODO At this point the task should be available in the queuer,
 	// but we should probably still check if the task is available?
 	task := q.tasks[job.TaskName]
-	runner, err := core.NewRunner(task, job)
+	runner, err := core.NewRunnerFromJob(task, job)
 	if err != nil {
 		return []interface{}{}, fmt.Errorf("error creating runner: %v", err)
 	}
 
+	var results []interface{}
 	q.activeRunners.Store(job.RID, runner)
-	resultValues, err := runner.Run(q.ctx)
-	q.activeRunners.Delete(job.RID)
-	if err != nil {
-		return []interface{}{}, fmt.Errorf("error running job: %v", err)
+	go runner.Run(q.ctx)
+
+	select {
+	case err = <-runner.ErrorChannel:
+		break
+	case results = <-runner.ResultsChannel:
+		break
+	case <-q.ctx.Done():
+		runner.Cancel()
+		break
 	}
 
-	return resultValues, nil
+	q.activeRunners.Delete(job.RID)
+
+	return results, err
 }
 
-// retryJob retries the job.
-func (q *Queuer) retryJob(job *model.Job) error {
-	q.log.Printf("Retrying/running scheduled job with RID %v", job.RID)
-
-	resultValues, err := q.runJob(job)
-	if err != nil {
-		return fmt.Errorf("error retrying job: %v", err)
+// retryJob retries the job with the given job error.
+func (q *Queuer) retryJob(job *model.Job, jobErr error) {
+	if job.Options == nil || job.Options.OnError.MaxRetries <= 0 {
+		q.failJob(job, jobErr)
+		return
 	}
 
-	q.succeedJob(job, resultValues)
-	return nil
+	var err error
+	var results []interface{}
+	retryer, err := core.NewRetryer(
+		func() error {
+			q.log.Printf("Running job with RID %v", job.RID)
+			results, err = q.waitForJob(job)
+			if err != nil {
+				return fmt.Errorf("error retrying job: %v", err)
+			}
+			return nil
+		},
+		job.Options.OnError,
+	)
+	if err != nil {
+		jobErr = fmt.Errorf("error creating retryer: %v, original error: %v", err, jobErr)
+	}
+
+	err = retryer.Retry()
+	if err != nil {
+		q.failJob(job, fmt.Errorf("error retrying job: %v, original error: %v", err, jobErr))
+	} else {
+		q.succeedJob(job, results)
+	}
+}
+
+// scheduleJob retries the job.
+func (q *Queuer) scheduleJob(job *model.Job) {
+	q.log.Printf("Running scheduled job with RID %v", job.RID)
+
+	resultValues, err := q.waitForJob(job)
+	if err != nil {
+		q.retryJob(job, err)
+	} else {
+		q.succeedJob(job, resultValues)
+	}
 }
 
 // succeedJob updates the job status to succeeded and runs the next job if available.
@@ -258,25 +299,7 @@ func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 	}
 }
 
-// failJob updates the job status to failed and retries if configured.
 func (q *Queuer) failJob(job *model.Job, jobErr error) {
-	if job.Options != nil && job.Options.OnError.MaxRetries > 0 {
-		retryer, err := core.NewRetryer(
-			func() error {
-				return q.retryJob(job)
-			},
-			job.Options.OnError,
-		)
-		if err != nil {
-			jobErr = fmt.Errorf("error creating retryer: %v, initial error: %v", err, jobErr)
-		}
-
-		err = retryer.Retry()
-		if err != nil {
-			jobErr = fmt.Errorf("job failed after retries: %v, initial error: %v", err, jobErr)
-		}
-	}
-
 	job.Status = model.JobStatusFailed
 	job.Error = jobErr.Error()
 	_, err := q.dbJob.UpdateJobFinal(job)
