@@ -246,21 +246,21 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
 		`WITH current_concurrency AS (
-			SELECT COUNT(*)
+			SELECT COUNT(*) AS count
 			FROM job
 			WHERE worker_id = $1
 			AND status = 'RUNNING'
 		),
 		current_worker AS (
-			SELECT id, rid, available_tasks, max_concurrency, COALESCE(current_concurrency, 0) AS current_concurrency
-			FROM worker, current_concurrency
+			SELECT id, rid, available_tasks, max_concurrency, COALESCE(cc.count, 0) AS current_concurrency
+			FROM worker, current_concurrency AS cc
 			WHERE id = $1
-			AND (max_concurrency > COALESCE(current_concurrency, 0))
+			AND (max_concurrency > COALESCE(cc.count, 0))
 			FOR UPDATE
 		),
 		job_ids AS (
 			SELECT j.id
-			FROM current_worker AS cw,
+			FROM current_worker AS cw, current_concurrency AS cc,
 			LATERAL (
 				SELECT job.id
 				FROM job
@@ -271,7 +271,7 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 						OR (job.status = 'SCHEDULED' AND CURRENT_TIMESTAMP >= (job.scheduled_at - '10 minutes'::INTERVAL))
 					)
 				ORDER BY job.created_at ASC
-				LIMIT (cw.max_concurrency - cw.current_concurrency)
+				LIMIT (cw.max_concurrency - COALESCE(cc.count, 0))
 				FOR UPDATE SKIP LOCKED
 			) AS j
 		)

@@ -18,7 +18,7 @@ type Ticker struct {
 }
 
 // NewTicker creates and returns a new Ticker instance.
-func NewTicker(task interface{}, interval time.Duration, parameters ...interface{}) (*Ticker, error) {
+func NewTicker(interval time.Duration, task interface{}, parameters ...interface{}) (*Ticker, error) {
 	if interval <= 0 {
 		return nil, fmt.Errorf("ticker interval must be greater than zero")
 	}
@@ -43,22 +43,22 @@ func (t *Ticker) Go(ctx context.Context) error {
 		return fmt.Errorf("error creating runner: %v", err)
 	}
 
+	log.Printf("Initial Ticker run...")
 	runner.Run(ctx)
 
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled: %w", ctx.Err())
-		case <-ticker.C:
-			log.Printf("Ticker ticked. Running task...")
-			runner.Run(ctx)
-		case err := <-runner.ErrorChannel:
-			if err != nil {
-				return fmt.Errorf("error running task: %w", err)
-			}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled: %w", ctx.Err())
+	case <-ticker.C:
+		log.Printf("Ticker ticked. Running task...")
+		runner.Run(ctx)
+	case err := <-runner.ErrorChannel:
+		if err != nil {
+			return fmt.Errorf("error running task: %w", err)
 		}
 	}
+	return nil
 }

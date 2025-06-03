@@ -121,17 +121,8 @@ func (q *Queuer) Start(ctx context.Context) {
 		ctx, cancel := context.WithCancel(q.ctx)
 		defer cancel()
 
-		go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
-			err := q.runJobInitial()
-			if err != nil {
-				q.log.Printf("error running job: %v", err)
-			}
-		})
+		go q.listen(ctx, cancel)
 
-		// go q.jobUpdateListener.ListenToEvents(ctx, cancel)
-		// go q.jobDeleteListener.ListenToEvents(ctx, cancel)
-
-		// q.listen(ctx, cancel)
 		err := q.pollJobTicker(ctx)
 		if err != nil {
 			q.log.Printf("error starting job poll ticker: %v", err)
@@ -168,8 +159,12 @@ func (q *Queuer) Stop() {
 	q.log.Println("Queuer stopped")
 }
 
+// Internal
+
+// listen listens to job events and runs the initial job processing.
 func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 	go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
+		q.log.Printf("Job insert event received: %s", data)
 		err := q.runJobInitial()
 		if err != nil {
 			q.log.Printf("error running job: %v", err)
@@ -181,12 +176,16 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 }
 
 func (q *Queuer) pollJobTicker(ctx context.Context) error {
-	ticker, err := core.NewTicker(func() {
-		err := q.runJobInitial()
-		if err != nil {
-			q.log.Printf("error running job: %v", err)
-		}
-	}, 5*time.Minute)
+	ticker, err := core.NewTicker(
+		5*time.Minute,
+		func() {
+			log.Printf("Job poll ticker ticked at %s", time.Now().Format(time.RFC3339))
+			err := q.runJobInitial()
+			if err != nil {
+				q.log.Printf("error running job: %v", err)
+			}
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("error creating ticker: %v", err)
 	}

@@ -2,6 +2,7 @@ package queuer
 
 import (
 	"fmt"
+	"log"
 	"queuer/core"
 	"queuer/helper"
 	"queuer/model"
@@ -179,6 +180,8 @@ func (q *Queuer) runJobInitial() error {
 	} else if len(jobs) == 0 {
 		return nil
 	}
+
+	log.Printf("Running %v jobs", len(jobs))
 
 	for _, job := range jobs {
 		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
