@@ -175,8 +175,6 @@ func (ct *DBTime) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("\"%s\"", ct.Time.Format(dbTimeLayout))), nil
 }
 
-var nilTime = (time.Time{}).UnixNano()
-
 func (ct *DBTime) IsSet() bool {
 	return !ct.IsZero()
 }
