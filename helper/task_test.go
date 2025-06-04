@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // A simple function with no parameters and no return values
@@ -35,25 +36,25 @@ func TestGetTaskNameFromFunction(t *testing.T) {
 	t.Run("Valid function", func(t *testing.T) {
 		name, err := GetTaskNameFromFunction(testFuncNoParamsNoReturn)
 		assert.NoError(t, err)
-		assert.Contains(t, name, "main.testFuncNoParamsNoReturn", "should return full function name")
+		assert.Contains(t, name, "helper.testFuncNoParamsNoReturn", "should return full function name")
 	})
 
 	t.Run("Valid unexported function", func(t *testing.T) {
 		name, err := GetTaskNameFromFunction(unexportedTestFunc)
 		assert.NoError(t, err)
-		assert.Contains(t, name, "main.unexportedTestFunc", "should return full unexported function name")
+		assert.Contains(t, name, "helper.unexportedTestFunc", "should return full unexported function name")
 	})
 
 	t.Run("Not a function (string)", func(t *testing.T) {
 		name, err := GetTaskNameFromFunction("not_a_func")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, name, "should return empty string for non-function")
 		assert.Contains(t, err.Error(), "task must be a function, got string", "error message should indicate wrong type")
 	})
 
 	t.Run("Not a function (int)", func(t *testing.T) {
 		name, err := GetTaskNameFromFunction(123)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, name, "should return empty string for non-function")
 		assert.Contains(t, err.Error(), "task must be a function, got int", "error message should indicate wrong type")
 	})
@@ -61,7 +62,7 @@ func TestGetTaskNameFromFunction(t *testing.T) {
 	t.Run("Not a function (struct)", func(t *testing.T) {
 		type MyStruct struct{}
 		name, err := GetTaskNameFromFunction(MyStruct{})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, name, "should return empty string for non-function")
 		assert.Contains(t, err.Error(), "task must be a function, got struct", "error message should indicate wrong type")
 	})
@@ -78,12 +79,12 @@ func TestGetTaskNameFromInterface(t *testing.T) {
 	t.Run("Input is a function", func(t *testing.T) {
 		name, err := GetTaskNameFromInterface(testFuncOneParam)
 		assert.NoError(t, err)
-		assert.Contains(t, name, "main.testFuncOneParam", "should return function name if input is a function")
+		assert.Contains(t, name, "helper.testFuncOneParam", "should return function name if input is a function")
 	})
 
 	t.Run("Input is neither string nor function (int)", func(t *testing.T) {
 		name, err := GetTaskNameFromInterface(123)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, name, "should return empty string for non-string, non-function")
 		assert.Contains(t, err.Error(), "task must be a function, got int", "error message should indicate wrong type")
 	})
@@ -91,7 +92,7 @@ func TestGetTaskNameFromInterface(t *testing.T) {
 	t.Run("Input is neither string nor function (struct)", func(t *testing.T) {
 		type MyStruct struct{}
 		name, err := GetTaskNameFromInterface(MyStruct{})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, name, "should return empty string for non-string, non-function")
 		assert.Contains(t, err.Error(), "task must be a function, got struct", "error message should indicate wrong type")
 	})
@@ -105,15 +106,15 @@ func TestCheckValidTask(t *testing.T) {
 
 	t.Run("Not a function (string)", func(t *testing.T) {
 		err := CheckValidTask("not_a_func")
-		assert.Error(t, err, "should return error for non-function")
+		require.Error(t, err, "should return error for non-function")
 		assert.Contains(t, err.Error(), "task must be a function, got string", "error message should indicate wrong type")
 	})
 
 	t.Run("Not a function (nil)", func(t *testing.T) {
 		var f func()
 		err := CheckValidTask(f)
-		assert.Error(t, err, "should return error for nil function")
-		assert.Contains(t, err.Error(), "task must be a function, got invalid", "error message should indicate invalid kind for nil func")
+		require.Error(t, err, "should return error for nil function")
+		assert.Contains(t, err.Error(), "task value must not be nil", "error message should indicate invalid kind for nil func")
 	})
 }
 
@@ -128,44 +129,44 @@ func TestCheckValidTaskWithParameters(t *testing.T) {
 
 	t.Run("Not a function", func(t *testing.T) {
 		err := CheckValidTaskWithParameters("not_a_func", "param1")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "task must be a function, got string", "should fail if task is not a function")
 	})
 
 	t.Run("Function with too few parameters provided", func(t *testing.T) {
 		err := CheckValidTaskWithParameters(testFuncOneParam)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "task expects 1 parameters, got 0", "should fail if too few parameters")
 	})
 
 	t.Run("Function with too many parameters provided", func(t *testing.T) {
 		err := CheckValidTaskWithParameters(testFuncOneParam, "hello", "world")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "task expects 1 parameters, got 2", "should fail if too many parameters")
 	})
 
 	t.Run("Function with wrong parameter type (single param)", func(t *testing.T) {
 		err := CheckValidTaskWithParameters(testFuncOneParam, 123)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parameter 0 of task must be of type string, got int", "should fail if wrong parameter type")
 	})
 
 	t.Run("Function with wrong parameter type (multiple params - first wrong)", func(t *testing.T) {
 		err := CheckValidTaskWithParameters(testFuncMultiParamsReturn, "wrong", 10, 3.14)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parameter 0 of task must be of type interface, got string", "should fail on first wrong type")
 	})
 
 	t.Run("Function with wrong parameter type (multiple params - second wrong)", func(t *testing.T) {
 		err := CheckValidTaskWithParameters(testFuncMultiParamsReturn, context.Background(), "wrong", 3.14)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parameter 1 of task must be of type int, got string", "should fail on second wrong type")
 	})
 
 	t.Run("Function with different parameter type (time.Duration vs int)", func(t *testing.T) {
 		f := func(d time.Duration) {}
 		err := CheckValidTaskWithParameters(f, 10)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parameter 0 of task must be of type int64, got int", "should distinguish similar underlying types")
 	})
 

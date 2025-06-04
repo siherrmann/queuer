@@ -6,25 +6,15 @@ import (
 	"runtime"
 )
 
-func GetTaskNameFromFunction(f interface{}) (string, error) {
-	if reflect.ValueOf(f).Kind() != reflect.Func {
-		return "", fmt.Errorf("task must be a function, got %s", reflect.TypeOf(f).Kind())
-	}
-
-	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name(), nil
-}
-
-func GetTaskNameFromInterface(task interface{}) (string, error) {
-	if taskNameString, ok := task.(string); ok {
-		return taskNameString, nil
-	}
-
-	return GetTaskNameFromFunction(task)
-}
-
 func CheckValidTask(task interface{}) error {
+	if task == nil {
+		return fmt.Errorf("task must not be nil")
+	}
 	if reflect.ValueOf(task).Kind() != reflect.Func {
 		return fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
+	}
+	if reflect.ValueOf(task).IsNil() {
+		return fmt.Errorf("task value must not be nil")
 	}
 
 	return nil
@@ -42,12 +32,29 @@ func CheckValidTaskWithParameters(task interface{}, parameters ...interface{}) e
 	}
 
 	for i, param := range parameters {
-		if !taskType.In(i).AssignableTo(reflect.TypeOf(param)) {
+		if !reflect.TypeOf(param).AssignableTo(taskType.In(i)) {
 			return fmt.Errorf("parameter %d of task must be of type %s, got %s", i, taskType.In(i).Kind(), reflect.TypeOf(param).Kind())
 		}
 	}
 
 	return nil
+}
+
+func GetTaskNameFromFunction(f interface{}) (string, error) {
+	err := CheckValidTask(f)
+	if err != nil {
+		return "", err
+	}
+
+	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name(), nil
+}
+
+func GetTaskNameFromInterface(task interface{}) (string, error) {
+	if taskNameString, ok := task.(string); ok {
+		return taskNameString, nil
+	}
+
+	return GetTaskNameFromFunction(task)
 }
 
 func GetInputParametersFromTask(task interface{}) ([]reflect.Type, error) {
