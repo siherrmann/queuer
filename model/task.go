@@ -14,7 +14,7 @@ type Task struct {
 }
 
 func NewTask(task interface{}) (*Task, error) {
-	taskName, err := helper.GetFunctionName(task)
+	taskName, err := helper.GetTaskNameFromFunction(task)
 	if err != nil {
 		return nil, fmt.Errorf("error getting task name: %v", err)
 	}

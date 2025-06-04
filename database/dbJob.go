@@ -275,7 +275,7 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 				FOR UPDATE SKIP LOCKED
 			) AS j
 		)
-		UPDATE job SET 
+		UPDATE job SET
 			worker_id = cw.id,
 			worker_rid = cw.rid,
 			status = 'RUNNING',

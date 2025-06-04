@@ -52,6 +52,21 @@ type DatabaseConfiguration struct {
 	Schema   string
 }
 
+func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
+	config := &DatabaseConfiguration{
+		Host:     os.Getenv("QUEUER_DB_HOST"),
+		Port:     os.Getenv("QUEUER_DB_PORT"),
+		Database: os.Getenv("QUEUER_DB_DATABASE"),
+		Username: os.Getenv("QUEUER_DB_USERNAME"),
+		Password: os.Getenv("QUEUER_DB_PASSWORD"),
+		Schema:   os.Getenv("QUEUER_DB_SCHEMA"),
+	}
+	if len(strings.TrimSpace(config.Host)) == 0 || len(strings.TrimSpace(config.Port)) == 0 || len(strings.TrimSpace(config.Database)) == 0 || len(strings.TrimSpace(config.Username)) == 0 || len(strings.TrimSpace(config.Password)) == 0 || len(strings.TrimSpace(config.Schema)) == 0 {
+		return nil, fmt.Errorf("QUEUER_DB_HOST, QUEUER_DB_PORT, QUEUER_DB_DATABASE, QUEUER_DB_USERNAME, QUEUER_DB_PASSWORD and QUEUER_DB_SCHEMA environment variables must be set")
+	}
+	return config, nil
+}
+
 func (d *DatabaseConfiguration) DatabaseConnectionString() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, d.Schema)
 }

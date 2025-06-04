@@ -19,7 +19,7 @@ func main() {
 		"exampleWorker",
 		3,
 		&model.OnError{
-			Timeout:      2,
+			Timeout:      5,
 			RetryDelay:   1,
 			RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
 			MaxRetries:   3,
@@ -90,7 +90,7 @@ func main() {
 // Simple example task function
 func MyTask(param1 int, param2 string) (int, error) {
 	// Simulate some work
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	// Example for some error handling
 	param2Int, err := strconv.Atoi(param2)

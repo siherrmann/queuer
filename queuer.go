@@ -37,22 +37,17 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	// Logger
 	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
 
-	dbConfig := &helper.DatabaseConfiguration{
-		Host:     helper.GetEnvVariableWithoutDelete("QUEUER_DB_HOST"),
-		Port:     helper.GetEnvVariableWithoutDelete("QUEUER_DB_PORT"),
-		Database: helper.GetEnvVariableWithoutDelete("QUEUER_DB_DATABASE"),
-		Username: helper.GetEnvVariableWithoutDelete("QUEUER_DB_USERNAME"),
-		Password: helper.GetEnvVariableWithoutDelete("QUEUER_DB_PASSWORD"),
-		Schema:   helper.GetEnvVariableWithoutDelete("QUEUER_DB_SCHEMA"),
+	// Database
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		logger.Fatalf("failed to create database configuration: %v", err)
 	}
-
 	dbConnection := helper.NewDatabase(
 		"queuer",
 		dbConfig,
 	)
 
 	// DBs
-	var err error
 	var dbJob database.JobDBHandlerFunctions
 	var dbWorker database.WorkerDBHandlerFunctions
 	dbJob, err = database.NewJobDBHandler(dbConnection)
