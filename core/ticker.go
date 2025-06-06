@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"log"
 	"queuer/helper"
 	"queuer/model"
 	"reflect"
@@ -43,22 +42,21 @@ func (t *Ticker) Go(ctx context.Context) error {
 		return fmt.Errorf("error creating runner: %v", err)
 	}
 
-	log.Printf("Initial Ticker run...")
-	runner.Run(ctx)
+	go runner.Run(ctx)
 
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
 
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("context cancelled: %w", ctx.Err())
-	case <-ticker.C:
-		log.Printf("Ticker ticked. Running task...")
-		runner.Run(ctx)
-	case err := <-runner.ErrorChannel:
-		if err != nil {
-			return fmt.Errorf("error running task: %w", err)
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
+		case <-ticker.C:
+			go runner.Run(ctx)
+		case err := <-runner.ErrorChannel:
+			if err != nil {
+				return fmt.Errorf("error running task: %w", err)
+			}
 		}
 	}
-	return nil
 }

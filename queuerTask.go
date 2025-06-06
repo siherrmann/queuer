@@ -1,11 +1,14 @@
 package queuer
 
-import "queuer/model"
+import (
+	"log"
+	"queuer/model"
+)
 
-func (q *Queuer) AddTask(task interface{}) {
+func (q *Queuer) AddTask(task interface{}) *model.Task {
 	newTask, err := model.NewTask(task)
 	if err != nil {
-		q.log.Fatalf("error creating new task: %v", err)
+		log.Fatalf("error creating new task: %v", err)
 	}
 
 	q.tasks[newTask.Name] = newTask
@@ -14,16 +17,18 @@ func (q *Queuer) AddTask(task interface{}) {
 	// Update worker in DB
 	_, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		q.log.Fatalf("error updating worker: %v", err)
+		log.Fatalf("error updating worker: %v", err)
 	}
 
 	q.log.Printf("Task added with name %v", newTask.Name)
+
+	return newTask
 }
 
-func (q *Queuer) AddTaskWithName(task interface{}, name string) {
+func (q *Queuer) AddTaskWithName(task interface{}, name string) *model.Task {
 	newTask, err := model.NewTaskWithName(task, name)
 	if err != nil {
-		q.log.Fatalf("error creating new task: %v", err)
+		log.Fatalf("error creating new task: %v", err)
 	}
 
 	q.tasks[newTask.Name] = newTask
@@ -32,8 +37,10 @@ func (q *Queuer) AddTaskWithName(task interface{}, name string) {
 	// Update worker in DB
 	_, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		q.log.Fatalf("error updating worker: %v", err)
+		log.Fatalf("error updating worker: %v", err)
 	}
 
 	q.log.Printf("Task added with name %v", newTask.Name)
+
+	return newTask
 }

@@ -57,9 +57,7 @@ func NewRunnerFromJob(task *model.Task, job *model.Job) (*Runner, error) {
 	}
 
 	parameters := make([]interface{}, len(job.Parameters))
-	for i, param := range job.Parameters {
-		parameters[i] = param
-	}
+	copy(parameters, job.Parameters)
 
 	runner, err := NewRunner(job.Options, task.Task, job.Parameters...)
 	if err != nil {
@@ -108,8 +106,10 @@ func (r *Runner) Run(ctx context.Context) {
 		}
 
 		var ok bool
-		if err, ok = resultValues[len(resultValues)-1].(error); len(resultValues) > 0 && (ok || (len(outputParameters) > 0 && outputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil)) {
-			resultValues = resultValues[:len(resultValues)-1]
+		if len(resultValues) > 0 {
+			if err, ok = resultValues[len(resultValues)-1].(error); ok || (outputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil) {
+				resultValues = resultValues[:len(resultValues)-1]
+			}
 		}
 
 		if err != nil {
@@ -122,16 +122,17 @@ func (r *Runner) Run(ctx context.Context) {
 	for {
 		select {
 		case p := <-panicChan:
-			r.cancel()
 			r.ErrorChannel <- fmt.Errorf("panic running task: %v", p)
+			return
 		case err := <-errorChannel:
-			r.Cancel()
 			r.ErrorChannel <- fmt.Errorf("error running task: %v", err)
+			return
 		case results := <-resultsChannel:
-			r.Cancel()
 			r.ResultsChannel <- results
+			return
 		case <-ctx.Done():
 			r.ErrorChannel <- fmt.Errorf("error running task: %v", ctx.Err())
+			return
 		}
 	}
 }

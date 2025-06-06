@@ -2,7 +2,6 @@ package queuer
 
 import (
 	"fmt"
-	"log"
 	"queuer/core"
 	"queuer/helper"
 	"queuer/model"
@@ -66,28 +65,35 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 }
 
 // CancelJob cancels a job with the given job RID.
-func (q *Queuer) CancelJob(jobRid uuid.UUID) error {
-	jobRunner, found := q.activeRunners.Load(jobRid)
-	if !found {
-		return fmt.Errorf("job with rid %v not found or not running", jobRid)
+func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
+	job, err := q.dbJob.SelectJob(jobRid)
+	if err != nil {
+		q.log.Printf("error selecting job with rid %v, but already cancelled: %v", jobRid, err)
 	}
 
-	runner := jobRunner.(*core.Runner) // Type assertion
-	runner.Cancel(func() {
-		job, err := q.dbJob.SelectJob(jobRid)
-		if err != nil {
-			q.log.Printf("error selecting job with rid %v, but already cancelled: %v", jobRid, err)
-		}
+	err = q.cancelJob(job)
+	if err != nil {
+		return nil, fmt.Errorf("error cancelling job with rid %v: %v", jobRid, err)
+	}
 
-		job.Status = model.JobStatusCancelled
-		_, err = q.dbJob.UpdateJobFinal(job)
-		if err != nil {
-			q.log.Printf("error updating job status to cancelled: %v", err)
-		}
+	q.log.Printf("Job cancelled with RID %v", job.RID)
 
+	return job, nil
+}
+
+func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID) error {
+	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, 0, 0)
+	if err != nil {
+		return fmt.Errorf("error selecting jobs by worker RID %v: %v", workerRid, err)
+	}
+
+	for _, job := range jobs {
+		err := q.cancelJob(job)
+		if err != nil {
+			return fmt.Errorf("error cancelling job with rid %v: %v", job.RID, err)
+		}
 		q.log.Printf("Job cancelled with RID %v", job.RID)
-	})
-
+	}
 	return nil
 }
 
@@ -181,8 +187,6 @@ func (q *Queuer) runJobInitial() error {
 		return nil
 	}
 
-	log.Printf("Running %v jobs", len(jobs))
-
 	for _, job := range jobs {
 		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
 			scheduler, err := core.NewScheduler(
@@ -193,7 +197,7 @@ func (q *Queuer) runJobInitial() error {
 			if err != nil {
 				return fmt.Errorf("error creating scheduler: %v", err)
 			}
-			scheduler.Go(q.ctx)
+			go scheduler.Go(q.ctx)
 		} else {
 			go func() {
 				q.log.Printf("Running job with RID %v", job.RID)
@@ -282,6 +286,32 @@ func (q *Queuer) scheduleJob(job *model.Job) {
 	} else {
 		q.succeedJob(job, resultValues)
 	}
+}
+
+func (q *Queuer) cancelJob(job *model.Job) error {
+	var err error
+	if job.Status == model.JobStatusRunning {
+		jobRunner, found := q.activeRunners.Load(job.RID)
+		if !found {
+			return fmt.Errorf("job with rid %v not found or not running", job.RID)
+		}
+
+		runner := jobRunner.(*core.Runner)
+		runner.Cancel(func() {
+			job.Status = model.JobStatusCancelled
+			job, err = q.dbJob.UpdateJobFinal(job)
+			if err != nil {
+				q.log.Printf("error updating job status to cancelled: %v", err)
+			}
+		})
+	} else if job.Status == model.JobStatusScheduled || job.Status == model.JobStatusQueued {
+		job.Status = model.JobStatusCancelled
+		job, err = q.dbJob.UpdateJobFinal(job)
+		if err != nil {
+			return fmt.Errorf("error updating job status to cancelled: %v", err)
+		}
+	}
+	return nil
 }
 
 // succeedJob updates the job status to succeeded and runs the next job if available.

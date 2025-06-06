@@ -32,7 +32,7 @@ func NewScheduler(task interface{}, startTime *time.Time, parameters ...interfac
 func (s *Scheduler) Go(ctx context.Context) {
 	var duration time.Duration
 	if s.StartTime != nil {
-		duration = s.StartTime.Sub(time.Now())
+		duration = time.Until(*s.StartTime)
 	}
 
 	runner, err := NewRunner(

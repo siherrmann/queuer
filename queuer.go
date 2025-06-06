@@ -15,7 +15,8 @@ import (
 
 type Queuer struct {
 	// Context
-	ctx context.Context
+	ctx    context.Context
+	cancel context.CancelFunc
 	// Runners
 	activeRunners sync.Map
 	// Worker
@@ -27,6 +28,7 @@ type Queuer struct {
 	jobInsertListener *database.QueuerListener
 	jobUpdateListener *database.QueuerListener
 	jobDeleteListener *database.QueuerListener
+	JobPollInterval   time.Duration
 	// Tasks
 	tasks map[string]*model.Task
 	// Logger
@@ -100,17 +102,19 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 		jobInsertListener: jobInsertListener,
 		jobUpdateListener: jobUpdateListener,
 		jobDeleteListener: jobDeleteListener,
+		JobPollInterval:   1 * time.Minute,
 		tasks:             map[string]*model.Task{},
 		log:               logger,
 	}
 }
 
-func (q *Queuer) Start(ctx context.Context) {
+func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 	if q.dbJob == nil || q.dbWorker == nil || q.jobInsertListener == nil || q.jobUpdateListener == nil || q.jobDeleteListener == nil {
 		q.log.Fatalln("worker is not initialized properly")
 	}
 
 	q.ctx = ctx
+	q.cancel = cancel
 
 	go func() {
 		ctx, cancel := context.WithCancel(q.ctx)
@@ -119,7 +123,7 @@ func (q *Queuer) Start(ctx context.Context) {
 		go q.listen(ctx, cancel)
 
 		err := q.pollJobTicker(ctx)
-		if err != nil {
+		if err != nil && ctx.Err() == nil {
 			q.log.Printf("error starting job poll ticker: %v", err)
 			return
 		}
@@ -131,27 +135,40 @@ func (q *Queuer) Start(ctx context.Context) {
 	}()
 }
 
-func (q *Queuer) Stop() {
+func (q *Queuer) Stop() error {
 	if q.jobInsertListener != nil {
 		err := q.jobInsertListener.Listener.Close()
 		if err != nil {
-			q.log.Printf("error closing job insert listener: %v", err)
+			return fmt.Errorf("error closing job insert listener: %v", err)
 		}
 	}
 	if q.jobUpdateListener != nil {
 		err := q.jobUpdateListener.Listener.Close()
 		if err != nil {
-			q.log.Printf("error closing job update listener: %v", err)
+			return fmt.Errorf("error closing job update listener: %v", err)
 		}
 	}
 	if q.jobDeleteListener != nil {
 		err := q.jobDeleteListener.Listener.Close()
 		if err != nil {
-			q.log.Printf("error closing job delete listener: %v", err)
+			return fmt.Errorf("error closing job delete listener: %v", err)
 		}
 	}
 
+	// Cancel all queued and running jobs
+	err := q.CancelAllJobsByWorker(q.worker.RID)
+	if err != nil {
+		return fmt.Errorf("error cancelling all jobs by worker: %v", err)
+	}
+
+	// Cancel the context to stop the queuer
+	if q.ctx != nil {
+		q.cancel()
+	}
+
 	q.log.Println("Queuer stopped")
+
+	return nil
 }
 
 // Internal
@@ -159,7 +176,6 @@ func (q *Queuer) Stop() {
 // listen listens to job events and runs the initial job processing.
 func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 	go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
-		q.log.Printf("Job insert event received: %s", data)
 		err := q.runJobInitial()
 		if err != nil {
 			q.log.Printf("error running job: %v", err)
@@ -172,9 +188,9 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 
 func (q *Queuer) pollJobTicker(ctx context.Context) error {
 	ticker, err := core.NewTicker(
-		5*time.Minute,
+		q.JobPollInterval,
 		func() {
-			log.Printf("Job poll ticker ticked at %s", time.Now().Format(time.RFC3339))
+			q.log.Println("Polling jobs...")
 			err := q.runJobInitial()
 			if err != nil {
 				q.log.Printf("error running job: %v", err)

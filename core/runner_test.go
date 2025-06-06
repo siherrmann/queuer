@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"queuer/model" // Importing the actual model package
+	"queuer/model"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require" // For require.NoError/Fatal
+	"github.com/stretchr/testify/require"
 )
 
 // Mock function to simulate a task that might succeed or fail
@@ -32,7 +32,7 @@ func newFuncRunner(ctx context.Context, panic bool, workDuration time.Duration, 
 
 func (m *funcRunner) Call(param1 int, param2 string) (int, error) {
 	if m.panic {
-		panic(fmt.Sprintf("FuncRunner panicked on call"))
+		panic("FuncRunner panicked on call")
 	}
 
 	// Simulate work duration
@@ -53,6 +53,28 @@ func (m *funcRunner) Call(param1 int, param2 string) (int, error) {
 
 	// Simulate successful return values (e.g., sum of two ints)
 	return param1 + param2Int, nil
+}
+
+func (m *funcRunner) CallWithoutReturn(param1 int, param2 string) {
+	if m.panic {
+		panic("FuncRunner panicked on call")
+	}
+
+	// Simulate work duration
+	if m.workDuration > 0 {
+		select {
+		case <-time.After(m.workDuration):
+			// Work completed
+		case <-m.ctx.Done(): // Check for context cancellation
+			return
+		}
+	}
+
+	// Error case if string conversion fails
+	_, err := strconv.Atoi(param2)
+	if err != nil {
+		return
+	}
 }
 
 // TestNewRunner tests the constructor's validation and parameter handling
@@ -328,7 +350,7 @@ outerLoop:
 
 // TestCancelMethodWithOnCancelFunc tests the onCancel callback
 func TestCancelMethodWithOnCancelFunc(t *testing.T) {
-	mockFn := newFuncRunner(context.Background(), true, 5*time.Second, nil).Call // Panics on 1st call
+	mockFn := newFuncRunner(context.Background(), false, 5*time.Second, nil).Call
 	mockTask, err := model.NewTask(mockFn)
 	require.NoError(t, err, "Failed to create mock task")
 
@@ -338,25 +360,53 @@ func TestCancelMethodWithOnCancelFunc(t *testing.T) {
 			1,
 			"1",
 		},
-		Options: &model.Options{
-			OnError: &model.OnError{
-				Timeout: 1.0,
-			},
-		},
 	}
 
 	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
 	called := make(chan bool, 1)
-	onCancelFunc := func() {
-		called <- true
-	}
+
+	go runner.Run(context.Background())
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		runner.Cancel(onCancelFunc) // Call with callback
+		runner.Cancel(func() {
+			called <- true
+		}) // Call with callback
 	}()
+
+outerLoop:
+	for {
+		select {
+		case err := <-runner.ErrorChannel:
+			assert.Error(t, err)
+			assert.Equal(t, <-called, true, "onCancelFunc should have been called")
+			assert.Contains(t, err.Error(), "canceled")
+			break outerLoop
+		case results := <-runner.ResultsChannel:
+			assert.Nil(t, results)
+			break outerLoop
+		}
+	}
+}
+
+// TestCancelMethodWithoutReturnValues tests the onCancel callback
+func TestCancelMethodWithoutReturnValues(t *testing.T) {
+	mockFn := newFuncRunner(context.Background(), false, 5*time.Second, nil).CallWithoutReturn
+	mockTask, err := model.NewTask(mockFn)
+	require.NoError(t, err, "Failed to create mock task")
+
+	job := &model.Job{
+		TaskName: mockTask.Name,
+		Parameters: []interface{}{
+			1,
+			"1",
+		},
+	}
+
+	runner, err := NewRunnerFromJob(mockTask, job)
+	require.NoError(t, err)
 
 	go runner.Run(context.Background())
 
@@ -364,19 +414,11 @@ outerLoop:
 	for {
 		select {
 		case err := <-runner.ErrorChannel:
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "panicked")
+			assert.NoError(t, err)
 			break outerLoop
 		case results := <-runner.ResultsChannel:
-			assert.Nil(t, results)
+			assert.Empty(t, results)
 			break outerLoop
 		}
-	}
-
-	select {
-	case <-called:
-		assert.True(t, true, "onCancelFunc should have been called")
-	case <-time.After(500 * time.Millisecond):
-		assert.Fail(t, "onCancelFunc was not called in time")
 	}
 }

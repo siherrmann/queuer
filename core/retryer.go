@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"log"
 	"queuer/model"
 	"time"
 )
@@ -27,7 +26,6 @@ func NewRetryer(function func() error, options *model.OnError) (*Retryer, error)
 
 func (r *Retryer) Retry() (err error) {
 	for i := 0; i < r.options.MaxRetries; i++ {
-		log.Printf("Retrying with max retries: %d, current sleep: %s", r.options.MaxRetries, r.sleep)
 		err = r.function()
 		if err != nil {
 			time.Sleep(r.sleep)

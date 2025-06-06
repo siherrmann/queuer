@@ -40,13 +40,11 @@ func (l *QueuerListener) ListenToEvents(ctx context.Context, cancel context.Canc
 	for {
 		select {
 		case <-ctx.Done():
-			err := l.Listener.Close()
-			if err != nil {
-				log.Printf("error closing listener: %v", err)
-			}
 			return
 		case n := <-l.Listener.Notify:
-			go notifyFunction(n.Extra)
+			if n != nil {
+				go notifyFunction(n.Extra)
+			}
 		case <-time.After(90 * time.Second):
 			// Checking connection all 90 seconds
 			err := l.Listener.Ping()
