@@ -8,7 +8,7 @@ import (
 
 func ExampleEasy() {
 	// Create a new queuer instance
-	q := queuer.NewQueuer("exampleWorker", 3, nil)
+	q := queuer.NewQueuer("exampleWorker", 3)
 
 	// Add a short task to the queuer
 	q.AddTask(ShortTask)
