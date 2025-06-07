@@ -16,7 +16,7 @@ type Scheduler struct {
 	StartTime  *time.Time
 }
 
-func NewScheduler(task interface{}, startTime *time.Time, parameters ...interface{}) (*Scheduler, error) {
+func NewScheduler(startTime *time.Time, task interface{}, parameters ...interface{}) (*Scheduler, error) {
 	err := helper.CheckValidTaskWithParameters(task, parameters...)
 	if err != nil {
 		return nil, fmt.Errorf("error checking task: %v", err)

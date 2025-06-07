@@ -64,7 +64,7 @@ func ExampleFull() {
 			Start: time.Now().Add(time.Second * 10),
 		},
 	}
-	_, err = q.AddJobWithOptions(ShortTask, options, 5, "12")
+	_, err = q.AddJobWithOptions(options, ShortTask, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job with options: %v", err)
 	}
@@ -77,7 +77,7 @@ func ExampleFull() {
 			MaxCount: 10,
 		},
 	}
-	job, err := q.AddJobWithOptions(LongTask, options, time.Now().Second(), "1")
+	job, err := q.AddJobWithOptions(options, LongTask, time.Now().Second(), "1")
 	if err != nil {
 		log.Fatalf("Error adding job with schedule options: %v", err)
 	}

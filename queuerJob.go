@@ -11,6 +11,8 @@ import (
 )
 
 // AddJob adds a job to the queue with the given task and parameters.
+// As a task you can either pass a function or a string with the task name
+// (necessary if you want to use a task with a name set by you).
 func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
 	options := q.mergeOptions(nil)
 	job, err := q.addJob(task, options, parameters...)
@@ -24,7 +26,9 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 }
 
 // AddJobWithOptions adds a job with the given task, options, and parameters.
-func (q *Queuer) AddJobWithOptions(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
+// As a task you can either pass a function or a string with the task name
+// (necessary if you want to use a task with a name set by you).
+func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
 	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
@@ -105,7 +109,7 @@ func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) error {
 	}
 
 	// Readd the job to the queue
-	newJob, err := q.AddJobWithOptions(job.TaskName, job.Options, job.Parameters...)
+	newJob, err := q.AddJobWithOptions(job.Options, job.TaskName, job.Parameters...)
 	if err != nil {
 		return fmt.Errorf("error readding job: %v", err)
 	}
@@ -190,8 +194,8 @@ func (q *Queuer) runJobInitial() error {
 	for _, job := range jobs {
 		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
 			scheduler, err := core.NewScheduler(
-				q.scheduleJob,
 				&job.Options.Schedule.Start,
+				q.scheduleJob,
 				job,
 			)
 			if err != nil {

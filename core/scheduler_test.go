@@ -84,9 +84,9 @@ func TestNewScheduler(t *testing.T) {
 			var err error
 			var scheduler *Scheduler
 			if test.startTime.IsZero() {
-				scheduler, err = NewScheduler(test.task, nil)
+				scheduler, err = NewScheduler(nil, test.task)
 			} else {
-				scheduler, err = NewScheduler(test.task, &test.startTime)
+				scheduler, err = NewScheduler(&test.startTime, test.task)
 			}
 
 			if test.wantErr {
@@ -107,7 +107,7 @@ func TestScheduleWithDelay(t *testing.T) {
 	startTime := time.Now().Add(delay) // Time in the future
 
 	mockFn.wg.Add(1)
-	scheduler, err := NewScheduler(mockFn.Call, &startTime)
+	scheduler, err := NewScheduler(&startTime, mockFn.Call)
 	require.NoError(t, err)
 
 	start := time.Now()
@@ -135,7 +135,7 @@ func TestScheduleTimeInPast(t *testing.T) {
 	startTime := time.Now().Add(-5 * time.Second) // Time in the past
 
 	mockFn.wg.Add(1)
-	scheduler, err := NewScheduler(mockFn.Call, &startTime)
+	scheduler, err := NewScheduler(&startTime, mockFn.Call)
 	require.NoError(t, err)
 
 	start := time.Now()
@@ -162,7 +162,7 @@ func TestScheduleNoDelay(t *testing.T) {
 	now := time.Now() // Current time
 
 	mockFn.wg.Add(1)
-	scheduler, err := NewScheduler(mockFn.Call, &now)
+	scheduler, err := NewScheduler(&now, mockFn.Call)
 	require.NoError(t, err)
 
 	start := time.Now()
@@ -191,7 +191,7 @@ func TestScheduleWithWorkDuration(t *testing.T) {
 	startTime := time.Now().Add(delay) // Time in the future
 
 	mockFn.wg.Add(1)
-	scheduler, err := NewScheduler(mockFn.Call, &startTime)
+	scheduler, err := NewScheduler(&startTime, mockFn.Call)
 	require.NoError(t, err)
 
 	start := time.Now()
