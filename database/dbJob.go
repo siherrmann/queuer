@@ -663,8 +663,8 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 			created_at,
 			updated_at
 		FROM job
-		WHERE (rid ILIKE '%' || $1 || '%'
-				OR worker_id ILIKE '%' || $1 || '%'
+		WHERE (rid::text ILIKE '%' || $1 || '%'
+				OR worker_id::text ILIKE '%' || $1 || '%'
 				OR task_name ILIKE '%' || $1 || '%'
 				OR status ILIKE '%' || $1 || '%')
 			AND (0 = $2
