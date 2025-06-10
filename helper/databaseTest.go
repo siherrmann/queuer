@@ -23,7 +23,7 @@ func MustStartPostgresContainer() (func(ctx context.Context, opts ...testcontain
 
 	pgContainer, err := postgres.Run(
 		ctx,
-		"postgres:latest",
+		"timescale/timescaledb:latest-pg17",
 		postgres.WithDatabase(dbName),
 		postgres.WithUsername(dbUser),
 		postgres.WithPassword(dbPwd),

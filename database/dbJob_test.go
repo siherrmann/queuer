@@ -6,6 +6,7 @@ import (
 	"queuer/helper"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 )
 
@@ -26,13 +27,13 @@ func TestMain(m *testing.M) {
 	}
 }
 
-// func TestNewJobDBHandler(t *testing.T) {
-// 	database := helper.NewTestDatabase(port)
+func TestNewJobDBHandler(t *testing.T) {
+	database := helper.NewTestDatabase(port)
 
-// 	jobDBHandler, err := NewJobDBHandler(database)
-// 	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+	jobDBHandler, err := NewJobDBHandler(database)
+	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-// 	if jobDBHandler == nil || jobDBHandler.db == nil || jobDBHandler.db.Instance == nil {
-// 		t.Fatal("Expected NewJobDBHandler to return a non-nil instance")
-// 	}
-// }
+	if jobDBHandler == nil || jobDBHandler.db == nil || jobDBHandler.db.Instance == nil {
+		t.Fatal("Expected NewJobDBHandler to return a non-nil instance")
+	}
+}
