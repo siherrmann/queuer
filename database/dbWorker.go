@@ -81,7 +81,7 @@ func (r WorkerDBHandler) CreateTable() error {
 		log.Fatalf("error creating worker table: %#v", err)
 	}
 
-	err = r.db.CreateIndexes("worker", "name", "status")
+	err = r.db.CreateIndexes("worker", "rid", "name", "status")
 	if err != nil {
 		r.db.Logger.Fatal(err)
 	}
@@ -232,8 +232,11 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 		&worker.CreatedAt,
 		&worker.UpdatedAt,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("error scanning worker with RID %s: %w", rid.String(), err)
+	}
 
-	return worker, err
+	return worker, nil
 }
 
 // SelectAllWorkers retrieves a paginated list of all workers.

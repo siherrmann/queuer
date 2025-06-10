@@ -141,7 +141,7 @@ func (d *Database) AddNotifyFunction() error {
 func (d *Database) CheckTableExistance(tableName string) (bool, error) {
 	exists := false
 
-	tableNameQuoted := pq.QuoteIdentifier(tableName)
+	tableNameQuoted := pq.QuoteLiteral(tableName)
 	row := d.Instance.QueryRow(
 		fmt.Sprintf(`
 				SELECT EXISTS (
