@@ -73,6 +73,26 @@ func TestJobInsertJob(t *testing.T) {
 	assert.WithinDuration(t, insertedJob.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
 }
 
+func TestJobBatchInsertJobs(t *testing.T) {
+	database := helper.NewTestDatabase(port)
+
+	jobDBHandler, err := NewJobDBHandler(database)
+	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+
+	jobCount := 5
+	jobs := []*model.Job{}
+	for i := 0; i < jobCount; i++ {
+		// TODO options must not be nil currently
+		job, err := model.NewJob("TestTask", &model.Options{})
+		require.NoError(t, err, "Expected NewJob to not return an error")
+		require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+		jobs = append(jobs, job)
+	}
+
+	err = jobDBHandler.BatchInsertJobs(jobs)
+	assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+}
+
 func TestJobUpdateJobsInitial(t *testing.T) {
 	database := helper.NewTestDatabase(port)
 
