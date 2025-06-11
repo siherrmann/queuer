@@ -3,7 +3,6 @@ package queuer
 import (
 	"fmt"
 	"queuer/core"
-	"queuer/helper"
 	"queuer/model"
 	"time"
 
@@ -44,13 +43,8 @@ func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, par
 func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	var jobs []*model.Job
 	for _, batchJob := range batchJobs {
-		taskName, err := helper.GetTaskNameFromInterface(batchJob.Task)
-		if err != nil {
-			return fmt.Errorf("error getting task name: %v", err)
-		}
-
 		options := q.mergeOptions(batchJob.Options)
-		newJob, err := model.NewJob(taskName, options, batchJob.Parameters...)
+		newJob, err := model.NewJob(batchJob.Task, options, batchJob.Parameters...)
 		if err != nil {
 			return fmt.Errorf("error creating job with job options: %v", err)
 		}
@@ -72,7 +66,7 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJob(jobRid)
 	if err != nil {
-		q.log.Printf("error selecting job with rid %v, but already cancelled: %v", jobRid, err)
+		return nil, fmt.Errorf("error selecting job with rid %v, but already cancelled: %v", jobRid, err)
 	}
 
 	err = q.cancelJob(job)
@@ -158,17 +152,13 @@ func (q *Queuer) mergeOptions(options *model.Options) *model.Options {
 	} else if options == nil && q.worker.Options != nil {
 		options = &model.Options{OnError: q.worker.Options}
 	}
+
 	return options
 }
 
 // addJob adds a job to the queue with all necessary parameters.
 func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
-	taskName, err := helper.GetTaskNameFromInterface(task)
-	if err != nil {
-		return nil, fmt.Errorf("error getting task name: %v", err)
-	}
-
-	newJob, err := model.NewJob(taskName, options, parameters...)
+	newJob, err := model.NewJob(task, options, parameters...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating job: %v", err)
 	}

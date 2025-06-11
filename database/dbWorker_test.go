@@ -12,7 +12,8 @@ import (
 )
 
 func TestWorkerNewWorkerDBHandler(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -23,7 +24,8 @@ func TestWorkerNewWorkerDBHandler(t *testing.T) {
 }
 
 func TestWorkerCheckTableExistance(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -34,7 +36,8 @@ func TestWorkerCheckTableExistance(t *testing.T) {
 }
 
 func TestWorkerCreateTable(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -44,7 +47,8 @@ func TestWorkerCreateTable(t *testing.T) {
 }
 
 func TestWorkerDropTable(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -54,7 +58,8 @@ func TestWorkerDropTable(t *testing.T) {
 }
 
 func TestWorkerInsertWorker(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -73,7 +78,8 @@ func TestWorkerInsertWorker(t *testing.T) {
 }
 
 func TestWorkerUpdateWorker(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -100,7 +106,8 @@ func TestWorkerUpdateWorker(t *testing.T) {
 }
 
 func TestWorkerDeleteWorker(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -121,7 +128,8 @@ func TestWorkerDeleteWorker(t *testing.T) {
 }
 
 func TestWorkerSelectWorker(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -140,7 +148,8 @@ func TestWorkerSelectWorker(t *testing.T) {
 }
 
 func TestWorkerSelectAllWorkers(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
@@ -165,7 +174,8 @@ func TestWorkerSelectAllWorkers(t *testing.T) {
 }
 
 func TestWorkerSelectAllWorkersBySearch(t *testing.T) {
-	database := helper.NewTestDatabase(port)
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")

@@ -203,13 +203,22 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 	}
 
 	for _, job := range jobs {
-		optionsJSON, err := job.Options.Marshal()
-		if err != nil {
-			return fmt.Errorf("error marshaling job options for batch insert: %w", err)
+		var err error
+		optionsJSON := []byte("{}")
+		parametersJSON := []byte("[]")
+
+		if job.Options != nil {
+			optionsJSON, err = job.Options.Marshal()
+			if err != nil {
+				return fmt.Errorf("error marshaling job options for batch insert: %w", err)
+			}
 		}
-		parametersJSON, err := job.Parameters.Marshal()
-		if err != nil {
-			return fmt.Errorf("error marshaling job parameters for batch insert: %v", err)
+
+		if job.Parameters != nil {
+			parametersJSON, err = job.Parameters.Marshal()
+			if err != nil {
+				return fmt.Errorf("error marshaling job parameters for batch insert: %v", err)
+			}
 		}
 
 		_, err = stmt.Exec(

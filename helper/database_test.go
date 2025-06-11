@@ -29,13 +29,15 @@ func TestMain(m *testing.M) {
 }
 
 func TestNew(t *testing.T) {
-	database := NewTestDatabase(port)
+	dbConfig := NewTestDatabaseConfig(port)
+	database := NewTestDatabase(dbConfig)
 
 	assert.NotNil(t, database, "expected NewDatabase to return a non-nil instance")
 }
 
 func TestHealth(t *testing.T) {
-	database := NewTestDatabase(port)
+	dbConfig := NewTestDatabaseConfig(port)
+	database := NewTestDatabase(dbConfig)
 
 	stats := database.Health()
 
@@ -46,7 +48,8 @@ func TestHealth(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	database := NewTestDatabase(port)
+	dbConfig := NewTestDatabaseConfig(port)
+	database := NewTestDatabase(dbConfig)
 
 	assert.NotNil(t, database, "expected NewDatabase to return a non-nil instance")
 }

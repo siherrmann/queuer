@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"queuer/helper"
 	"reflect"
 	"strings"
 	"time"
@@ -77,7 +78,12 @@ type Job struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-func NewJob(taskName string, options *Options, parameters ...interface{}) (*Job, error) {
+func NewJob(task interface{}, options *Options, parameters ...interface{}) (*Job, error) {
+	taskName, err := helper.GetTaskNameFromInterface(task)
+	if err != nil {
+		return nil, fmt.Errorf("error getting task name: %v", err)
+	}
+
 	if len(taskName) == 0 || len(taskName) > 100 {
 		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
 	}

@@ -49,16 +49,20 @@ func MustStartPostgresContainer() (func(ctx context.Context, opts ...testcontain
 	return pgContainer.Terminate, u.Port(), err
 }
 
-func NewTestDatabase(port string) *Database {
+func NewTestDatabase(config *DatabaseConfiguration) *Database {
 	return NewDatabase(
 		"test_db",
-		&DatabaseConfiguration{
-			Host:     "localhost",
-			Port:     port,
-			Database: dbName,
-			Username: dbUser,
-			Password: dbPwd,
-			Schema:   "public",
-		},
+		config,
 	)
+}
+
+func NewTestDatabaseConfig(port string) *DatabaseConfiguration {
+	return &DatabaseConfiguration{
+		Host:     "localhost",
+		Port:     port,
+		Database: dbName,
+		Username: dbUser,
+		Password: dbPwd,
+		Schema:   "public",
+	}
 }
