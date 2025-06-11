@@ -862,8 +862,8 @@ func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int
 			created_at,
 			updated_at
 		FROM job_archive
-		WHERE (rid ILIKE '%' || $1 || '%'
-				OR worker_id ILIKE '%' || $1 || '%'
+		WHERE (rid::text ILIKE '%' || $1 || '%'
+				OR worker_id::text ILIKE '%' || $1 || '%'
 				OR task_name ILIKE '%' || $1 || '%'
 				OR status ILIKE '%' || $1 || '%')
 			AND (0 = $2
