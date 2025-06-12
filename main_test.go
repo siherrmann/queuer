@@ -13,12 +13,12 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
-var port string
+var dbPort string
 
 func TestMain(m *testing.M) {
 	var teardown func(ctx context.Context, opts ...testcontainers.TerminateOption) error
 	var err error
-	teardown, port, err = helper.MustStartPostgresContainer()
+	teardown, dbPort, err = helper.MustStartPostgresContainer()
 	if err != nil {
 		log.Fatalf("error starting postgres container: %v", err)
 	}
@@ -35,7 +35,7 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
 
 	// Database
-	dbConfig := helper.NewTestDatabaseConfig(port)
+	dbConfig := helper.NewTestDatabaseConfig(dbPort)
 	dbConnection := helper.NewTestDatabase(dbConfig)
 
 	// DBs

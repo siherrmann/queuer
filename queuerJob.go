@@ -2,6 +2,7 @@ package queuer
 
 import (
 	"fmt"
+	"log"
 	"queuer/core"
 	"queuer/model"
 	"time"
@@ -191,6 +192,7 @@ func (q *Queuer) runJobInitial() error {
 			if err != nil {
 				return fmt.Errorf("error creating scheduler: %v", err)
 			}
+			log.Printf("Scheduling job with RID %v to run at %v", job.RID, job.Options.Schedule.Start)
 			go scheduler.Go(q.ctx)
 		} else {
 			go func() {

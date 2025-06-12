@@ -11,12 +11,12 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var port string
+var dbPort string
 
 func TestMain(m *testing.M) {
 	var teardown func(ctx context.Context, opts ...testcontainers.TerminateOption) error
 	var err error
-	teardown, port, err = MustStartPostgresContainer()
+	teardown, dbPort, err = MustStartPostgresContainer()
 	if err != nil {
 		log.Fatalf("error starting postgres container: %v", err)
 	}
@@ -29,14 +29,14 @@ func TestMain(m *testing.M) {
 }
 
 func TestNew(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(port)
+	dbConfig := NewTestDatabaseConfig(dbPort)
 	database := NewTestDatabase(dbConfig)
 
 	assert.NotNil(t, database, "expected NewDatabase to return a non-nil instance")
 }
 
 func TestHealth(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(port)
+	dbConfig := NewTestDatabaseConfig(dbPort)
 	database := NewTestDatabase(dbConfig)
 
 	stats := database.Health()
@@ -48,7 +48,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(port)
+	dbConfig := NewTestDatabaseConfig(dbPort)
 	database := NewTestDatabase(dbConfig)
 
 	assert.NotNil(t, database, "expected NewDatabase to return a non-nil instance")
