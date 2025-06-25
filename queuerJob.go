@@ -80,8 +80,8 @@ func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 	return job, nil
 }
 
-func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID) error {
-	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, 0, 0)
+func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID, entries int) error {
+	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, 0, entries)
 	if err != nil {
 		return fmt.Errorf("error selecting jobs by worker RID %v: %v", workerRid, err)
 	}
@@ -97,21 +97,21 @@ func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID) error {
 }
 
 // ReaddJobFromArchive readds a job from the archive back to the queue.
-func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) error {
+func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJobFromArchive(jobRid)
 	if err != nil {
-		return fmt.Errorf("error selecting job from archive with rid %v: %v", jobRid, err)
+		return nil, fmt.Errorf("error selecting job from archive with rid %v: %v", jobRid, err)
 	}
 
 	// Readd the job to the queue
 	newJob, err := q.AddJobWithOptions(job.Options, job.TaskName, job.Parameters...)
 	if err != nil {
-		return fmt.Errorf("error readding job: %v", err)
+		return nil, fmt.Errorf("error readding job: %v", err)
 	}
 
 	q.log.Printf("Job readded with RID %v", newJob.RID)
 
-	return nil
+	return newJob, nil
 }
 
 // GetJob retrieves a job by its RID.
@@ -285,8 +285,8 @@ func (q *Queuer) scheduleJob(job *model.Job) {
 }
 
 func (q *Queuer) cancelJob(job *model.Job) error {
-	var err error
-	if job.Status == model.JobStatusRunning {
+	switch job.Status {
+	case model.JobStatusRunning:
 		jobRunner, found := q.activeRunners.Load(job.RID)
 		if !found {
 			return fmt.Errorf("job with rid %v not found or not running", job.RID)
@@ -295,16 +295,16 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 		runner := jobRunner.(*core.Runner)
 		runner.Cancel(func() {
 			job.Status = model.JobStatusCancelled
-			job, err = q.dbJob.UpdateJobFinal(job)
+			_, err := q.dbJob.UpdateJobFinal(job)
 			if err != nil {
 				q.log.Printf("error updating job status to cancelled: %v", err)
 			}
 		})
-	} else if job.Status == model.JobStatusScheduled || job.Status == model.JobStatusQueued {
+	case model.JobStatusScheduled, model.JobStatusQueued:
 		job.Status = model.JobStatusCancelled
-		job, err = q.dbJob.UpdateJobFinal(job)
+		_, err := q.dbJob.UpdateJobFinal(job)
 		if err != nil {
-			return fmt.Errorf("error updating job status to cancelled: %v", err)
+			q.log.Printf("error updating job status to cancelled: %v", err)
 		}
 	}
 	return nil

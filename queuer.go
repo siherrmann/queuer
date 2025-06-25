@@ -35,6 +35,11 @@ type Queuer struct {
 	log *log.Logger
 }
 
+// NewQueuer creates a new Queuer instance with the given name and max concurrency.
+// It initializes the database connection, job listeners, and worker.
+// If options are provided, it creates a worker with those options.
+// If any error occurs during initialization, it logs a panic error and exits the program.
+// It returns a pointer to the newly created Queuer instance.
 func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queuer {
 	// Logger
 	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
@@ -42,7 +47,7 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	// Database
 	dbConfig, err := helper.NewDatabaseConfiguration()
 	if err != nil {
-		logger.Fatalf("failed to create database configuration: %v", err)
+		logger.Panicf("failed to create database configuration: %v", err)
 	}
 	dbConnection := helper.NewDatabase(
 		"queuer",
@@ -54,25 +59,25 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	var dbWorker database.WorkerDBHandlerFunctions
 	dbJob, err = database.NewJobDBHandler(dbConnection)
 	if err != nil {
-		logger.Fatalf("failed to create job db handler: %v", err)
+		logger.Panicf("failed to create job db handler: %v", err)
 	}
 	dbWorker, err = database.NewWorkerDBHandler(dbConnection)
 	if err != nil {
-		logger.Fatalf("failed to create worker db handler: %v", err)
+		logger.Panicf("failed to create worker db handler: %v", err)
 	}
 
 	// Job listeners
 	jobInsertListener, err := database.NewQueuerListener(dbConfig, "job.INSERT")
 	if err != nil {
-		logger.Fatalf("failed to create job insert listener: %v", err)
+		logger.Panicf("failed to create job insert listener: %v", err)
 	}
 	jobUpdateListener, err := database.NewQueuerListener(dbConfig, "job.UPDATE")
 	if err != nil {
-		logger.Fatalf("failed to create job update listener: %v", err)
+		logger.Panicf("failed to create job update listener: %v", err)
 	}
 	jobDeleteListener, err := database.NewQueuerListener(dbConfig, "job.DELETE")
 	if err != nil {
-		logger.Fatalf("failed to create job delete listener: %v", err)
+		logger.Panicf("failed to create job delete listener: %v", err)
 	}
 
 	// Inserting worker
@@ -80,18 +85,18 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	if len(options) > 0 {
 		newWorker, err = model.NewWorkerWithOptions(name, maxConcurrency, options[0])
 		if err != nil {
-			logger.Fatalf("error creating new worker with options: %v", err)
+			logger.Panicf("error creating new worker with options: %v", err)
 		}
 	} else {
 		newWorker, err = model.NewWorker(name, maxConcurrency)
 		if err != nil {
-			logger.Fatalf("error creating new worker: %v", err)
+			logger.Panicf("error creating new worker: %v", err)
 		}
 	}
 
 	worker, err := dbWorker.InsertWorker(newWorker)
 	if err != nil {
-		logger.Fatalf("error inserting worker: %v", err)
+		logger.Panicf("error inserting worker: %v", err)
 	}
 	logger.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
 
@@ -108,9 +113,12 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	}
 }
 
+// Start starts the queuer by initializing the job listeners and starting the job poll ticker.
+// It checks if the queuer is initialized properly, and if not, it logs a panic error and exits the program.
+// It runs the job processing in a separate goroutine and listens for job events.
 func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 	if q.dbJob == nil || q.dbWorker == nil || q.jobInsertListener == nil || q.jobUpdateListener == nil || q.jobDeleteListener == nil {
-		q.log.Fatalln("worker is not initialized properly")
+		q.log.Panicln("worker is not initialized properly")
 	}
 
 	q.ctx = ctx
@@ -135,6 +143,8 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 	}()
 }
 
+// Stop stops the queuer by closing the job listeners, cancelling all queued and running jobs,
+// and cancelling the context to stop the queuer.
 func (q *Queuer) Stop() error {
 	if q.jobInsertListener != nil {
 		err := q.jobInsertListener.Listener.Close()
@@ -156,7 +166,7 @@ func (q *Queuer) Stop() error {
 	}
 
 	// Cancel all queued and running jobs
-	err := q.CancelAllJobsByWorker(q.worker.RID)
+	err := q.CancelAllJobsByWorker(q.worker.RID, 100)
 	if err != nil {
 		return fmt.Errorf("error cancelling all jobs by worker: %v", err)
 	}

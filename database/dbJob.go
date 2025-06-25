@@ -97,7 +97,7 @@ func (r JobDBHandler) CreateTable() error {
 		SELECT create_hypertable('job_archive', by_range('updated_at'), if_not_exists => TRUE);`,
 	)
 	if err != nil {
-		log.Fatalf("error creating job table: %#v", err)
+		log.Panicf("error creating job table: %#v", err)
 	}
 
 	_, err = r.db.Instance.ExecContext(
@@ -107,7 +107,7 @@ func (r JobDBHandler) CreateTable() error {
 			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
 	)
 	if err != nil {
-		log.Fatalf("error creating notify trigger on job table: %#v", err)
+		log.Panicf("error creating notify trigger on job table: %#v", err)
 	}
 
 	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "created_at", "updated_at") // Indexes on common search/filter fields

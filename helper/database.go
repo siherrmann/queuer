@@ -34,7 +34,7 @@ func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
 
 		err := db.AddNotifyFunction()
 		if err != nil {
-			logger.Fatalf("failed to add notify function: %v", err)
+			logger.Panicf("failed to add notify function: %v", err)
 		}
 
 		return db
@@ -87,7 +87,7 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 	connectOnce.Do(func() {
 		db, err = sql.Open("postgres", dbConfig.DatabaseConnectionString())
 		if err != nil {
-			logger.Fatalf("error establishing connection to db: %v. Trying again.", err.Error())
+			logger.Panicf("error establishing connection to db: %v. Trying again.", err.Error())
 		}
 
 		db.SetMaxOpenConns(10)
@@ -307,7 +307,7 @@ func (d *Database) Health() map[string]string {
 	if err != nil {
 		stats["status"] = "down"
 		stats["error"] = fmt.Sprintf("db down: %v", err)
-		log.Fatalf("db down: %v", err) // Log the error and terminate the program
+		log.Panicf("db down: %v", err) // Log the error and terminate the program
 		return stats
 	}
 

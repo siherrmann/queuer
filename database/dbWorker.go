@@ -78,7 +78,7 @@ func (r WorkerDBHandler) CreateTable() error {
 		)`,
 	)
 	if err != nil {
-		log.Fatalf("error creating worker table: %#v", err)
+		log.Panicf("error creating worker table: %#v", err)
 	}
 
 	err = r.db.CreateIndexes("worker", "rid", "name", "status")

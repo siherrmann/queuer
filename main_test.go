@@ -13,6 +13,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
+const maxDeviation = 50 * time.Millisecond
+
 var dbPort string
 
 func TestMain(m *testing.M) {

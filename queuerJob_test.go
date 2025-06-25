@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Short running example task function
@@ -29,6 +30,8 @@ func TestAddJob(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully adds a job with nil options", func(t *testing.T) {
+		t.Parallel()
+
 		expectedJob := &model.Job{
 			TaskName:   "queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
@@ -43,8 +46,35 @@ func TestAddJob(t *testing.T) {
 		assert.Equal(t, expectedJob.Options, job.Options, "AddJob should return the correct options")
 	})
 
+	t.Run("Returns error for nil function", func(t *testing.T) {
+		t.Parallel()
+
+		var nilTask func() // Invalid nil function
+		job, err := testQueuer.AddJob(nilTask, "param1")
+
+		assert.Error(t, err, "AddJob should return an error for nil task (via addJobFn)")
+		assert.Nil(t, job, "Job should be nil for nil task")
+		assert.Contains(t, err.Error(), "task value must not be nil", "Error message should reflect nil task handling")
+	})
+
+	t.Run("Returns error for invalid task type", func(t *testing.T) {
+		t.Parallel()
+
+		invalidTask := 123 // Invalid integer type instead of a function
+		job, err := testQueuer.AddJob(invalidTask, "param1")
+
+		assert.Error(t, err, "AddJob should return an error for invalid task type")
+		assert.Nil(t, job, "Job should be nil for invalid task type")
+		assert.Contains(t, err.Error(), "task must be a function, got int", "Error message should reflect invalid task type handling")
+	})
+}
+
+func TestAddJobRunning(t *testing.T) {
+	testQueuer := newQueuerMock("TestQueuer", 100)
+
 	t.Run("Successfully runs a job without options", func(t *testing.T) {
 		t.Parallel()
+
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
@@ -70,29 +100,61 @@ func TestAddJob(t *testing.T) {
 		assert.Equal(t, jobArchived.Status, model.JobStatusSucceeded, "Archived job should have status Succeeded")
 	})
 
-	t.Run("Returns error for nil function", func(t *testing.T) {
-		var nilTask func() // Invalid nil function
-		job, err := testQueuer.AddJob(nilTask, "param1")
+	t.Run("Successfully runs a job with options", func(t *testing.T) {
+		t.Parallel()
 
-		assert.Error(t, err, "AddJob should return an error for nil task (via addJobFn)")
-		assert.Nil(t, job, "Job should be nil for nil task")
-		assert.Contains(t, err.Error(), "task value must not be nil", "Error message should reflect nil task handling")
-	})
+		options := &model.Options{
+			OnError: &model.OnError{
+				Timeout:      5,
+				MaxRetries:   3,
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+			},
+			Schedule: &model.Schedule{
+				Start:    time.Now().Add(1 * time.Second),
+				Interval: 15 * time.Second,
+				MaxCount: 3,
+			},
+		}
+		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
+		require.NoError(t, err, "AddJob should not return an error on success")
 
-	t.Run("Returns error for invalid task type", func(t *testing.T) {
-		invalidTask := 123 // Invalid integer type instead of a function
-		job, err := testQueuer.AddJob(invalidTask, "param1")
+		queuedJob, err := testQueuer.GetJob(job.RID)
+		require.NoError(t, err, "GetJob should not return an error")
+		require.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
 
-		assert.Error(t, err, "AddJob should return an error for invalid task type")
-		assert.Nil(t, job, "Job should be nil for invalid task type")
-		assert.Contains(t, err.Error(), "task must be a function, got int", "Error message should reflect invalid task type handling")
+		// Initialize the queuer and start processing jobs
+		testQueuer.AddTask(TaskMock)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		testQueuer.Start(ctx, cancel)
+
+		// Wait for the job to be running (not scheduled because of less than 1 minute delay)
+		time.Sleep(1 * time.Second)
+		jobScheduled, err := testQueuer.GetJob(job.RID)
+		assert.NoError(t, err, "GetJob should not return an error for running job")
+		assert.NotNil(t, jobScheduled, "GetJob should return the job that is currently running")
+		assert.Equal(t, model.JobStatusRunning, jobScheduled.Status, "Job should be in Scheduled status")
+
+		// Wait for schedule time and job execution
+		time.Sleep(15*time.Second + maxDeviation)
+		jobNotExisting, err := testQueuer.GetJob(job.RID)
+		assert.Error(t, err, "GetJob should return an error for cancelled job")
+		assert.Nil(t, jobNotExisting, "GetJob should return nil for cancelled job")
+
+		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(job.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
+		require.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
+		assert.Equal(t, jobArchived.Status, model.JobStatusSucceeded, "Archived job should have status Succeeded")
 	})
 }
 
 func TestAddJobWithOptions(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 1)
+	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully adds a job with options", func(t *testing.T) {
+		t.Parallel()
+
 		options := &model.Options{
 			OnError: &model.OnError{
 				Timeout:      5,
@@ -123,6 +185,8 @@ func TestAddJobWithOptions(t *testing.T) {
 	})
 
 	t.Run("Successfully adds a job with nil options", func(t *testing.T) {
+		t.Parallel()
+
 		expectedJob := &model.Job{
 			TaskName:   "queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
@@ -136,54 +200,9 @@ func TestAddJobWithOptions(t *testing.T) {
 		assert.EqualValues(t, expectedJob.Parameters, job.Parameters, "AddJobWithOptions should return the correct parameters")
 	})
 
-	t.Run("Successfully runs a job with options", func(t *testing.T) {
-		t.Parallel()
-		options := &model.Options{
-			OnError: &model.OnError{
-				Timeout:      5,
-				MaxRetries:   3,
-				RetryDelay:   1,
-				RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
-			},
-			Schedule: &model.Schedule{
-				Start:    time.Now().Add(1 * time.Second),
-				Interval: 15 * time.Minute,
-				MaxCount: 3,
-			},
-		}
-		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
-		assert.NoError(t, err, "AddJob should not return an error on success")
-
-		queuedJob, err := testQueuer.GetJob(job.RID)
-		assert.NoError(t, err, "GetJob should not return an error")
-		assert.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
-
-		// Initialize the queuer and start processing jobs
-		testQueuer.AddTask(TaskMock)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		testQueuer.Start(ctx, cancel)
-
-		// Wait for the job to be running
-		time.Sleep(1500 * time.Millisecond)
-		jobScheduled, err := testQueuer.GetJob(job.RID)
-		assert.NoError(t, err, "GetJob should not return an error for running job")
-		assert.NotNil(t, jobScheduled, "GetJob should return the job that is currently running")
-		assert.Equal(t, model.JobStatusRunning, jobScheduled.Status, "Job should be in Scheduled status")
-
-		// Wait for schedule time and job execution
-		time.Sleep(2 * time.Second)
-		jobNotExisting, err := testQueuer.GetJob(job.RID)
-		assert.Error(t, err, "GetJob should return an error for cancelled job")
-		assert.Nil(t, jobNotExisting, "GetJob should return nil for cancelled job")
-
-		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(job.RID)
-		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
-		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
-		assert.Equal(t, jobArchived.Status, model.JobStatusSucceeded, "Archived job should have status Succeeded")
-	})
-
 	t.Run("Return error for invalid options", func(t *testing.T) {
+		t.Parallel()
+
 		options := &model.Options{
 			OnError: &model.OnError{
 				Timeout:      -5, // Invalid timeout
@@ -207,9 +226,11 @@ func TestAddJobWithOptions(t *testing.T) {
 }
 
 func TestAddJobs(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 1)
+	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully adds multiple jobs with nil options", func(t *testing.T) {
+		t.Parallel()
+
 		batchJobs := []model.BatchJob{
 			{
 				Task:       TaskMock,
@@ -232,6 +253,8 @@ func TestAddJobs(t *testing.T) {
 	})
 
 	t.Run("Returns error for invalid batch job", func(t *testing.T) {
+		t.Parallel()
+
 		batchJobs := []model.BatchJob{
 			{
 				Task:       nil, // Invalid nil function
@@ -246,9 +269,11 @@ func TestAddJobs(t *testing.T) {
 }
 
 func TestCancelJob(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 1)
+	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully cancels a queued job", func(t *testing.T) {
+		t.Parallel()
+
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
@@ -263,8 +288,21 @@ func TestCancelJob(t *testing.T) {
 		assert.NotContains(t, jobs, cancelledJob, "Cancelled job should not be in the job list")
 	})
 
+	t.Run("Returns error for non-existent job", func(t *testing.T) {
+		t.Parallel()
+
+		cancelledJob, err := testQueuer.CancelJob(uuid.New())
+		assert.Error(t, err, "CancelJob should return an error for non-existent job")
+		assert.Nil(t, cancelledJob, "Cancelled job should be nil for non-existent job")
+	})
+}
+
+func TestCancelJobRunning(t *testing.T) {
+	testQueuer := newQueuerMock("TestQueuer", 100)
+
 	t.Run("Successfully cancels a running job", func(t *testing.T) {
 		t.Parallel()
+
 		job, err := testQueuer.AddJob(TaskMock, 3, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
@@ -293,10 +331,91 @@ func TestCancelJob(t *testing.T) {
 		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
 		assert.Equal(t, jobArchived.Status, model.JobStatusCancelled, "Archived job should have status Cancelled")
 	})
+}
 
-	t.Run("Returns error for non-existent job", func(t *testing.T) {
-		cancelledJob, err := testQueuer.CancelJob(uuid.New())
-		assert.Error(t, err, "CancelJob should return an error for non-existent job")
-		assert.Nil(t, cancelledJob, "Cancelled job should be nil for non-existent job")
+func TestCancelAllJobsByWorkerRunning(t *testing.T) {
+	// Only works with a running queuer because the worker needs to process jobs
+	// to be able to cancel them.
+	testQueuer := newQueuerMock("TestQueuer", 100)
+
+	t.Run("Successfully cancels all jobs by worker RID", func(t *testing.T) {
+		t.Parallel()
+
+		worker, err := testQueuer.GetWorker(testQueuer.worker.RID)
+		require.NoError(t, err, "GetWorker should not return an error on success")
+
+		job1, err := testQueuer.AddJob(TaskMock, 10, "2")
+		require.NoError(t, err, "AddJob should not return an error on success")
+		job1.WorkerRID = worker.RID
+
+		job2, err := testQueuer.AddJob(TaskMock, 10, "4")
+		require.NoError(t, err, "AddJob should not return an error on success")
+		job2.WorkerRID = worker.RID
+
+		// Initialize the queuer and start processing jobs
+		testQueuer.AddTask(TaskMock)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		testQueuer.Start(ctx, cancel)
+
+		time.Sleep(1 * time.Second)
+
+		jobs, err := testQueuer.dbJob.SelectAllJobsByWorkerRID(worker.RID, 0, 10)
+		assert.NoError(t, err, "SelectAllJobsByWorkerRID should not return an error")
+		assert.Len(t, jobs, 2, "There should be two jobs for the worker")
+
+		err = testQueuer.CancelAllJobsByWorker(worker.RID, 10)
+		assert.NoError(t, err, "CancelAllJobsByWorker should not return an error on success")
+
+		jobs, err = testQueuer.GetJobs(0, 10)
+		assert.NoError(t, err, "GetJobs should not return an error")
+		assert.NotContains(t, jobs, job1, "Cancelled job1 should not be in the job list")
+		assert.NotContains(t, jobs, job2, "Cancelled job2 should not be in the job list")
+
+		jobArchived1, err := testQueuer.dbJob.SelectJobFromArchive(job1.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job1")
+		require.NotNil(t, jobArchived1, "SelectJobFromArchive should return the archived job1")
+		assert.Equal(t, jobArchived1.Status, model.JobStatusCancelled, "Archived job1 should have status Cancelled")
+
+		jobArchived2, err := testQueuer.dbJob.SelectJobFromArchive(job2.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job2")
+		require.NotNil(t, jobArchived2, "SelectJobFromArchive should return the archived job2")
+		assert.Equal(t, jobArchived2.Status, model.JobStatusCancelled, "Archived job2 should have status Cancelled")
+	})
+}
+
+func TestReaddJobFromArchive(t *testing.T) {
+	testQueuer := newQueuerMock("TestQueuer", 100)
+
+	t.Run("Successfully readds a job from archive", func(t *testing.T) {
+		t.Parallel()
+
+		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		assert.NoError(t, err, "AddJob should not return an error on success")
+
+		job, err = testQueuer.GetJob(job.RID)
+		assert.NoError(t, err, "GetJob should not return an error")
+		assert.NotNil(t, job, "GetJob should return the job that is currently queued")
+
+		// Cancel the job to archive it
+		cancelledJob, err := testQueuer.CancelJob(job.RID)
+		assert.NoError(t, err, "CancelJob should not return an error on success")
+		assert.Equal(t, job.RID, cancelledJob.RID, "CancelJob should return the correct job RID")
+
+		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(cancelledJob.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
+		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
+		assert.Equal(t, jobArchived.Status, model.JobStatusCancelled, "Archived job should have status Cancelled")
+
+		readdedJob, err := testQueuer.ReaddJobFromArchive(job.RID)
+		assert.NoError(t, err, "ReaddJobFromArchive should not return an error on success")
+		assert.NotNil(t, readdedJob, "ReaddJobFromArchive should return the readded job")
+
+		// Readded job should have a new RID and status
+		job, err = testQueuer.GetJob(readdedJob.RID)
+		assert.NoError(t, err, "GetJob should not return an error")
+		require.NotNil(t, job, "GetJob should return the readded job")
+		assert.Equal(t, model.JobStatusQueued, job.Status, "Readded job should have status Queued")
+		assert.NotEqual(t, cancelledJob.RID, job.RID, "Readded job should have a new RID")
 	})
 }
