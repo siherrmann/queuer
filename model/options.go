@@ -12,6 +12,11 @@ type Options struct {
 }
 
 func (c *Options) IsValid() error {
+	// nil options are considered valid
+	if c == nil {
+		return nil
+	}
+
 	if c.OnError != nil {
 		if err := c.OnError.IsValid(); err != nil {
 			return err

@@ -53,11 +53,27 @@ func (r *Parameters) Unmarshal(value interface{}) error {
 }
 
 func (r *Parameters) ToReflectValues() []reflect.Value {
+	if r == nil {
+		return []reflect.Value{}
+	}
+
 	reflectValues := []reflect.Value{}
 	for _, p := range *r {
 		reflectValues = append(reflectValues, reflect.ValueOf(p))
 	}
+
 	return reflectValues
+}
+
+func (r *Parameters) ToInterfaceSlice() []interface{} {
+	if r == nil {
+		return []interface{}{}
+	}
+
+	interfaceSlice := make([]interface{}, len(*r))
+	copy(interfaceSlice, *r)
+
+	return interfaceSlice
 }
 
 type Job struct {
