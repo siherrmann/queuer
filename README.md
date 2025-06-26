@@ -136,3 +136,21 @@ type Schedule struct {
 - `Start`: The initial time at which the scheduled job should first run.
 - `Interval`: The duration between consecutive executions of the scheduled job.
 - `MaxCount`: The maximum number of times the job should be executed. A value 0 indicates an indefinite number of repetitions (run forever).
+
+---
+
+# Features
+
+- Insert job batches using the `COPY FROM` postgres feature.
+- Panic recovery for all running jobs.
+- Error handling by checking last output parameter for error.
+- Multiple queuers can be started in different microservices while maintaining job start order and isolation.
+- Scheduled and periodic jobs.
+- Easy functions to get jobs and workers.
+- Retry mechanism for ended jobs which creates a new job with the same parameters.
+
+## Coming soon
+
+- Add a new job in a transaction to rollback if for example step after job insertion fails.
+- Helper function to listen for a specific finished job.
+- Custom NextInterval functions to address custom needs for scheduling (eg. scheduling with timezone offset)

@@ -128,12 +128,12 @@ func TestIsValid(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Invalid options with zero MaxCount in Schedule",
+			name: "Invalid options with negative MaxCount in Schedule",
 			options: &Options{
 				Schedule: &Schedule{
 					Start:    time.Now().Add(1 * time.Minute),
 					Interval: 1 * time.Minute,
-					MaxCount: 0,
+					MaxCount: -1,
 				},
 			},
 			wantErr: true,
