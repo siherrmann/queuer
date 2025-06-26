@@ -74,6 +74,22 @@ type OnError struct {
 - `RetryDelay`: The initial delay (in seconds) before the first retry attempt. This delay can be modified by the `RetryBackoff` strategy.
 - `RetryBackoff`: Specifies the strategy used to increase the delay between subsequent retries.
 
+#### Retry Backoff Strategies
+
+The RetryBackoff constant defines the available strategies for increasing retry delays:
+
+```go
+const (
+    RETRY_BACKOFF_NONE        = "none"
+    RETRY_BACKOFF_LINEAR      = "linear"
+    RETRY_BACKOFF_EXPONENTIAL = "exponential"
+)
+```
+
+- `RETRY_BACKOFF_NONE`: No backoff. The RetryDelay remains constant for all retries.
+- `RETRY_BACKOFF_LINEAR`: The retry delay increases linearly with each attempt (e.g., delay, 2*delay, 3*delay).
+- `RETRY_BACKOFF_EXPONENTIAL`: The retry delay increases exponentially with each attempt (e.g., delay, delay*2, delay*2*2).
+
 ---
 
 ## Job options
@@ -104,22 +120,6 @@ type OnError struct {
     RetryBackoff string  `json:"retry_backoff"`
 }
 ```
-
-#### Retry Backoff Strategies
-
-The RetryBackoff constant defines the available strategies for increasing retry delays:
-
-```go
-const (
-    RETRY_BACKOFF_NONE        = "none"
-    RETRY_BACKOFF_LINEAR      = "linear"
-    RETRY_BACKOFF_EXPONENTIAL = "exponential"
-)
-```
-
-- `RETRY_BACKOFF_NONE`: No backoff. The RetryDelay remains constant for all retries.
-- `RETRY_BACKOFF_LINEAR`: The retry delay increases linearly with each attempt (e.g., delay, 2*delay, 3*delay).
-- `RETRY_BACKOFF_EXPONENTIAL`: The retry delay increases exponentially with each attempt (e.g., delay, delay*2, delay*2*2).
 
 ### Schedule
 
