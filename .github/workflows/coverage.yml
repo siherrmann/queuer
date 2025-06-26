@@ -11,18 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: stable
       - name: Build
         run: go build -v ./...
       - name: Test
-        run: go test -v $(go list ./... | grep -v /example/)
+        run: go test -v -coverprofile coverage.out $(go list ./... | grep -v /example/)
       - name: Update coverage report
         uses: ncruces/go-coverage-report@v0
         with:
+          coverage-file: coverage.out
           report: true
           chart: true
           amend: true
