@@ -9,17 +9,17 @@ import (
 )
 
 func TestAddTask(t *testing.T) {
-	q := newQueuerMock("TestQueuer", 100)
+	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully add task", func(t *testing.T) {
 		t.Parallel()
 
 		task := func() {}
-		newTask := q.AddTask(task)
+		newTask := testQueuer.AddTask(task)
 		require.NotNil(t, newTask, "expected task to be created")
 		assert.Equal(t, "queuer.TestAddTask.func1.1", newTask.Name, "expected task name to match the function name")
 
-		updatedWorker, err := q.GetWorker(q.worker.RID)
+		updatedWorker, err := testQueuer.GetWorker(testQueuer.worker.RID)
 		require.NoError(t, err, "expected no error when getting updated worker")
 		assert.Equal(t, 1, len(updatedWorker.AvailableTasks), "expected worker to have one available task")
 		assert.Contains(t, updatedWorker.AvailableTasks, newTask.Name, "expected task to be added to worker's available tasks")
@@ -36,22 +36,22 @@ func TestAddTask(t *testing.T) {
 		}()
 
 		var task func()
-		newTask = q.AddTask(task)
+		newTask = testQueuer.AddTask(task)
 	})
 }
 
 func TestAddTaskWithName(t *testing.T) {
-	q := newQueuerMock("TestQueuer", 100)
+	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully add task with name", func(t *testing.T) {
 		t.Parallel()
 
 		task := func() {}
-		newTask := q.AddTaskWithName(task, "CustomTaskName")
+		newTask := testQueuer.AddTaskWithName(task, "CustomTaskName")
 		require.NotNil(t, newTask, "expected task to be created")
 		assert.Equal(t, "CustomTaskName", newTask.Name, "expected task name to match the provided name")
 
-		updatedWorker, err := q.GetWorker(q.worker.RID)
+		updatedWorker, err := testQueuer.GetWorker(testQueuer.worker.RID)
 		require.NoError(t, err, "expected no error when getting updated worker")
 		assert.Equal(t, 1, len(updatedWorker.AvailableTasks), "expected worker to have one available task")
 		assert.Contains(t, updatedWorker.AvailableTasks, newTask.Name, "expected task to be added to worker's available tasks")
@@ -68,7 +68,7 @@ func TestAddTaskWithName(t *testing.T) {
 		}()
 
 		var task func()
-		newTask = q.AddTaskWithName(task, "CustomTaskName")
+		newTask = testQueuer.AddTaskWithName(task, "CustomTaskName")
 	})
 
 	t.Run("Panics on empty task name", func(t *testing.T) {
@@ -82,6 +82,6 @@ func TestAddTaskWithName(t *testing.T) {
 		}()
 
 		task := func() {}
-		newTask = q.AddTaskWithName(task, "")
+		newTask = testQueuer.AddTaskWithName(task, "")
 	})
 }

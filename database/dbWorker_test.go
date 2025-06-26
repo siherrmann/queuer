@@ -98,11 +98,16 @@ func TestWorkerUpdateWorker(t *testing.T) {
 		RetryDelay:   1,
 		RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
 	}
+	insertedWorker.AvailableTasks = []string{"task1", "task2"}
+	insertedWorker.AvailableNextIntervalFuncs = []string{"interval1", "interval2"}
 
 	updatedWorker, err := workerDBHandler.UpdateWorker(insertedWorker)
 	assert.NoError(t, err, "Expected UpdateWorker to not return an error")
 	assert.Equal(t, updatedWorker.Name, insertedWorker.Name, "Expected updated worker Name to match")
 	assert.Equal(t, updatedWorker.Options, insertedWorker.Options, "Expected updated worker Options to match")
+	assert.Equal(t, updatedWorker.AvailableTasks, insertedWorker.AvailableTasks, "Expected updated worker AvailableTasks to match")
+	assert.Equal(t, updatedWorker.AvailableNextIntervalFuncs, insertedWorker.AvailableNextIntervalFuncs, "Expected updated worker AvailableNextInterval to match")
+	assert.Equal(t, updatedWorker.MaxConcurrency, insertedWorker.MaxConcurrency, "Expected updated worker MaxConcurrency to match")
 }
 
 func TestWorkerDeleteWorker(t *testing.T) {

@@ -145,7 +145,7 @@ func TestIsValid(t *testing.T) {
 					Start:        time.Now().Add(1 * time.Minute),
 					Interval:     0,
 					MaxCount:     3,
-					NextInterval: nil,
+					NextInterval: "",
 				},
 			},
 			wantErr: true,

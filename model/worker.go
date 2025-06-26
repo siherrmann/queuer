@@ -13,15 +13,16 @@ const (
 )
 
 type Worker struct {
-	ID             int       `json:"id"`
-	RID            uuid.UUID `json:"rid"`
-	Name           string    `json:"name"`
-	Options        *OnError  `json:"options,omitempty"`
-	MaxConcurrency int       `json:"max_concurrency"`
-	AvailableTasks []string  `json:"available_tasks"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                         int       `json:"id"`
+	RID                        uuid.UUID `json:"rid"`
+	Name                       string    `json:"name"`
+	Options                    *OnError  `json:"options,omitempty"`
+	MaxConcurrency             int       `json:"max_concurrency"`
+	AvailableTasks             []string  `json:"available_tasks,omitempty"`
+	AvailableNextIntervalFuncs []string  `json:"available_next_interval,omitempty"`
+	Status                     string    `json:"status"`
+	CreatedAt                  time.Time `json:"created_at"`
+	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
 func NewWorker(name string, maxConcurrency int) (*Worker, error) {

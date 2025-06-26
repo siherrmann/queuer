@@ -95,6 +95,7 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 		jobDeleteListener: jobDeleteListener,
 		JobPollInterval:   1 * time.Minute,
 		tasks:             map[string]*model.Task{},
+		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
 		log:               logger,
 	}
 }

@@ -29,8 +29,9 @@ type Queuer struct {
 	jobUpdateListener *database.QueuerListener
 	jobDeleteListener *database.QueuerListener
 	JobPollInterval   time.Duration
-	// Tasks
-	tasks map[string]*model.Task
+	// Available functions
+	tasks             map[string]*model.Task
+	nextIntervalFuncs map[string]model.NextIntervalFunc
 	// Logger
 	log *log.Logger
 }
@@ -109,6 +110,7 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 		jobDeleteListener: jobDeleteListener,
 		JobPollInterval:   1 * time.Minute,
 		tasks:             map[string]*model.Task{},
+		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
 		log:               logger,
 	}
 }

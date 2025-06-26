@@ -7,11 +7,15 @@ import (
 	"time"
 )
 
+// NextIntervalFunc defines a function type that calculates the next interval
+// based on the start time and the current count of executions.
+type NextIntervalFunc func(start time.Time, currentCount int) time.Time
+
 type Schedule struct {
-	Start        time.Time                                         `json:"start"`
-	Interval     time.Duration                                     `json:"interval"`
-	MaxCount     int                                               `json:"max_count"`
-	NextInterval func(start time.Time, currentCount int) time.Time `json:"-"`
+	Start        time.Time     `json:"start"`
+	Interval     time.Duration `json:"interval"`
+	MaxCount     int           `json:"max_count"`
+	NextInterval string        `json:"next_interval,omitempty"`
 }
 
 func (c *Schedule) IsValid() error {
@@ -21,7 +25,7 @@ func (c *Schedule) IsValid() error {
 	if c.MaxCount < 0 {
 		return errors.New("maxCount must be greater than or equal to 0")
 	}
-	if c.Interval <= time.Duration(0) && c.NextInterval == nil {
+	if c.Interval <= time.Duration(0) && c.NextInterval == "" {
 		return errors.New("interval must be greater than zero or nextInterval must be provided")
 	}
 	return nil
