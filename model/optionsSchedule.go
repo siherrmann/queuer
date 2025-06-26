@@ -18,8 +18,8 @@ func (c *Schedule) IsValid() error {
 	if c.Start.IsZero() {
 		return errors.New("start time cannot be zero")
 	}
-	if c.MaxCount < 1 {
-		return errors.New("maxCount must be greater than or equal to 1")
+	if c.MaxCount < 0 {
+		return errors.New("maxCount must be greater than or equal to 0")
 	}
 	if c.Interval <= time.Duration(0) && c.NextInterval == nil {
 		return errors.New("interval must be greater than zero or nextInterval must be provided")

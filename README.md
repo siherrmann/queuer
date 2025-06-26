@@ -12,6 +12,8 @@ This queuer is meant to be as easy as possible to use. No specific function sign
 
 The job table contains only queued, scheduled and running tasks. The ended jobs (succeeded, cancelled, failed) are moved to a timescaleDB table.
 
+---
+
 ## Getting started
 
 The full initialisation is (in the easiest case):
@@ -51,3 +53,86 @@ QUEUER_DB_SCHEMA=public
 ```
 
 You can find a full example (the same as above plus a more detailed example) in the example folder. In there you'll also find a docker-compose file with the timescaleDB/postgres service that is needed for the running the queuer (it's just postgres with an extension).
+
+---
+
+## Worker Options
+
+The OnError struct defines how a worker should handle errors when processing a job. This allows for configurable retry behavior.
+
+```go
+type OnError struct {
+    Timeout      float64 `json:"timeout"`
+    MaxRetries   int     `json:"max_retries"`
+    RetryDelay   float64 `json:"retry_delay"`
+    RetryBackoff string  `json:"retry_backoff"`
+}
+```
+
+- `Timeout`: The maximum time (in seconds) allowed for a single attempt of a job. If the job exceeds this duration, it's considered to have timed out.
+- `MaxRetries`: The maximum number of times a job will be retried after a failure.
+- `RetryDelay`: The initial delay (in seconds) before the first retry attempt. This delay can be modified by the `RetryBackoff` strategy.
+- `RetryBackoff`: Specifies the strategy used to increase the delay between subsequent retries.
+
+---
+
+## Job options
+
+Job Options
+The Options struct allows you to define specific behaviors for individual jobs, overriding default worker settings where applicable.
+
+```go
+type Options struct {
+    OnError  *OnError
+    Schedule *Schedule
+}
+```
+
+- `OnError`: An optional `OnError` configuration that will override the worker's default error handling for this specific job. This allows you to define unique retry logic per job.
+- `Schedule`: An optional `Schedule` configuration for jobs that need to be executed at recurring intervals.
+
+### OnError for jobs
+
+OnError for Jobs
+The OnError struct for jobs is identical to the one used for worker options, allowing granular control over error handling for individual jobs.
+
+```go
+type OnError struct {
+    Timeout      float64 `json:"timeout"`
+    MaxRetries   int     `json:"max_retries"`
+    RetryDelay   float64 `json:"retry_delay"`
+    RetryBackoff string  `json:"retry_backoff"`
+}
+```
+
+#### Retry Backoff Strategies
+
+The RetryBackoff constant defines the available strategies for increasing retry delays:
+
+```go
+const (
+    RETRY_BACKOFF_NONE        = "none"
+    RETRY_BACKOFF_LINEAR      = "linear"
+    RETRY_BACKOFF_EXPONENTIAL = "exponential"
+)
+```
+
+- `RETRY_BACKOFF_NONE`: No backoff. The RetryDelay remains constant for all retries.
+- `RETRY_BACKOFF_LINEAR`: The retry delay increases linearly with each attempt (e.g., delay, 2*delay, 3*delay).
+- `RETRY_BACKOFF_EXPONENTIAL`: The retry delay increases exponentially with each attempt (e.g., delay, delay*2, delay*2*2).
+
+### Schedule
+
+The Schedule struct is used to define recurring jobs.
+
+```go
+type Schedule struct {
+    Start        time.Time       `json:"start"`
+    Interval     time.Duration   `json:"interval"`
+    MaxCount     int             `json:"max_count"`
+}
+```
+
+- `Start`: The initial time at which the scheduled job should first run.
+- `Interval`: The duration between consecutive executions of the scheduled job.
+- `MaxCount`: The maximum number of times the job should be executed. A value 0 indicates an indefinite number of repetitions (run forever).
