@@ -119,7 +119,7 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 // NewQueuerWithoutWorker creates a new Queuer instance without a worker.
 // This is useful for scenarios where the queuer needs to be initialized without a worker,
 // such as when a seperate service is responsible for job status endpoints without processing jobs.
-// It initializes the database connection and job listeners.
+// It initializes the database connection.
 // If any error occurs during initialization, it logs a panic error and exits the program.
 // It returns a pointer to the newly created Queuer instance.
 func NewQueuerWithoutWorker() *Queuer {
@@ -148,6 +148,8 @@ func NewQueuerWithoutWorker() *Queuer {
 		logger.Panicf("failed to create worker db handler: %v", err)
 	}
 
+	// TODO: Add job listeners to line 83 in readme.
+	// TODO: Update comment to: It initializes the database connection and job listeners.
 	// Job listeners
 	// jobInsertListener, err := database.NewQueuerListener(dbConfig, "job.INSERT")
 	// if err != nil {

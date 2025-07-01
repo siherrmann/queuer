@@ -56,6 +56,34 @@ You can find a full example (the same as above plus a more detailed example) in 
 
 ---
 
+## New queuer
+
+The `NewQueuer` function initializes a new Queuer instance, setting up the core components for job processing.
+
+```go
+func NewQueuer(name string, maxConcurrency int, opts ...WorkerOption) *Queuer
+```
+
+- `name`: A string identifier for this specific queuer instance. This is useful for distinguishing between multiple queuers in your application or logs.
+- `maxConcurrency`: An integer representing the maximum number of jobs that this queuer can process concurrently. This controls the worker's parallelism.
+- `opts ...WorkerOption`: Optional `WorkerOption` configurations that allow you to customize the worker's behavior, such as error handling strategies.
+
+This function handles the entire setup process: it establishes the database connection, configures the necessary job listeners, and creates an associated worker. If any part of this initialization fails, `NewQueuer` will log a panic error and exit the program to prevent an improperly configured queuer from running. It returns a pointer to the newly created `Queuer` instance, ready to accept and process jobs.
+
+---
+
+## New queuer without worker
+
+The `NewQueuerWithoutWorker` function provides a way to initialize a `Queuer` instance without an active worker. This is particularly useful for scenarios where you need to interact with the job queue (e.g., add jobs, check job status) but don't intend for this specific instance to actively process them.
+
+```go
+func NewQueuerWithoutWorker() *Queuer
+```
+
+This function only initializes the database connection. It omits the worker component, making it suitable for services that might, for example, serve job status endpoints or solely add jobs to the queue, without consuming computational resources for job execution. Similar to `NewQueuer`, any initialization errors will result in a panic and program exit. It returns a pointer to the newly created `Queuer` instance.
+
+---
+
 ## Worker Options
 
 The OnError struct defines how a worker should handle errors when processing a job. This allows for configurable retry behavior.
