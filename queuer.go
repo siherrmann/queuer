@@ -37,7 +37,7 @@ type Queuer struct {
 }
 
 // NewQueuer creates a new Queuer instance with the given name and max concurrency.
-// It initializes the database connection, job listeners, and worker.
+// It initializes the database connection, job listeners and worker.
 // If options are provided, it creates a worker with those options.
 // If any error occurs during initialization, it logs a panic error and exits the program.
 // It returns a pointer to the newly created Queuer instance.
@@ -99,7 +99,8 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	if err != nil {
 		logger.Panicf("error inserting worker: %v", err)
 	}
-	logger.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
+
+	logger.Printf("Queuer %s created with worker RID %s", worker.Name, worker.RID.String())
 
 	return &Queuer{
 		worker:            worker,
@@ -108,6 +109,67 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 		jobInsertListener: jobInsertListener,
 		jobUpdateListener: jobUpdateListener,
 		jobDeleteListener: jobDeleteListener,
+		JobPollInterval:   1 * time.Minute,
+		tasks:             map[string]*model.Task{},
+		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
+		log:               logger,
+	}
+}
+
+// NewQueuerWithoutWorker creates a new Queuer instance without a worker.
+// This is useful for scenarios where the queuer needs to be initialized without a worker,
+// such as when a seperate service is responsible for job status endpoints without processing jobs.
+// It initializes the database connection and job listeners.
+// If any error occurs during initialization, it logs a panic error and exits the program.
+// It returns a pointer to the newly created Queuer instance.
+func NewQueuerWithoutWorker() *Queuer {
+	// Logger
+	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
+
+	// Database
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		logger.Panicf("failed to create database configuration: %v", err)
+	}
+	dbConnection := helper.NewDatabase(
+		"queuer",
+		dbConfig,
+	)
+
+	// DBs
+	var dbJob database.JobDBHandlerFunctions
+	var dbWorker database.WorkerDBHandlerFunctions
+	dbJob, err = database.NewJobDBHandler(dbConnection)
+	if err != nil {
+		logger.Panicf("failed to create job db handler: %v", err)
+	}
+	dbWorker, err = database.NewWorkerDBHandler(dbConnection)
+	if err != nil {
+		logger.Panicf("failed to create worker db handler: %v", err)
+	}
+
+	// Job listeners
+	// jobInsertListener, err := database.NewQueuerListener(dbConfig, "job.INSERT")
+	// if err != nil {
+	// 	logger.Panicf("failed to create job insert listener: %v", err)
+	// }
+	// jobUpdateListener, err := database.NewQueuerListener(dbConfig, "job.UPDATE")
+	// if err != nil {
+	// 	logger.Panicf("failed to create job update listener: %v", err)
+	// }
+	// jobDeleteListener, err := database.NewQueuerListener(dbConfig, "job.DELETE")
+	// if err != nil {
+	// 	logger.Panicf("failed to create job delete listener: %v", err)
+	// }
+
+	logger.Println("Queuer without worker created")
+
+	return &Queuer{
+		dbJob:    dbJob,
+		dbWorker: dbWorker,
+		// jobInsertListener: jobInsertListener,
+		// jobUpdateListener: jobUpdateListener,
+		// jobDeleteListener: jobDeleteListener,
 		JobPollInterval:   1 * time.Minute,
 		tasks:             map[string]*model.Task{},
 		nextIntervalFuncs: map[string]model.NextIntervalFunc{},

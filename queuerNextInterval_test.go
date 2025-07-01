@@ -12,6 +12,7 @@ import (
 func MockNextIntervalFunc1(start time.Time, currentCount int) time.Time {
 	return start.Add(time.Hour * time.Duration(currentCount))
 }
+
 func MockNextIntervalFunc2(start time.Time, currentCount int) time.Time {
 	return start.Add(time.Hour * time.Duration(currentCount))
 }

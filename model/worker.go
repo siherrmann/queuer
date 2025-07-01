@@ -42,12 +42,9 @@ func NewWorker(name string, maxConcurrency int) (*Worker, error) {
 }
 
 func NewWorkerWithOptions(name string, maxConcurrency int, options *OnError) (*Worker, error) {
-	if len(name) == 0 || len(name) > 100 {
-		return nil, fmt.Errorf("name must have a length between 1 and 100")
-	}
-
-	if maxConcurrency < 1 || maxConcurrency > 1000 {
-		return nil, fmt.Errorf("maxConcurrency must be between 1 and 100")
+	err := options.IsValid()
+	if err != nil {
+		return nil, fmt.Errorf("invalid options: %w", err)
 	}
 
 	return &Worker{
