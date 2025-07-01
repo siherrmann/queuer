@@ -12,8 +12,6 @@ func TestAddTask(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully add task", func(t *testing.T) {
-		t.Parallel()
-
 		task := func() {}
 		newTask := testQueuer.AddTask(task)
 		require.NotNil(t, newTask, "expected task to be created")
@@ -26,8 +24,6 @@ func TestAddTask(t *testing.T) {
 	})
 
 	t.Run("Panics on nil task", func(t *testing.T) {
-		t.Parallel()
-
 		var newTask *model.Task
 		defer func() {
 			r := recover()
@@ -44,8 +40,6 @@ func TestAddTaskWithName(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully add task with name", func(t *testing.T) {
-		t.Parallel()
-
 		task := func() {}
 		newTask := testQueuer.AddTaskWithName(task, "CustomTaskName")
 		require.NotNil(t, newTask, "expected task to be created")
@@ -58,8 +52,6 @@ func TestAddTaskWithName(t *testing.T) {
 	})
 
 	t.Run("Panics on nil task with name", func(t *testing.T) {
-		t.Parallel()
-
 		var newTask *model.Task
 		defer func() {
 			r := recover()
@@ -72,8 +64,6 @@ func TestAddTaskWithName(t *testing.T) {
 	})
 
 	t.Run("Panics on empty task name", func(t *testing.T) {
-		t.Parallel()
-
 		var newTask *model.Task
 		defer func() {
 			r := recover()

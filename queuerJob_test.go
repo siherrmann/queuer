@@ -30,8 +30,6 @@ func TestAddJob(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully adds a job with nil options", func(t *testing.T) {
-		t.Parallel()
-
 		expectedJob := &model.Job{
 			TaskName:   "queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
@@ -47,8 +45,6 @@ func TestAddJob(t *testing.T) {
 	})
 
 	t.Run("Returns error for nil function", func(t *testing.T) {
-		t.Parallel()
-
 		var nilTask func() // Invalid nil function
 		job, err := testQueuer.AddJob(nilTask, "param1")
 
@@ -58,8 +54,6 @@ func TestAddJob(t *testing.T) {
 	})
 
 	t.Run("Returns error for invalid task type", func(t *testing.T) {
-		t.Parallel()
-
 		invalidTask := 123 // Invalid integer type instead of a function
 		job, err := testQueuer.AddJob(invalidTask, "param1")
 
@@ -73,8 +67,6 @@ func TestAddJobRunning(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully runs a job without options", func(t *testing.T) {
-		t.Parallel()
-
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
@@ -101,8 +93,6 @@ func TestAddJobRunning(t *testing.T) {
 	})
 
 	t.Run("Successfully runs a job with options", func(t *testing.T) {
-		t.Parallel()
-
 		options := &model.Options{
 			OnError: &model.OnError{
 				Timeout:      5,
@@ -153,8 +143,6 @@ func TestAddJobWithOptions(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully adds a job with options", func(t *testing.T) {
-		t.Parallel()
-
 		options := &model.Options{
 			OnError: &model.OnError{
 				Timeout:      5,
@@ -185,8 +173,6 @@ func TestAddJobWithOptions(t *testing.T) {
 	})
 
 	t.Run("Successfully adds a job with nil options", func(t *testing.T) {
-		t.Parallel()
-
 		expectedJob := &model.Job{
 			TaskName:   "queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
@@ -201,8 +187,6 @@ func TestAddJobWithOptions(t *testing.T) {
 	})
 
 	t.Run("Return error for invalid options", func(t *testing.T) {
-		t.Parallel()
-
 		options := &model.Options{
 			OnError: &model.OnError{
 				Timeout:      -5, // Invalid timeout
@@ -229,8 +213,6 @@ func TestAddJobs(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully adds multiple jobs with nil options", func(t *testing.T) {
-		t.Parallel()
-
 		batchJobs := []model.BatchJob{
 			{
 				Task:       TaskMock,
@@ -253,8 +235,6 @@ func TestAddJobs(t *testing.T) {
 	})
 
 	t.Run("Returns error for invalid batch job", func(t *testing.T) {
-		t.Parallel()
-
 		batchJobs := []model.BatchJob{
 			{
 				Task:       nil, // Invalid nil function
@@ -272,8 +252,6 @@ func TestCancelJob(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully cancels a queued job", func(t *testing.T) {
-		t.Parallel()
-
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
@@ -289,8 +267,6 @@ func TestCancelJob(t *testing.T) {
 	})
 
 	t.Run("Returns error for non-existent job", func(t *testing.T) {
-		t.Parallel()
-
 		cancelledJob, err := testQueuer.CancelJob(uuid.New())
 		assert.Error(t, err, "CancelJob should return an error for non-existent job")
 		assert.Nil(t, cancelledJob, "Cancelled job should be nil for non-existent job")
@@ -301,8 +277,6 @@ func TestCancelJobRunning(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully cancels a running job", func(t *testing.T) {
-		t.Parallel()
-
 		job, err := testQueuer.AddJob(TaskMock, 3, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
@@ -339,8 +313,6 @@ func TestCancelAllJobsByWorkerRunning(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully cancels all jobs by worker RID", func(t *testing.T) {
-		t.Parallel()
-
 		worker, err := testQueuer.GetWorker(testQueuer.worker.RID)
 		require.NoError(t, err, "GetWorker should not return an error on success")
 
@@ -388,8 +360,6 @@ func TestReaddJobFromArchive(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
 	t.Run("Successfully readds a job from archive", func(t *testing.T) {
-		t.Parallel()
-
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
