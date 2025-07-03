@@ -74,8 +74,18 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	if err != nil {
 		logger.Panicf("failed to create job insert listener: %v", err)
 	}
-	jobUpdateListener := core.NewListener[*model.Job]("job.UPDATE")
-	jobDeleteListener := core.NewListener[*model.Job]("job.DELETE")
+
+	// Broadcasters for job updates and deletes
+	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
+	jobUpdateListener, err := core.NewListener(broadcasterJobUpdate)
+	if err != nil {
+		logger.Panicf("failed to create job update listener: %v", err)
+	}
+	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
+	jobDeleteListener, err := core.NewListener(broadcasterJobDelete)
+	if err != nil {
+		logger.Panicf("failed to create job update listener: %v", err)
+	}
 
 	// Inserting worker
 	var newWorker *model.Worker
@@ -150,8 +160,18 @@ func NewQueuerWithoutWorker() *Queuer {
 	if err != nil {
 		logger.Panicf("failed to create job insert listener: %v", err)
 	}
-	jobUpdateListener := core.NewListener[*model.Job]("job.UPDATE")
-	jobDeleteListener := core.NewListener[*model.Job]("job.DELETE")
+
+	// Broadcasters for job updates and deletes
+	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
+	jobUpdateListener, err := core.NewListener(broadcasterJobUpdate)
+	if err != nil {
+		logger.Panicf("failed to create job update listener: %v", err)
+	}
+	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
+	jobDeleteListener, err := core.NewListener(broadcasterJobDelete)
+	if err != nil {
+		logger.Panicf("failed to create job update listener: %v", err)
+	}
 
 	logger.Println("Queuer without worker created")
 

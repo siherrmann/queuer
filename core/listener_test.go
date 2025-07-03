@@ -9,23 +9,28 @@ import (
 )
 
 func TestNewListener(t *testing.T) {
-	listener := NewListener[string]("testListener")
+	broadcaster := NewBroadcaster[string]("testBroadcaster")
+	listener, err := NewListener(broadcaster)
+	require.NoError(t, err, "expected no error when creating a new listener")
 	require.NotNil(t, listener, "expected non-nil listener")
-	assert.NotNil(t, listener.channel, "expected non-nil channel")
 }
 
-func TestNotify(t *testing.T) {
-	listener := NewListener[string]("testListener")
+func TestNotifyAndListen(t *testing.T) {
+	broadcaster := NewBroadcaster[string]("testBroadcaster")
+	listener, err := NewListener(broadcaster)
+	require.NoError(t, err, "expected no error when creating a new listener")
+	require.NotNil(t, listener, "expected non-nil listener")
+
 	data := "test data"
 	notifyChannel := make(chan string)
 	ready := make(chan struct{})
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		go func() {
 			ready <- struct{}{}
-			for d := range listener.channel {
-				notifyChannel <- d
-			}
+			listener.Listen(context.Background(), make(chan struct{}), func(data string) {
+				notifyChannel <- data
+			})
 		}()
 
 		// Wait for the listener to be ready and notify
@@ -39,7 +44,11 @@ func TestNotify(t *testing.T) {
 }
 
 func TestListen(t *testing.T) {
-	listener := NewListener[string]("testListener")
+	broadcaster := NewBroadcaster[string]("testBroadcaster")
+	listener, err := NewListener(broadcaster)
+	require.NoError(t, err, "expected no error when creating a new listener")
+	require.NotNil(t, listener, "expected non-nil listener")
+
 	data := "test data"
 
 	t.Run("Successfully listen with valid function", func(t *testing.T) {

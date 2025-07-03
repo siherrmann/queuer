@@ -2,29 +2,32 @@ package core
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"sync"
-	"time"
 )
 
 type Listener[T any] struct {
-	name      string
-	channel   chan T
-	waitgroup *sync.WaitGroup
+	broadcaster *Broadcaster[T]
+	waitgroup   *sync.WaitGroup
 }
 
-func NewListener[T any](name string) *Listener[T] {
-	return &Listener[T]{
-		name:      name,
-		channel:   make(chan T, 100),
-		waitgroup: &sync.WaitGroup{},
+func NewListener[T any](broadcaster *Broadcaster[T]) (*Listener[T], error) {
+	if broadcaster == nil {
+		return nil, fmt.Errorf("broadcaster cannot be nil")
 	}
+
+	return &Listener[T]{
+		broadcaster: broadcaster,
+		waitgroup:   &sync.WaitGroup{},
+	}, nil
 }
 
 func (l *Listener[T]) Listen(ctx context.Context, ready chan struct{}, notifyFunction func(data T)) {
 	if notifyFunction == nil {
 		return
 	}
+
+	channel := l.broadcaster.Subscribe()
 
 	readySignaled := false
 	for {
@@ -34,7 +37,7 @@ func (l *Listener[T]) Listen(ctx context.Context, ready chan struct{}, notifyFun
 				close(ready)
 			}
 			return
-		case data := <-l.channel:
+		case data := <-channel:
 			l.waitgroup.Add(1)
 
 			if !readySignaled {
@@ -56,12 +59,7 @@ func (l *Listener[T]) Listen(ctx context.Context, ready chan struct{}, notifyFun
 }
 
 func (l *Listener[T]) Notify(data T) {
-	select {
-	case l.channel <- data:
-		log.Println("Listener notified")
-	case <-time.After(1 * time.Second):
-		panic("Listener timeout: probably the listener is not running or the channel is full")
-	}
+	l.broadcaster.Broadcast(data)
 }
 
 func (l *Listener[T]) WaitForNotificationsProcessed() {

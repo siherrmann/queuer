@@ -177,9 +177,9 @@ type Schedule struct {
 - Scheduled and periodic jobs.
 - Easy functions to get jobs and workers.
 - Listener functions for job updates and deletion (ended jobs).
+- Helper function to listen for a specific finished job.
 - Retry mechanism for ended jobs which creates a new job with the same parameters.
 
 ## Coming soon
 
-- Helper function to listen for a specific finished job.
 - Custom NextInterval functions to address custom needs for scheduling (eg. scheduling with timezone offset)

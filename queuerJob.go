@@ -94,6 +94,28 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	return nil
 }
 
+// WaitForJobFinished waits for a job to finish and returns the job.
+func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
+	jobFinished := make(chan *model.Job, 1)
+	ready := make(chan struct{})
+	go q.jobDeleteListener.Listen(q.ctx, ready, func(job *model.Job) {
+		if job.RID == jobRid {
+			jobFinished <- job
+		}
+	})
+
+	<-ready
+	for {
+		select {
+		case job := <-jobFinished:
+			return job
+		case <-q.ctx.Done():
+			log.Println("context cancelled while waiting for job")
+			return nil
+		}
+	}
+}
+
 // CancelJob cancels a job with the given job RID.
 func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJob(jobRid)

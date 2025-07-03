@@ -456,6 +456,41 @@ func TestAddJobs(t *testing.T) {
 	})
 }
 
+func TestWaitForJobFinished(t *testing.T) {
+	testQueuer := newQueuerMock("TestQueuer", 100)
+	testQueuer.AddTask(TaskMock)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.Start(ctx, cancel)
+
+	t.Run("Successfully waits for a job to finish", func(t *testing.T) {
+		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		assert.NoError(t, err, "AddJob should not return an error on success")
+
+		job = testQueuer.WaitForJobFinished(job.RID)
+		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
+
+		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(job.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
+		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
+		assert.Equal(t, model.JobStatusSucceeded, jobArchived.Status, "Archived job should have status Succeeded")
+	})
+
+	t.Run("Successfully cancel context while waiting for job", func(t *testing.T) {
+		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		assert.NoError(t, err, "AddJob should not return an error on success")
+
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			cancel()
+		}()
+
+		job = testQueuer.WaitForJobFinished(job.RID)
+		assert.Nil(t, job, "WaitForJobFinished should return nil when context is cancelled")
+	})
+}
+
 func TestCancelJob(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
@@ -533,7 +568,7 @@ func TestCancelAllJobsByWorkerRunning(t *testing.T) {
 
 		time.Sleep(1 * time.Second)
 
-		jobs, err := testQueuer.dbJob.SelectAllJobsByWorkerRID(testQueuer.worker.RID, 0, 10)
+		jobs, err := testQueuer.GetJobsByWorkerRID(testQueuer.worker.RID, 0, 10)
 		assert.NoError(t, err, "SelectAllJobsByWorkerRID should not return an error")
 		require.Len(t, jobs, 2, "There should be two jobs for the worker")
 		assert.Equal(t, model.JobStatusRunning, jobs[0].Status, "Job1 should be in Running status")
