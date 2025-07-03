@@ -23,7 +23,7 @@ func TestListenForJobUpdate(t *testing.T) {
 	})
 	require.NoError(t, err, "expected to successfully listen for job updates")
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Notify the listener manually
 	q.jobUpdateListener.Notify(data)
@@ -49,7 +49,7 @@ func TestListenForJobDelete(t *testing.T) {
 	})
 	require.NoError(t, err, "expected to successfully listen for job deletions")
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Notify the listener manually
 	q.jobDeleteListener.Notify(data)
