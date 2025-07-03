@@ -9,35 +9,37 @@ import (
 )
 
 func TestNewListener(t *testing.T) {
-	listener := NewListener[string]()
+	listener := NewListener[string]("testListener")
 	require.NotNil(t, listener, "expected non-nil listener")
-	assert.NotNil(t, listener.Channel, "expected non-nil channel")
+	assert.NotNil(t, listener.channel, "expected non-nil channel")
 }
 
 func TestNotify(t *testing.T) {
-	listener := NewListener[string]()
+	listener := NewListener[string]("testListener")
 	data := "test data"
-
 	notifyChannel := make(chan string)
 	ready := make(chan struct{})
-	go func() {
-		close(ready)
-		for d := range listener.Channel {
-			notifyChannel <- d
-		}
-	}()
 
-	// Wait for the listener to be ready and notify
-	<-ready
-	listener.Notify(data)
+	for i := 0; i < 1000; i++ {
+		go func() {
+			ready <- struct{}{}
+			for d := range listener.channel {
+				notifyChannel <- d
+			}
+		}()
 
-	// Check if the data was received
-	receivedData := <-notifyChannel
-	assert.Equal(t, data, receivedData, "expected to receive the same data")
+		// Wait for the listener to be ready and notify
+		<-ready
+		listener.Notify(data)
+
+		// Check if the data was received
+		receivedData := <-notifyChannel
+		assert.Equal(t, data, receivedData, "expected to receive the same data")
+	}
 }
 
 func TestListen(t *testing.T) {
-	listener := NewListener[string]()
+	listener := NewListener[string]("testListener")
 	data := "test data"
 
 	t.Run("Successfully listen with valid function", func(t *testing.T) {

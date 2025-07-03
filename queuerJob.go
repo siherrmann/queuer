@@ -1,6 +1,7 @@
 package queuer
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"queuer/core"
@@ -25,12 +26,42 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 	return job, nil
 }
 
+// AddJobTx adds a job to the queue with the given task and parameters within a transaction.
+// As a task you can either pass a function or a string with the task name
+// (necessary if you want to use a task with a name set by you).
+func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{}) (*model.Job, error) {
+	options := q.mergeOptions(nil)
+	job, err := q.addJobTx(tx, task, options, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error adding job: %v", err)
+	}
+
+	q.log.Printf("Job added with RID %v", job.RID)
+
+	return job, nil
+}
+
 // AddJobWithOptions adds a job with the given task, options, and parameters.
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
 func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
 	job, err := q.addJob(task, options, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error adding job: %v", err)
+	}
+
+	q.log.Printf("Job with options added with RID %v", job.RID)
+
+	return job, nil
+}
+
+// AddJobWithOptionsTx adds a job with the given task, options, and parameters within a transaction.
+// As a task you can either pass a function or a string with the task name
+// (necessary if you want to use a task with a name set by you).
+func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
+	q.mergeOptions(options)
+	job, err := q.addJobTx(tx, task, options, parameters...)
 	if err != nil {
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
@@ -166,6 +197,21 @@ func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...
 	}
 
 	job, err := q.dbJob.InsertJob(newJob)
+	if err != nil {
+		return nil, fmt.Errorf("error inserting job: %v", err)
+	}
+
+	return job, nil
+}
+
+// addJobTx adds a job to the queue with all necessary parameters.
+func (q *Queuer) addJobTx(tx *sql.Tx, task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
+	newJob, err := model.NewJob(task, options, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating job: %v", err)
+	}
+
+	job, err := q.dbJob.InsertJobTx(tx, newJob)
 	if err != nil {
 		return nil, fmt.Errorf("error inserting job: %v", err)
 	}

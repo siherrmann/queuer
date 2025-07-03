@@ -156,6 +156,57 @@ func TestAddJobRunning(t *testing.T) {
 	})
 }
 
+func TestAddJobTx(t *testing.T) {
+	testQueuer := newQueuerMock("TestQueuer", 100)
+
+	t.Run("Successfully adds a job with nil options in transaction", func(t *testing.T) {
+		expectedJob := &model.Job{
+			TaskName:   "queuer.TaskMock",
+			Parameters: model.Parameters{1.0, "2"},
+		}
+
+		params := []interface{}{1, "2"}
+		tx, err := testQueuer.DB.Begin()
+		require.NoError(t, err, "Begin transaction should not return an error")
+
+		job, err := testQueuer.AddJobTx(tx, TaskMock, params...)
+		assert.NoError(t, err, "AddJobTx should not return an error on success")
+		assert.Equal(t, expectedJob.TaskName, job.TaskName, "AddJobTx should return the correct task name")
+		assert.EqualValues(t, expectedJob.Parameters, job.Parameters, "AddJobTx should return the correct parameters")
+		assert.Equal(t, expectedJob.Options, job.Options, "AddJobTx should return the correct options")
+
+		err = tx.Commit()
+		assert.NoError(t, err, "Commit transaction should not return an error")
+	})
+
+	t.Run("Returns error for nil function in transaction", func(t *testing.T) {
+		var nilTask func() // Invalid nil function
+		tx, err := testQueuer.DB.Begin()
+		require.NoError(t, err, "Begin transaction should not return an error")
+
+		job, err := testQueuer.AddJobTx(tx, nilTask, "param1")
+		assert.Error(t, err, "AddJobTx should return an error for nil task (via addJobFn)")
+		assert.Nil(t, job, "Job should be nil for nil task")
+
+		err = tx.Rollback()
+		assert.NoError(t, err, "Rollback transaction should not return an error")
+	})
+
+	t.Run("Returns error for invalid task type in transaction", func(t *testing.T) {
+		invalidTask := 123 // Invalid integer type instead of a function
+		tx, err := testQueuer.DB.Begin()
+		require.NoError(t, err, "Begin transaction should not return an error")
+
+		job, err := testQueuer.AddJobTx(tx, invalidTask, "param1")
+		assert.Error(t, err, "AddJobTx should return an error for invalid task type")
+		assert.Nil(t, job, "Job should be nil for invalid task type")
+		assert.Contains(t, err.Error(), "task must be a function, got int", "Error message should reflect invalid task type handling")
+
+		err = tx.Rollback()
+		assert.NoError(t, err, "Rollback transaction should not return an error")
+	})
+}
+
 func TestAddJobWithOptions(t *testing.T) {
 	testQueuer := newQueuerMock("TestQueuer", 100)
 
@@ -297,6 +348,72 @@ func TestAddJobWithOptionsRunning(t *testing.T) {
 		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
 		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
 		assert.Equal(t, model.JobStatusFailed, jobArchived.Status, "Archived job should have status Failed")
+	})
+}
+
+func TestAddJobWithOptionsTx(t *testing.T) {
+	testQueuer := newQueuerMock("TestQueuer", 100)
+
+	t.Run("Successfully adds a job with options in transaction", func(t *testing.T) {
+		options := &model.Options{
+			OnError: &model.OnError{
+				Timeout:      5,
+				MaxRetries:   3,
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+			},
+			Schedule: &model.Schedule{
+				Start:    time.Now().Add(10 * time.Minute),
+				Interval: 15 * time.Minute,
+				MaxCount: 3,
+			},
+		}
+		expectedJob := &model.Job{
+			TaskName:   "queuer.TaskMock",
+			Parameters: model.Parameters{1.0, "2"},
+			Options:    options,
+		}
+
+		params := []interface{}{1, "2"}
+		tx, err := testQueuer.DB.Begin()
+		require.NoError(t, err, "Begin transaction should not return an error")
+
+		job, err := testQueuer.AddJobWithOptionsTx(tx, options, TaskMock, params...)
+		assert.NoError(t, err, "AddJobWithOptionsTx should not return an error on success")
+		assert.Equal(t, expectedJob.TaskName, job.TaskName, "AddJobWithOptionsTx should return the correct task name")
+		assert.EqualValues(t, expectedJob.Parameters, job.Parameters, "AddJobWithOptionsTx should return the correct parameters")
+		assert.EqualValues(t, expectedJob.Options.OnError, job.Options.OnError, "AddJobWithOptionsTx should return the correct OnError options")
+		assert.EqualExportedValues(t, expectedJob.Options.Schedule, job.Options.Schedule, "AddJobWithOptionsTx should return the correct Schedule options")
+
+		err = tx.Commit()
+		assert.NoError(t, err, "Commit transaction should not return an error")
+	})
+
+	t.Run("Returns error for nil function in transaction", func(t *testing.T) {
+		var nilTask func() // Invalid nil function
+		tx, err := testQueuer.DB.Begin()
+		require.NoError(t, err, "Begin transaction should not return an error")
+
+		job, err := testQueuer.AddJobWithOptionsTx(tx, nil, nilTask)
+		assert.Error(t, err, "AddJobWithOptionsTx should return an error for nil task (via addJobFn)")
+		assert.Nil(t, job, "Job should be nil for nil task")
+		assert.Contains(t, err.Error(), "task value must not be nil", "Error message should reflect nil task handling")
+		err = tx.Rollback()
+		assert.NoError(t, err, "Rollback transaction should not return an error")
+	})
+
+	t.Run("Returns error for invalid task type in transaction", func(t *testing.T) {
+		invalidTask := 123 // Invalid integer type instead of a function
+		tx, err := testQueuer.DB.Begin()
+		require.NoError(t, err, "Begin transaction should not return an error")
+
+		job, err := testQueuer.AddJobWithOptionsTx(tx, nil, invalidTask, "param1")
+		assert.Error(t, err, "AddJobWithOptionsTx should return an error for invalid task type")
+		assert.Nil(t, job, "Job should be nil for invalid task type")
+		assert.Contains(t, err.Error(), "task must be a function, got int", "Error message should reflect invalid task type handling")
+
+		err = tx.Rollback()
+		assert.NoError(t, err, "Rollback transaction should not return an error")
 	})
 }
 

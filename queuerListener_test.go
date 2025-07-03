@@ -2,6 +2,7 @@ package queuer
 
 import (
 	"context"
+	"log"
 	"queuer/model"
 	"testing"
 	"time"
@@ -12,28 +13,34 @@ import (
 )
 
 func TestListenForJobUpdate(t *testing.T) {
+	now := time.Now()
+	log.Printf("Starting test at %v", now)
+
 	q := newQueuerMock("testQueuer", 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	q.Start(ctx, cancel)
+	defer cancel()
 
 	data := &model.Job{RID: uuid.New()}
-	notifyChannel := make(chan *model.Job)
+	notifyChannel := make(chan *model.Job, 1)
 	err := q.ListenForJobUpdate(func(d *model.Job) {
 		notifyChannel <- d
 	})
 	require.NoError(t, err, "expected to successfully listen for job updates")
 
-	time.Sleep(1 * time.Second)
+	for i := 0; i < 100; i++ {
+		// Notify the listener manually
+		q.jobUpdateListener.Notify(data)
 
-	// Notify the listener manually
-	q.jobUpdateListener.Notify(data)
+		q.jobUpdateListener.WaitForNotificationsProcessed()
 
-	select {
-	case receivedData := <-notifyChannel:
-		assert.NotNil(t, receivedData, "expected to receive job data")
-		assert.Equal(t, data.RID, receivedData.RID, "expected to receive the same job RID")
-	default:
-		t.Error("expected to receive job data, but got nothing")
+		select {
+		case receivedData := <-notifyChannel:
+			assert.NotNil(t, receivedData, "expected to receive job data")
+			assert.Equal(t, data.RID, receivedData.RID, "expected to receive the same job RID")
+		case <-time.After(1 * time.Second):
+			t.Error("timed out after 1s waiting for job data")
+		}
 	}
 }
 
@@ -41,24 +48,27 @@ func TestListenForJobDelete(t *testing.T) {
 	q := newQueuerMock("testQueuer", 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	q.Start(ctx, cancel)
+	defer cancel()
 
 	data := &model.Job{RID: uuid.New()}
-	notifyChannel := make(chan *model.Job)
+	notifyChannel := make(chan *model.Job, 1)
 	err := q.ListenForJobDelete(func(d *model.Job) {
 		notifyChannel <- d
 	})
 	require.NoError(t, err, "expected to successfully listen for job deletions")
 
-	time.Sleep(1 * time.Second)
+	for i := 0; i < 100; i++ {
+		// Notify the listener manually
+		q.jobDeleteListener.Notify(data)
 
-	// Notify the listener manually
-	q.jobDeleteListener.Notify(data)
+		q.jobDeleteListener.WaitForNotificationsProcessed()
 
-	select {
-	case receivedData := <-notifyChannel:
-		assert.NotNil(t, receivedData, "expected to receive job data")
-		assert.Equal(t, data.RID, receivedData.RID, "expected to receive the same job RID")
-	default:
-		t.Error("expected to receive job data, but got nothing")
+		select {
+		case receivedData := <-notifyChannel:
+			assert.NotNil(t, receivedData, "expected to receive job data")
+			assert.Equal(t, data.RID, receivedData.RID, "expected to receive the same job RID")
+		case <-time.After(1 * time.Second):
+			t.Error("timed out after 5s waiting for job data")
+		}
 	}
 }

@@ -78,6 +78,32 @@ func TestJobInsertJob(t *testing.T) {
 	assert.WithinDuration(t, insertedJob.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
 }
 
+func TestJobInsertJobTx(t *testing.T) {
+	dbConfig := helper.NewTestDatabaseConfig(port)
+	database := helper.NewTestDatabase(dbConfig)
+
+	jobDBHandler, err := NewJobDBHandler(database, true)
+	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+
+	job, err := model.NewJob("TestTask", nil)
+	require.NoError(t, err, "Expected NewJob to not return an error")
+
+	tx, err := database.Instance.Begin()
+	require.NoError(t, err, "Expected Begin to not return an error")
+
+	insertedJob, err := jobDBHandler.InsertJobTx(tx, job)
+	assert.NoError(t, err, "Expected InsertJobTx to not return an error")
+	assert.NotNil(t, insertedJob, "Expected InsertJobTx to return a non-nil job")
+	assert.Equal(t, insertedJob.TaskName, job.TaskName, "Expected task name to match")
+	assert.Equal(t, insertedJob.Status, model.JobStatusQueued, "Expected job status to be QUEUED")
+	assert.Equal(t, insertedJob.Attempts, 0, "Expected job attempts to be 0")
+	assert.WithinDuration(t, insertedJob.CreatedAt, time.Now(), 1*time.Second, "Expected inserted worker CreatedAt time to match")
+	assert.WithinDuration(t, insertedJob.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
+
+	err = tx.Commit()
+	assert.NoError(t, err, "Expected Commit to not return an error")
+}
+
 func TestJobBatchInsertJobs(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)

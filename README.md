@@ -80,7 +80,7 @@ The `NewQueuerWithoutWorker` function provides a way to initialize a `Queuer` in
 func NewQueuerWithoutWorker() *Queuer
 ```
 
-This function only initializes the database connection. It omits the worker component, making it suitable for services that might, for example, serve job status endpoints or solely add jobs to the queue, without consuming computational resources for job execution. Similar to `NewQueuer`, any initialization errors will result in a panic and program exit. It returns a pointer to the newly created `Queuer` instance.
+This function only initializes the database connection and job listeners. It omits the worker component, making it suitable for services that might, for example, serve job status endpoints or solely add jobs to the queue, without consuming computational resources for job execution. Similar to `NewQueuer`, any initialization errors will result in a panic and program exit. It returns a pointer to the newly created `Queuer` instance.
 
 ---
 
@@ -170,15 +170,16 @@ type Schedule struct {
 # Features
 
 - Insert job batches using the `COPY FROM` postgres feature.
+- Insert a job in a transaction to rollback if eg. the step after job insertion fails.
 - Panic recovery for all running jobs.
 - Error handling by checking last output parameter for error.
 - Multiple queuers can be started in different microservices while maintaining job start order and isolation.
 - Scheduled and periodic jobs.
 - Easy functions to get jobs and workers.
+- Listener functions for job updates and deletion (ended jobs).
 - Retry mechanism for ended jobs which creates a new job with the same parameters.
 
 ## Coming soon
 
-- Add a new job in a transaction to rollback if for example step after job insertion fails.
 - Helper function to listen for a specific finished job.
 - Custom NextInterval functions to address custom needs for scheduling (eg. scheduling with timezone offset)

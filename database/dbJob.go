@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"queuer/helper"
@@ -18,6 +19,7 @@ type JobDBHandlerFunctions interface {
 	CreateTable() error
 	DropTable() error
 	InsertJob(job *model.Job) (*model.Job, error)
+	InsertJobTx(tx *sql.Tx, job *model.Job) (*model.Job, error)
 	BatchInsertJobs(jobs []*model.Job) error
 	UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error)
 	UpdateJobFinal(job *model.Job) (*model.Job, error)
@@ -145,6 +147,52 @@ func (r JobDBHandler) DropTable() error {
 func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := r.db.Instance.QueryRow(
+		`INSERT INTO job (options, task_name, parameters, status, scheduled_at)
+			VALUES ($1, $2, $3, $4, $5)
+		RETURNING
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			scheduled_at,
+			attempts,
+			created_at,
+			updated_at;`,
+		job.Options,
+		job.TaskName,
+		job.Parameters,
+		job.Status,
+		job.ScheduledAt,
+	)
+
+	err := row.Scan(
+		&newJob.ID,
+		&newJob.RID,
+		&newJob.WorkerID,
+		&newJob.WorkerRID,
+		&newJob.Options,
+		&newJob.TaskName,
+		&newJob.Parameters,
+		&newJob.Status,
+		&newJob.ScheduledAt,
+		&newJob.Attempts,
+		&newJob.CreatedAt,
+		&newJob.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error scanning new job: %w", err)
+	}
+
+	return newJob, nil
+}
+
+func (r JobDBHandler) InsertJobTx(tx *sql.Tx, job *model.Job) (*model.Job, error) {
+	newJob := &model.Job{}
+	row := tx.QueryRow(
 		`INSERT INTO job (options, task_name, parameters, status, scheduled_at)
 			VALUES ($1, $2, $3, $4, $5)
 		RETURNING

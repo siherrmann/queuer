@@ -61,7 +61,8 @@ func ExampleFull() {
 			MaxRetries:   3,
 		},
 		Schedule: &model.Schedule{
-			Start: time.Now().Add(time.Second * 10),
+			Start:    time.Now().Add(time.Second * 10),
+			Interval: time.Second * 5,
 		},
 	}
 	_, err = q.AddJobWithOptions(options, ShortTask, 5, "12")

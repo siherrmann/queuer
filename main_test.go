@@ -60,8 +60,8 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 	if err != nil {
 		logger.Fatalf("failed to create job insert listener: %v", err)
 	}
-	jobUpdateListener := core.NewListener[*model.Job]()
-	jobDeleteListener := core.NewListener[*model.Job]()
+	jobUpdateListener := core.NewListener[*model.Job]("job.UPDATE")
+	jobDeleteListener := core.NewListener[*model.Job]("job.DELETE")
 
 	// Inserting worker
 	var newWorker *model.Worker
@@ -85,6 +85,7 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 
 	return &Queuer{
 		worker:            worker,
+		DB:                dbConnection.Instance,
 		dbJob:             dbJob,
 		dbWorker:          dbWorker,
 		jobInsertListener: jobInsertListener,

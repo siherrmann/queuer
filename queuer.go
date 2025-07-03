@@ -2,6 +2,7 @@ package queuer
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +23,7 @@ type Queuer struct {
 	// Worker
 	worker *model.Worker
 	// DBs
+	DB       *sql.DB
 	dbJob    database.JobDBHandlerFunctions
 	dbWorker database.WorkerDBHandlerFunctions
 	// Job listeners
@@ -72,8 +74,8 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	if err != nil {
 		logger.Panicf("failed to create job insert listener: %v", err)
 	}
-	jobUpdateListener := core.NewListener[*model.Job]()
-	jobDeleteListener := core.NewListener[*model.Job]()
+	jobUpdateListener := core.NewListener[*model.Job]("job.UPDATE")
+	jobDeleteListener := core.NewListener[*model.Job]("job.DELETE")
 
 	// Inserting worker
 	var newWorker *model.Worker
@@ -98,6 +100,7 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 
 	return &Queuer{
 		worker:            worker,
+		DB:                dbConnection.Instance,
 		dbJob:             dbJob,
 		dbWorker:          dbWorker,
 		jobInsertListener: jobInsertListener,
@@ -113,7 +116,7 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 // NewQueuerWithoutWorker creates a new Queuer instance without a worker.
 // This is useful for scenarios where the queuer needs to be initialized without a worker,
 // such as when a seperate service is responsible for job status endpoints without processing jobs.
-// It initializes the database connection.
+// It initializes the database connection and job listeners.
 // If any error occurs during initialization, it logs a panic error and exits the program.
 // It returns a pointer to the newly created Queuer instance.
 func NewQueuerWithoutWorker() *Queuer {
@@ -142,19 +145,18 @@ func NewQueuerWithoutWorker() *Queuer {
 		logger.Panicf("failed to create worker db handler: %v", err)
 	}
 
-	// TODO: Add job listeners to line 83 in readme.
-	// TODO: Update comment to: It initializes the database connection and job listeners.
 	// Job listeners
 	jobInsertListener, err := database.NewQueuerDBListener(dbConfig, "job.INSERT")
 	if err != nil {
 		logger.Panicf("failed to create job insert listener: %v", err)
 	}
-	jobUpdateListener := core.NewListener[*model.Job]()
-	jobDeleteListener := core.NewListener[*model.Job]()
+	jobUpdateListener := core.NewListener[*model.Job]("job.UPDATE")
+	jobDeleteListener := core.NewListener[*model.Job]("job.DELETE")
 
 	logger.Println("Queuer without worker created")
 
 	return &Queuer{
+		DB:                dbConnection.Instance,
 		dbJob:             dbJob,
 		dbWorker:          dbWorker,
 		jobInsertListener: jobInsertListener,
