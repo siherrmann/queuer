@@ -30,6 +30,9 @@ func ExampleTx() {
 	_, err = q.AddJobTx(tx, ShortTask, 5, "12")
 	if err != nil {
 		log.Printf("Error adding job: %v", err)
-		tx.Rollback()
+		err = tx.Rollback()
+		if err != nil {
+			log.Printf("Error rolling back transaction: %v", err)
+		}
 	}
 }
