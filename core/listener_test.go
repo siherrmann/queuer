@@ -18,14 +18,17 @@ func TestNotify(t *testing.T) {
 	listener := NewListener[string]()
 	data := "test data"
 
-	// Use a channel to capture the notification
 	notifyChannel := make(chan string)
+	ready := make(chan struct{})
 	go func() {
+		close(ready)
 		for d := range listener.Channel {
 			notifyChannel <- d
 		}
 	}()
 
+	// Wait for the listener to be ready and notify
+	<-ready
 	listener.Notify(data)
 
 	// Check if the data was received
@@ -39,10 +42,13 @@ func TestListen(t *testing.T) {
 
 	t.Run("Successfully listen with valid function", func(t *testing.T) {
 		notifyChannel := make(chan string)
-		go listener.Listen(context.Background(), func(d string) {
+		ready := make(chan struct{})
+		go listener.Listen(context.Background(), ready, func(d string) {
 			notifyChannel <- d
 		})
 
+		// Wait for the listener to be ready and notify
+		<-ready
 		listener.Notify(data)
 
 		// Check if the data was received
@@ -55,11 +61,13 @@ func TestListen(t *testing.T) {
 		defer cancel()
 
 		notifyChannel := make(chan string)
-		go listener.Listen(ctx, func(d string) {
+		ready := make(chan struct{})
+		go listener.Listen(ctx, ready, func(d string) {
 			notifyChannel <- d
 		})
 
-		// Cancel the context to stop listening
+		// Wait for the listener to be ready and cancel
+		<-ready
 		cancel()
 
 		select {

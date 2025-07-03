@@ -15,8 +15,8 @@ func NewListener[T any]() *Listener[T] {
 	}
 }
 
-func (l *Listener[T]) Listen(ctx context.Context, notifyFunction func(data T)) {
-	log.Printf("Context: %v, Channel: %v", ctx, l.Channel)
+func (l *Listener[T]) Listen(ctx context.Context, ready chan struct{}, notifyFunction func(data T)) {
+	close(ready)
 	for {
 		select {
 		case <-ctx.Done():
