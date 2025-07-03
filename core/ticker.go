@@ -3,17 +3,16 @@ package core
 import (
 	"context"
 	"fmt"
+	"log"
 	"queuer/helper"
-	"queuer/model"
 	"reflect"
 	"time"
 )
 
 // Ticker represents a recurring task runner.
 type Ticker struct {
-	interval   time.Duration
-	task       interface{}
-	parameters model.Parameters
+	interval time.Duration
+	runner   *Runner
 }
 
 // NewTicker creates and returns a new Ticker instance.
@@ -27,22 +26,21 @@ func NewTicker(interval time.Duration, task interface{}, parameters ...interface
 		return nil, fmt.Errorf("error checking task: %s", reflect.TypeOf(task).Kind())
 	}
 
+	runner, err := NewRunner(nil, task, parameters...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating runner: %v", err)
+	}
+
 	return &Ticker{
-		interval:   interval,
-		task:       task,
-		parameters: model.Parameters(parameters),
+		interval: interval,
+		runner:   runner,
 	}, nil
 }
 
 // Go starts the Ticker. It runs the task at the specified interval
 // until the provided context is cancelled.
-func (t *Ticker) Go(ctx context.Context) error {
-	runner, err := NewRunner(nil, t.task, t.parameters...)
-	if err != nil {
-		return fmt.Errorf("error creating runner: %v", err)
-	}
-
-	go runner.Run(ctx)
+func (t *Ticker) Go(ctx context.Context) {
+	go t.runner.Run(ctx)
 
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
@@ -50,12 +48,14 @@ func (t *Ticker) Go(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("context cancelled: %w", ctx.Err())
+			return
 		case <-ticker.C:
-			go runner.Run(ctx)
-		case err := <-runner.ErrorChannel:
+			go t.runner.Run(ctx)
+		case err := <-t.runner.ErrorChannel:
 			if err != nil {
-				return fmt.Errorf("error running task: %w", err)
+				// TODO also implement error channel?
+				log.Printf("error running task: %v", err)
+				return
 			}
 		}
 	}

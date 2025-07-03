@@ -178,6 +178,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 	q.ctx = ctx
 	q.cancel = cancel
 
+	ready := make(chan struct{})
 	go func() {
 		ctx, cancel := context.WithCancel(q.ctx)
 		defer cancel()
@@ -191,10 +192,18 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 		}
 
 		q.log.Println("Queuer started")
+		close(ready)
 
 		<-ctx.Done()
 		q.log.Println("Queuer stopped")
 	}()
+
+	select {
+	case <-ready:
+		return
+	case <-time.After(5 * time.Second):
+		q.log.Panicln("Queuer failed to start within 5 seconds")
+	}
 }
 
 // Stop stops the queuer by closing the job listeners, cancelling all queued and running jobs,
@@ -234,9 +243,6 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 			q.log.Printf("error running job: %v", err)
 		}
 	})
-
-	// go q.jobUpdateListener.ListenToEvents(ctx, cancel)
-	// go q.jobDeleteListener.ListenToEvents(ctx, cancel)
 }
 
 func (q *Queuer) pollJobTicker(ctx context.Context) error {
@@ -255,9 +261,7 @@ func (q *Queuer) pollJobTicker(ctx context.Context) error {
 	}
 
 	q.log.Println("Starting job poll ticker...")
-	err = ticker.Go(ctx)
-	if err != nil {
-		return fmt.Errorf("error starting ticker: %v", err)
-	}
+	go ticker.Go(ctx)
+
 	return nil
 }
