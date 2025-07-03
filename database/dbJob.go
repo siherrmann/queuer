@@ -395,7 +395,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			$3,
 			$4,
 			jobs_old.created_at,
-			jobs_old.updated_at
+			CURRENT_TIMESTAMP
 		FROM jobs_old
 		RETURNING
 			id,

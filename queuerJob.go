@@ -323,14 +323,14 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 	job.Status = model.JobStatusSucceeded
 	job.Results = results
-	_, err := q.dbJob.UpdateJobFinal(job)
+	updatedJob, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		// TODO probably add retry for updating job to succeeded
 		q.log.Printf("error updating job status to succeeded: %v", err)
+	} else {
+		// Notify listener for deleted job
+		q.jobDeleteListener.Notify(updatedJob)
 	}
-
-	// Notify listener for deleted job
-	q.jobDeleteListener.Notify(job)
 
 	q.log.Printf("Job succeeded with RID %v", job.RID)
 
@@ -344,14 +344,14 @@ func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 func (q *Queuer) failJob(job *model.Job, jobErr error) {
 	job.Status = model.JobStatusFailed
 	job.Error = jobErr.Error()
-	job, err := q.dbJob.UpdateJobFinal(job)
+	updatedJob, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		// TODO probably add retry for updating job to failed
 		q.log.Printf("error updating job status to failed: %v", err)
+	} else {
+		// Notify listener for deleted job
+		q.jobDeleteListener.Notify(updatedJob)
 	}
-
-	// Notify listener for deleted job
-	q.jobDeleteListener.Notify(job)
 
 	q.log.Printf("Job failed with RID %v", job.RID)
 
