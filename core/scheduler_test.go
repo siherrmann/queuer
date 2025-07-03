@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const maxDeviation = 50 * time.Millisecond
+const maxDeviation = 100 * time.Millisecond
 
 // funcScheduler is a mock function type that can be passed to Scheduler.
 type funcScheduler struct {

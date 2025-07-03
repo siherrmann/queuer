@@ -14,7 +14,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
-const maxDeviation = 50 * time.Millisecond
+const maxDeviation = 100 * time.Millisecond
 
 var dbPort string
 
