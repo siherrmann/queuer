@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"queuer/core"
 	"queuer/database"
 	"queuer/helper"
 	"queuer/model"
@@ -32,6 +33,8 @@ func TestMain(m *testing.M) {
 	}
 }
 
+// newQueuerMock creates a new Queuer instance for testing purposes.
+// It initializes a test database connection, job listeners and worker.
 func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *Queuer {
 	// Logger
 	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
@@ -53,18 +56,12 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 	}
 
 	// Job listeners
-	jobInsertListener, err := database.NewQueuerListener(dbConfig, "job.INSERT")
+	jobInsertListener, err := database.NewQueuerDBListener(dbConfig, "job.INSERT")
 	if err != nil {
 		logger.Fatalf("failed to create job insert listener: %v", err)
 	}
-	jobUpdateListener, err := database.NewQueuerListener(dbConfig, "job.UPDATE")
-	if err != nil {
-		logger.Fatalf("failed to create job update listener: %v", err)
-	}
-	jobDeleteListener, err := database.NewQueuerListener(dbConfig, "job.DELETE")
-	if err != nil {
-		logger.Fatalf("failed to create job delete listener: %v", err)
-	}
+	jobUpdateListener := core.NewListener[*model.Job]()
+	jobDeleteListener := core.NewListener[*model.Job]()
 
 	// Inserting worker
 	var newWorker *model.Worker

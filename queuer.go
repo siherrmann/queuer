@@ -26,8 +26,8 @@ type Queuer struct {
 	dbWorker database.WorkerDBHandlerFunctions
 	// Job listeners
 	jobInsertListener *database.QueuerListener
-	jobUpdateListener *database.QueuerListener
-	jobDeleteListener *database.QueuerListener
+	jobUpdateListener *core.Listener[*model.Job]
+	jobDeleteListener *core.Listener[*model.Job]
 	JobPollInterval   time.Duration
 	// Available functions
 	tasks             map[string]*model.Task
@@ -68,18 +68,12 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	}
 
 	// Job listeners
-	jobInsertListener, err := database.NewQueuerListener(dbConfig, "job.INSERT")
+	jobInsertListener, err := database.NewQueuerDBListener(dbConfig, "job.INSERT")
 	if err != nil {
 		logger.Panicf("failed to create job insert listener: %v", err)
 	}
-	jobUpdateListener, err := database.NewQueuerListener(dbConfig, "job.UPDATE")
-	if err != nil {
-		logger.Panicf("failed to create job update listener: %v", err)
-	}
-	jobDeleteListener, err := database.NewQueuerListener(dbConfig, "job.DELETE")
-	if err != nil {
-		logger.Panicf("failed to create job delete listener: %v", err)
-	}
+	jobUpdateListener := core.NewListener[*model.Job]()
+	jobDeleteListener := core.NewListener[*model.Job]()
 
 	// Inserting worker
 	var newWorker *model.Worker
@@ -151,27 +145,21 @@ func NewQueuerWithoutWorker() *Queuer {
 	// TODO: Add job listeners to line 83 in readme.
 	// TODO: Update comment to: It initializes the database connection and job listeners.
 	// Job listeners
-	// jobInsertListener, err := database.NewQueuerListener(dbConfig, "job.INSERT")
-	// if err != nil {
-	// 	logger.Panicf("failed to create job insert listener: %v", err)
-	// }
-	// jobUpdateListener, err := database.NewQueuerListener(dbConfig, "job.UPDATE")
-	// if err != nil {
-	// 	logger.Panicf("failed to create job update listener: %v", err)
-	// }
-	// jobDeleteListener, err := database.NewQueuerListener(dbConfig, "job.DELETE")
-	// if err != nil {
-	// 	logger.Panicf("failed to create job delete listener: %v", err)
-	// }
+	jobInsertListener, err := database.NewQueuerDBListener(dbConfig, "job.INSERT")
+	if err != nil {
+		logger.Panicf("failed to create job insert listener: %v", err)
+	}
+	jobUpdateListener := core.NewListener[*model.Job]()
+	jobDeleteListener := core.NewListener[*model.Job]()
 
 	logger.Println("Queuer without worker created")
 
 	return &Queuer{
-		dbJob:    dbJob,
-		dbWorker: dbWorker,
-		// jobInsertListener: jobInsertListener,
-		// jobUpdateListener: jobUpdateListener,
-		// jobDeleteListener: jobDeleteListener,
+		dbJob:             dbJob,
+		dbWorker:          dbWorker,
+		jobInsertListener: jobInsertListener,
+		jobUpdateListener: jobUpdateListener,
+		jobDeleteListener: jobDeleteListener,
 		JobPollInterval:   1 * time.Minute,
 		tasks:             map[string]*model.Task{},
 		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
@@ -212,22 +200,11 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 // Stop stops the queuer by closing the job listeners, cancelling all queued and running jobs,
 // and cancelling the context to stop the queuer.
 func (q *Queuer) Stop() error {
+	// Close db listeners
 	if q.jobInsertListener != nil {
 		err := q.jobInsertListener.Listener.Close()
 		if err != nil {
 			return fmt.Errorf("error closing job insert listener: %v", err)
-		}
-	}
-	if q.jobUpdateListener != nil {
-		err := q.jobUpdateListener.Listener.Close()
-		if err != nil {
-			return fmt.Errorf("error closing job update listener: %v", err)
-		}
-	}
-	if q.jobDeleteListener != nil {
-		err := q.jobDeleteListener.Listener.Close()
-		if err != nil {
-			return fmt.Errorf("error closing job delete listener: %v", err)
 		}
 	}
 
@@ -251,7 +228,7 @@ func (q *Queuer) Stop() error {
 
 // listen listens to job events and runs the initial job processing.
 func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
-	go q.jobInsertListener.ListenToEvents(ctx, cancel, func(data string) {
+	go q.jobInsertListener.Listen(ctx, cancel, func(data string) {
 		err := q.runJobInitial()
 		if err != nil {
 			q.log.Printf("error running job: %v", err)

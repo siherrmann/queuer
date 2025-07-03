@@ -183,6 +183,9 @@ func (q *Queuer) runJobInitial() error {
 	}
 
 	for _, job := range jobs {
+		// Notify listener for initial job
+		q.jobUpdateListener.Notify(job)
+
 		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
 			scheduler, err := core.NewScheduler(
 				&job.Options.Schedule.Start,
@@ -299,6 +302,9 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 			if err != nil {
 				q.log.Printf("error updating job status to cancelled: %v", err)
 			}
+
+			// Notify listener for deleted job
+			q.jobDeleteListener.Notify(job)
 		})
 	case model.JobStatusScheduled, model.JobStatusQueued:
 		job.Status = model.JobStatusCancelled
@@ -306,6 +312,9 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 		if err != nil {
 			q.log.Printf("error updating job status to cancelled: %v", err)
 		}
+
+		// Notify listener for deleted job
+		q.jobDeleteListener.Notify(job)
 	}
 	return nil
 }
@@ -320,6 +329,9 @@ func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 		q.log.Printf("error updating job status to succeeded: %v", err)
 	}
 
+	// Notify listener for deleted job
+	q.jobDeleteListener.Notify(job)
+
 	q.log.Printf("Job succeeded with RID %v", job.RID)
 
 	// Try running next job if available
@@ -332,11 +344,14 @@ func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 func (q *Queuer) failJob(job *model.Job, jobErr error) {
 	job.Status = model.JobStatusFailed
 	job.Error = jobErr.Error()
-	_, err := q.dbJob.UpdateJobFinal(job)
+	job, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		// TODO probably add retry for updating job to failed
 		q.log.Printf("error updating job status to failed: %v", err)
 	}
+
+	// Notify listener for deleted job
+	q.jobDeleteListener.Notify(job)
 
 	q.log.Printf("Job failed with RID %v", job.RID)
 

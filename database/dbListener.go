@@ -15,8 +15,8 @@ type QueuerListener struct {
 	Channel  string
 }
 
-// NewQueuerListener creates a new QueuerListener instance.
-func NewQueuerListener(dbConfig *helper.DatabaseConfiguration, channel string) (*QueuerListener, error) {
+// NewQueuerDBListener creates a new QueuerListener instance.
+func NewQueuerDBListener(dbConfig *helper.DatabaseConfiguration, channel string) (*QueuerListener, error) {
 	listener := pq.NewListener(dbConfig.DatabaseConnectionString(), 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
 		if err != nil {
 			fmt.Printf("error creating postgres listener: %v", err)
@@ -35,8 +35,8 @@ func NewQueuerListener(dbConfig *helper.DatabaseConfiguration, channel string) (
 	}, nil
 }
 
-// ListenToEvents listens for events on the specified channel and processes them.
-func (l *QueuerListener) ListenToEvents(ctx context.Context, cancel context.CancelFunc, notifyFunction func(data string)) {
+// Listen listens for events on the specified channel and processes them.
+func (l *QueuerListener) Listen(ctx context.Context, cancel context.CancelFunc, notifyFunction func(data string)) {
 	for {
 		select {
 		case <-ctx.Done():
