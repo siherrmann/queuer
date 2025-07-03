@@ -125,7 +125,7 @@ func TestScheduleWithDelay(t *testing.T) {
 		assert.GreaterOrEqual(t, duration, delay, "Task should execute after the specified delay")
 		assert.Less(t, duration, delay+maxDeviation, "Task should execute reasonably close to the delay") // Add a small buffer
 	case <-time.After(delay + maxDeviation):
-		t.Fatal("Task did not execute within the expected time frame")
+		t.Error("Task did not execute within the expected time frame")
 	}
 }
 
@@ -152,7 +152,7 @@ func TestScheduleTimeInPast(t *testing.T) {
 		duration := time.Since(start)
 		assert.Less(t, duration, maxDeviation, "Task should execute almost immediately if start time is in the past")
 	case <-time.After(maxDeviation):
-		t.Fatal("Task did not execute immediately as expected")
+		t.Error("Task did not execute immediately as expected")
 	}
 }
 
@@ -179,7 +179,7 @@ func TestScheduleNoDelay(t *testing.T) {
 		duration := time.Since(start)
 		assert.Less(t, duration, 50*time.Millisecond, "Task should execute almost immediately if delay is zero")
 	case <-time.After(maxDeviation):
-		t.Fatal("Task did not execute immediately as expected")
+		t.Error("Task did not execute immediately as expected")
 	}
 }
 
@@ -209,6 +209,6 @@ func TestScheduleWithWorkDuration(t *testing.T) {
 		assert.GreaterOrEqual(t, duration, delay+workDuration, "Total duration should be delay + work duration")
 		assert.Less(t, duration, delay+workDuration+maxDeviation, "Total duration should be reasonable")
 	case <-time.After(delay + workDuration + maxDeviation):
-		t.Fatal("Task did not execute within the expected time frame")
+		t.Error("Task did not execute within the expected time frame")
 	}
 }

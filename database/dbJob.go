@@ -38,18 +38,19 @@ type JobDBHandler struct {
 }
 
 // NewJobDBHandler creates a new instance of JobDBHandler.
-func NewJobDBHandler(dbConnection *helper.Database) (*JobDBHandler, error) {
+func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBHandler, error) {
 	jobDbHandler := &JobDBHandler{
 		db: dbConnection,
 	}
 
-	// TODO Remove table drop
-	err := jobDbHandler.DropTable()
-	if err != nil {
-		return nil, fmt.Errorf("error dropping job table: %#v", err)
+	if withTableDrop {
+		err := jobDbHandler.DropTable()
+		if err != nil {
+			return nil, fmt.Errorf("error dropping job table: %#v", err)
+		}
 	}
 
-	err = jobDbHandler.CreateTable()
+	err := jobDbHandler.CreateTable()
 	if err != nil {
 		return nil, fmt.Errorf("error creating job table: %#v", err)
 	}

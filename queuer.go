@@ -58,11 +58,11 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	// DBs
 	var dbJob database.JobDBHandlerFunctions
 	var dbWorker database.WorkerDBHandlerFunctions
-	dbJob, err = database.NewJobDBHandler(dbConnection)
+	dbJob, err = database.NewJobDBHandler(dbConnection, false)
 	if err != nil {
 		logger.Panicf("failed to create job db handler: %v", err)
 	}
-	dbWorker, err = database.NewWorkerDBHandler(dbConnection)
+	dbWorker, err = database.NewWorkerDBHandler(dbConnection, false)
 	if err != nil {
 		logger.Panicf("failed to create worker db handler: %v", err)
 	}
@@ -133,11 +133,11 @@ func NewQueuerWithoutWorker() *Queuer {
 	// DBs
 	var dbJob database.JobDBHandlerFunctions
 	var dbWorker database.WorkerDBHandlerFunctions
-	dbJob, err = database.NewJobDBHandler(dbConnection)
+	dbJob, err = database.NewJobDBHandler(dbConnection, false)
 	if err != nil {
 		logger.Panicf("failed to create job db handler: %v", err)
 	}
-	dbWorker, err = database.NewWorkerDBHandler(dbConnection)
+	dbWorker, err = database.NewWorkerDBHandler(dbConnection, false)
 	if err != nil {
 		logger.Panicf("failed to create worker db handler: %v", err)
 	}

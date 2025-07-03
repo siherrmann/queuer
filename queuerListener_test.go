@@ -23,7 +23,7 @@ func TestListenForJobUpdate(t *testing.T) {
 	})
 	require.NoError(t, err, "expected to successfully listen for job updates")
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// Notify the listener manually
 	q.jobUpdateListener.Notify(data)
@@ -33,7 +33,7 @@ func TestListenForJobUpdate(t *testing.T) {
 		assert.NotNil(t, receivedData, "expected to receive job data")
 		assert.Equal(t, data.RID, receivedData.RID, "expected to receive the same job RID")
 	default:
-		t.Fatal("expected to receive job data, but got nothing")
+		t.Error("expected to receive job data, but got nothing")
 	}
 }
 
@@ -49,7 +49,7 @@ func TestListenForJobDelete(t *testing.T) {
 	})
 	require.NoError(t, err, "expected to successfully listen for job deletions")
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// Notify the listener manually
 	q.jobDeleteListener.Notify(data)
@@ -59,6 +59,6 @@ func TestListenForJobDelete(t *testing.T) {
 		assert.NotNil(t, receivedData, "expected to receive job data")
 		assert.Equal(t, data.RID, receivedData.RID, "expected to receive the same job RID")
 	default:
-		t.Fatal("expected to receive job data, but got nothing")
+		t.Error("expected to receive job data, but got nothing")
 	}
 }

@@ -15,11 +15,11 @@ func TestWorkerNewWorkerDBHandler(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	if workerDBHandler == nil || workerDBHandler.db == nil || workerDBHandler.db.Instance == nil {
-		t.Fatal("Expected NewWorkerDBHandler to return a non-nil instance")
+		t.Error("Expected NewWorkerDBHandler to return a non-nil instance")
 	}
 }
 
@@ -27,7 +27,7 @@ func TestWorkerCheckTableExistance(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	exists, err := workerDBHandler.CheckTableExistance()
@@ -39,7 +39,7 @@ func TestWorkerCreateTable(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	err = workerDBHandler.CreateTable()
@@ -50,7 +50,7 @@ func TestWorkerDropTable(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	err = workerDBHandler.DropTable()
@@ -61,7 +61,7 @@ func TestWorkerInsertWorker(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
@@ -81,7 +81,7 @@ func TestWorkerUpdateWorker(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
@@ -114,7 +114,7 @@ func TestWorkerDeleteWorker(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
@@ -136,7 +136,7 @@ func TestWorkerSelectWorker(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
@@ -156,7 +156,7 @@ func TestWorkerSelectAllWorkers(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	// Insert multiple workers
@@ -182,7 +182,7 @@ func TestWorkerSelectAllWorkersBySearch(t *testing.T) {
 	dbConfig := helper.NewTestDatabaseConfig(port)
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database)
+	workerDBHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	// Insert multiple workers with different names

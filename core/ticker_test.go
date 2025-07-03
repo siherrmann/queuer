@@ -131,7 +131,7 @@ outerLoop:
 			}
 		case <-time.After((interval * time.Duration(waitingForCount)) + 50*time.Millisecond):
 			cancel()
-			t.Fatal("Task did not execute within the expected time frame")
+			t.Error("Task did not execute within the expected time frame")
 		}
 	}
 }
@@ -164,7 +164,7 @@ outerLoop:
 			}
 		case <-time.After((interval * time.Duration(waitingForCount)) + 50*time.Millisecond):
 			cancel()
-			t.Fatal("Task did not execute within the expected time frame")
+			t.Error("Task did not execute within the expected time frame")
 		}
 	}
 }

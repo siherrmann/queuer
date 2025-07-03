@@ -46,11 +46,11 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 	// DBs
 	var dbJob database.JobDBHandlerFunctions
 	var dbWorker database.WorkerDBHandlerFunctions
-	dbJob, err := database.NewJobDBHandler(dbConnection)
+	dbJob, err := database.NewJobDBHandler(dbConnection, true)
 	if err != nil {
 		logger.Fatalf("failed to create job db handler: %v", err)
 	}
-	dbWorker, err = database.NewWorkerDBHandler(dbConnection)
+	dbWorker, err = database.NewWorkerDBHandler(dbConnection, true)
 	if err != nil {
 		logger.Fatalf("failed to create worker db handler: %v", err)
 	}

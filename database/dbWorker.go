@@ -31,18 +31,19 @@ type WorkerDBHandler struct {
 }
 
 // NewWorkerDBHandler creates a new instance of WorkerDBHandler.
-func NewWorkerDBHandler(dbConnection *helper.Database) (*WorkerDBHandler, error) {
+func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*WorkerDBHandler, error) {
 	workerDbHandler := &WorkerDBHandler{
 		db: dbConnection,
 	}
 
-	// TODO Remove table drop
-	err := workerDbHandler.DropTable()
-	if err != nil {
-		return nil, fmt.Errorf("error dropping worker table: %#v", err)
+	if withTableDrop {
+		err := workerDbHandler.DropTable()
+		if err != nil {
+			return nil, fmt.Errorf("error dropping worker table: %#v", err)
+		}
 	}
 
-	err = workerDbHandler.CreateTable()
+	err := workerDbHandler.CreateTable()
 	if err != nil {
 		return nil, fmt.Errorf("error creating worker table: %#v", err)
 	}
