@@ -11,13 +11,13 @@ type Listener[T any] struct {
 
 func NewListener[T any]() *Listener[T] {
 	return &Listener[T]{
-		Channel: make(chan T, 1),
+		Channel: make(chan T),
 	}
 }
 
 func (l *Listener[T]) Listen(ctx context.Context, notifyFunction func(data T)) {
+	log.Printf("Context: %v, Channel: %v", ctx, l.Channel)
 	for {
-		log.Printf("Context: %v, Channel: %v", ctx, l.Channel)
 		select {
 		case <-ctx.Done():
 			return
@@ -30,6 +30,10 @@ func (l *Listener[T]) Listen(ctx context.Context, notifyFunction func(data T)) {
 }
 
 func (l *Listener[T]) Notify(data T) {
-	log.Printf("Listener notified with data: %v", data)
-	l.Channel <- data
+	select {
+	case l.Channel <- data:
+		log.Printf("Listener notified with data: %v", data)
+	default:
+		log.Printf("No listener for data: %v", data)
+	}
 }

@@ -86,6 +86,7 @@ func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID, entries int) error {
 		return fmt.Errorf("error selecting jobs by worker RID %v: %v", workerRid, err)
 	}
 
+	log.Printf("Cancelling %d jobs for worker with RID %v", len(jobs), workerRid)
 	for _, job := range jobs {
 		err := q.cancelJob(job)
 		if err != nil {
@@ -288,6 +289,7 @@ func (q *Queuer) scheduleJob(job *model.Job) {
 }
 
 func (q *Queuer) cancelJob(job *model.Job) error {
+	log.Printf("Cancelling job with RID %v", job.RID)
 	switch job.Status {
 	case model.JobStatusRunning:
 		jobRunner, found := q.activeRunners.Load(job.RID)
