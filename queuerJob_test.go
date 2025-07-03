@@ -2,6 +2,7 @@ package queuer
 
 import (
 	"context"
+	"fmt"
 	"queuer/model"
 	"strconv"
 	"testing"
@@ -24,6 +25,29 @@ func TaskMock(duration int, param2 string) (int, error) {
 	}
 
 	return duration + param2Int, nil
+}
+
+type MockFailer struct {
+	count int
+}
+
+func (m *MockFailer) TaskMockFailing(duration int, maxFailCount string) (int, error) {
+	m.count++
+
+	// Simulate some work
+	time.Sleep(time.Duration(duration) * time.Second)
+
+	// Example for some error handling
+	maxFailCountInt, err := strconv.Atoi(maxFailCount)
+	if err != nil {
+		return 0, err
+	}
+
+	if m.count < maxFailCountInt {
+		return 0, fmt.Errorf("fake fail max count reached: %d", maxFailCountInt)
+	}
+
+	return duration + maxFailCountInt, nil
 }
 
 func TestAddJob(t *testing.T) {
@@ -199,6 +223,80 @@ func TestAddJobWithOptions(t *testing.T) {
 
 		assert.Error(t, err, "AddJobWithOptions should return an error for invalid options")
 		assert.Nil(t, job, "Job should be nil for invalid options")
+	})
+}
+
+func TestAddJobWithOptionsRunning(t *testing.T) {
+	newMockFailer := &MockFailer{}
+
+	testQueuer := newQueuerMock("TestQueuer", 100)
+	testQueuer.AddTask(newMockFailer.TaskMockFailing)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.Start(ctx, cancel)
+
+	t.Run("Successfully retries a job with options", func(t *testing.T) {
+		options := &model.Options{
+			OnError: &model.OnError{
+				Timeout:      5,
+				MaxRetries:   3,
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_NONE,
+			},
+		}
+
+		job, err := testQueuer.AddJobWithOptions(options, newMockFailer.TaskMockFailing, 1, "3")
+		assert.NoError(t, err, "AddJobWithOptions should not return an error on success")
+
+		time.Sleep(4 * time.Second)
+
+		jobRunning, err := testQueuer.GetJob(job.RID)
+		assert.NoError(t, err, "GetJob should not return an error for running job")
+		require.NotNil(t, jobRunning, "GetJob should return the job that is currently running")
+		assert.Equal(t, model.JobStatusRunning, jobRunning.Status, "Job should be in Running status")
+
+		time.Sleep(2 * time.Second)
+
+		jobNotExisting, err := testQueuer.GetJob(job.RID)
+		assert.Error(t, err, "GetJob should return an error for ended job")
+		assert.Nil(t, jobNotExisting, "GetJob should return nil for ended job")
+
+		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(job.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
+		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
+		assert.Equal(t, model.JobStatusSucceeded, jobArchived.Status, "Archived job should have status Succeeded")
+	})
+
+	t.Run("Fails after max retries", func(t *testing.T) {
+		options := &model.Options{
+			OnError: &model.OnError{
+				Timeout:      5,
+				MaxRetries:   2, // Runs 3 times, first is not a retry
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_NONE,
+			},
+		}
+
+		job, err := testQueuer.AddJobWithOptions(options, newMockFailer.TaskMockFailing, 1, "100")
+		assert.NoError(t, err, "AddJobWithOptions should not return an error on success")
+
+		time.Sleep(4 * time.Second)
+
+		jobRunning, err := testQueuer.GetJob(job.RID)
+		assert.NoError(t, err, "GetJob should not return an error for running job")
+		require.NotNil(t, jobRunning, "GetJob should return the job that is currently running")
+		assert.Equal(t, model.JobStatusRunning, jobRunning.Status, "Job should be in Running status")
+
+		time.Sleep(2 * time.Second)
+
+		jobNotExisting, err := testQueuer.GetJob(job.RID)
+		assert.Error(t, err, "GetJob should return an error for ended job")
+		assert.Nil(t, jobNotExisting, "GetJob should return nil for ended job")
+
+		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(job.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
+		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
+		assert.Equal(t, model.JobStatusFailed, jobArchived.Status, "Archived job should have status Failed")
 	})
 }
 
