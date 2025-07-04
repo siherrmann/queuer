@@ -365,27 +365,31 @@ func TestCancelMethodWithOnCancelFunc(t *testing.T) {
 	runner, err := NewRunnerFromJob(mockTask, job)
 	require.NoError(t, err)
 
-	called := make(chan bool, 1)
-
-	go runner.Run(context.Background())
-
+	ready := make(chan struct{})
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		close(ready)
+		runner.Run(context.Background())
+	}()
+
+	<-ready
+	called := make(chan bool, 1)
+	go func() {
+		time.Sleep(500 * time.Millisecond)
 		runner.Cancel(func() {
 			called <- true
-		}) // Call with callback
+		})
 	}()
 
 outerLoop:
 	for {
 		select {
 		case err := <-runner.ErrorChannel:
-			assert.Error(t, err)
+			assert.Error(t, err, "Runner should return an error on cancel")
 			assert.Equal(t, <-called, true, "onCancelFunc should have been called")
-			assert.Contains(t, err.Error(), "canceled")
+			assert.Contains(t, err.Error(), "canceled", "Error should indicate cancellation")
 			break outerLoop
 		case results := <-runner.ResultsChannel:
-			assert.Nil(t, results)
+			assert.Nil(t, results, "Results should be nil on cancel")
 			break outerLoop
 		}
 	}

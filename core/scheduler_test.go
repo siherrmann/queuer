@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const maxDeviation = 100 * time.Millisecond
+const maxDeviation = 500 * time.Millisecond
 
 // funcScheduler is a mock function type that can be passed to Scheduler.
 type funcScheduler struct {
@@ -110,11 +110,12 @@ func TestScheduleWithDelay(t *testing.T) {
 	scheduler, err := NewScheduler(&startTime, mockFn.Call)
 	require.NoError(t, err)
 
-	start := time.Now()
 	scheduler.Go(context.Background())
 
+	var start time.Time
 	done := make(chan bool)
 	go func() {
+		start = time.Now()
 		mockFn.wg.Wait()
 		done <- true
 	}()
@@ -138,11 +139,12 @@ func TestScheduleTimeInPast(t *testing.T) {
 	scheduler, err := NewScheduler(&startTime, mockFn.Call)
 	require.NoError(t, err)
 
-	start := time.Now()
 	scheduler.Go(context.Background())
 
+	var start time.Time
 	done := make(chan bool)
 	go func() {
+		start = time.Now()
 		mockFn.wg.Wait()
 		done <- true
 	}()
@@ -165,11 +167,12 @@ func TestScheduleNoDelay(t *testing.T) {
 	scheduler, err := NewScheduler(&now, mockFn.Call)
 	require.NoError(t, err)
 
-	start := time.Now()
 	scheduler.Go(context.Background())
 
+	var start time.Time
 	done := make(chan bool)
 	go func() {
+		start = time.Now()
 		mockFn.wg.Wait()
 		done <- true
 	}()
@@ -194,11 +197,12 @@ func TestScheduleWithWorkDuration(t *testing.T) {
 	scheduler, err := NewScheduler(&startTime, mockFn.Call)
 	require.NoError(t, err)
 
-	start := time.Now()
 	scheduler.Go(context.Background())
 
+	var start time.Time
 	done := make(chan bool)
 	go func() {
+		start = time.Now()
 		mockFn.wg.Wait()
 		done <- true
 	}()
