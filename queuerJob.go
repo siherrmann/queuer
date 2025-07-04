@@ -3,7 +3,6 @@ package queuer
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"queuer/core"
 	"queuer/model"
 	"time"
@@ -110,7 +109,6 @@ func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
 		case job := <-jobFinished:
 			return job
 		case <-q.ctx.Done():
-			log.Println("context cancelled while waiting for job")
 			return nil
 		}
 	}
@@ -128,8 +126,6 @@ func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 		return nil, fmt.Errorf("error cancelling job with rid %v: %v", jobRid, err)
 	}
 
-	q.log.Printf("Job cancelled with RID %v", job.RID)
-
 	return job, nil
 }
 
@@ -139,13 +135,11 @@ func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID, entries int) error {
 		return fmt.Errorf("error selecting jobs by worker RID %v: %v", workerRid, err)
 	}
 
-	log.Printf("Cancelling %d jobs for worker with RID %v", len(jobs), workerRid)
 	for _, job := range jobs {
 		err := q.cancelJob(job)
 		if err != nil {
 			return fmt.Errorf("error cancelling job with rid %v: %v", job.RID, err)
 		}
-		q.log.Printf("Job cancelled with RID %v", job.RID)
 	}
 	return nil
 }
@@ -252,9 +246,6 @@ func (q *Queuer) runJobInitial() error {
 	}
 
 	for _, job := range jobs {
-		// Notify listener for initial job
-		q.jobUpdateListener.Notify(job)
-
 		if job.Options != nil && job.Options.Schedule != nil && job.Options.Schedule.Start.After(time.Now()) {
 			scheduler, err := core.NewScheduler(
 				&job.Options.Schedule.Start,
@@ -264,7 +255,8 @@ func (q *Queuer) runJobInitial() error {
 			if err != nil {
 				return fmt.Errorf("error creating scheduler: %v", err)
 			}
-			log.Printf("Scheduling job with RID %v to run at %v", job.RID, job.Options.Schedule.Start)
+
+			q.log.Printf("Scheduling job with RID %v to run at %v", job.RID, job.Options.Schedule.Start)
 			go scheduler.Go(q.ctx)
 		} else {
 			go func() {
@@ -357,7 +349,6 @@ func (q *Queuer) scheduleJob(job *model.Job) {
 }
 
 func (q *Queuer) cancelJob(job *model.Job) error {
-	log.Printf("Cancelling job with RID %v", job.RID)
 	switch job.Status {
 	case model.JobStatusRunning:
 		jobRunner, found := q.activeRunners.Load(job.RID)
@@ -372,9 +363,7 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 			if err != nil {
 				q.log.Printf("error updating job status to cancelled: %v", err)
 			}
-
-			// Notify listener for deleted job
-			q.jobDeleteListener.Notify(job)
+			q.log.Printf("Job cancelled with RID %v", job.RID)
 		})
 	case model.JobStatusScheduled, model.JobStatusQueued:
 		job.Status = model.JobStatusCancelled
@@ -382,9 +371,7 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 		if err != nil {
 			q.log.Printf("error updating job status to cancelled: %v", err)
 		}
-
-		// Notify listener for deleted job
-		q.jobDeleteListener.Notify(job)
+		q.log.Printf("Job cancelled with RID %v", job.RID)
 	}
 	return nil
 }
@@ -393,13 +380,10 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 	job.Status = model.JobStatusSucceeded
 	job.Results = results
-	updatedJob, err := q.dbJob.UpdateJobFinal(job)
+	_, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		// TODO probably add retry for updating job to succeeded
 		q.log.Printf("error updating job status to succeeded: %v", err)
-	} else {
-		// Notify listener for deleted job
-		q.jobDeleteListener.Notify(updatedJob)
 	}
 
 	q.log.Printf("Job succeeded with RID %v", job.RID)
@@ -414,13 +398,10 @@ func (q *Queuer) succeedJob(job *model.Job, results []interface{}) {
 func (q *Queuer) failJob(job *model.Job, jobErr error) {
 	job.Status = model.JobStatusFailed
 	job.Error = jobErr.Error()
-	updatedJob, err := q.dbJob.UpdateJobFinal(job)
+	_, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		// TODO probably add retry for updating job to failed
 		q.log.Printf("error updating job status to failed: %v", err)
-	} else {
-		// Notify listener for deleted job
-		q.jobDeleteListener.Notify(updatedJob)
 	}
 
 	q.log.Printf("Job failed with RID %v", job.RID)

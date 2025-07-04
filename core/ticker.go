@@ -54,7 +54,7 @@ func (t *Ticker) Go(ctx context.Context) {
 		case err := <-t.runner.ErrorChannel:
 			if err != nil {
 				// TODO also implement error channel?
-				log.Printf("error running task: %v", err)
+				log.Printf("Error running task: %v", err)
 				return
 			}
 		}

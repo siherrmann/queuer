@@ -134,17 +134,13 @@ func TestAddJobRunning(t *testing.T) {
 		queuedJob, err := testQueuer.GetJob(job.RID)
 		require.NoError(t, err, "GetJob should not return an error")
 		require.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
+		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Running status")
 
-		time.Sleep(500 * time.Millisecond)
+		job = testQueuer.WaitForJobFinished(job.RID)
+		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
 
-		jobScheduled, err := testQueuer.GetJob(job.RID)
-		assert.NoError(t, err, "GetJob should not return an error for running job")
-		require.NotNil(t, jobScheduled, "GetJob should return the job that is currently running")
-		assert.Equal(t, model.JobStatusRunning, jobScheduled.Status, "Job should be in Scheduled status")
-
-		// Wait for schedule time and job execution
-		time.Sleep(15*time.Second + maxDeviation)
-
+		// Check if the job is archived
 		jobNotExisting, err := testQueuer.GetJob(job.RID)
 		assert.Error(t, err, "GetJob should return an error for ended job")
 		assert.Nil(t, jobNotExisting, "GetJob should return nil for ended job")

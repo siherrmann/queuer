@@ -106,14 +106,24 @@ func (r JobDBHandler) CreateTable() error {
 	_, err = r.db.Instance.ExecContext(
 		ctx,
 		`CREATE OR REPLACE TRIGGER job_notify_event
-			AFTER INSERT OR UPDATE OR DELETE ON job
+			AFTER INSERT OR UPDATE ON job
 			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
 	)
 	if err != nil {
 		log.Panicf("error creating notify trigger on job table: %#v", err)
 	}
 
-	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "created_at", "updated_at") // Indexes on common search/filter fields
+	_, err = r.db.Instance.ExecContext(
+		ctx,
+		`CREATE OR REPLACE TRIGGER job_archive_notify_event
+			AFTER INSERT ON job_archive
+			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
+	)
+	if err != nil {
+		log.Panicf("error creating notify trigger on job_archive table: %#v", err)
+	}
+
+	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "created_at", "updated_at")
 	if err != nil {
 		log.Fatal(err)
 	}

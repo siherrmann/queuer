@@ -49,7 +49,7 @@ func (l *QueuerListener) Listen(ctx context.Context, cancel context.CancelFunc, 
 			// Checking connection all 90 seconds
 			err := l.Listener.Ping()
 			if err != nil {
-				log.Printf("error pinging listener: %v", err)
+				log.Printf("Error pinging listener: %v", err)
 				cancel()
 				return
 			}

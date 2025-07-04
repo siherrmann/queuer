@@ -2,7 +2,6 @@ package queuer
 
 import (
 	"context"
-	"log"
 	"queuer/model"
 	"testing"
 	"time"
@@ -13,9 +12,6 @@ import (
 )
 
 func TestListenForJobUpdate(t *testing.T) {
-	now := time.Now()
-	log.Printf("Starting test at %v", now)
-
 	q := newQueuerMock("testQueuer", 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	q.Start(ctx, cancel)

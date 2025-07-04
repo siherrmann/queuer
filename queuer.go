@@ -3,6 +3,7 @@ package queuer
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -26,8 +27,11 @@ type Queuer struct {
 	DB       *sql.DB
 	dbJob    database.JobDBHandlerFunctions
 	dbWorker database.WorkerDBHandlerFunctions
+	// Job DB listeners
+	jobDbListener        *database.QueuerListener
+	jobArchiveDbListener *database.QueuerListener
 	// Job listeners
-	jobInsertListener *database.QueuerListener
+	jobInsertListener *core.Listener[*model.Job]
 	jobUpdateListener *core.Listener[*model.Job]
 	jobDeleteListener *core.Listener[*model.Job]
 	JobPollInterval   time.Duration
@@ -70,12 +74,21 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	}
 
 	// Job listeners
-	jobInsertListener, err := database.NewQueuerDBListener(dbConfig, "job.INSERT")
+	jobDbListener, err := database.NewQueuerDBListener(dbConfig, "job")
 	if err != nil {
 		logger.Panicf("failed to create job insert listener: %v", err)
 	}
+	jobArchiveDbListener, err := database.NewQueuerDBListener(dbConfig, "job_archive")
+	if err != nil {
+		logger.Panicf("failed to create job update listener: %v", err)
+	}
 
 	// Broadcasters for job updates and deletes
+	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
+	jobInsertListener, err := core.NewListener(broadcasterJobInsert)
+	if err != nil {
+		logger.Panicf("failed to create job insert listener: %v", err)
+	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	jobUpdateListener, err := core.NewListener(broadcasterJobUpdate)
 	if err != nil {
@@ -109,17 +122,19 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 	logger.Printf("Queuer %s created with worker RID %s", worker.Name, worker.RID.String())
 
 	return &Queuer{
-		worker:            worker,
-		DB:                dbConnection.Instance,
-		dbJob:             dbJob,
-		dbWorker:          dbWorker,
-		jobInsertListener: jobInsertListener,
-		jobUpdateListener: jobUpdateListener,
-		jobDeleteListener: jobDeleteListener,
-		JobPollInterval:   1 * time.Minute,
-		tasks:             map[string]*model.Task{},
-		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
-		log:               logger,
+		worker:               worker,
+		DB:                   dbConnection.Instance,
+		dbJob:                dbJob,
+		dbWorker:             dbWorker,
+		jobDbListener:        jobDbListener,
+		jobArchiveDbListener: jobArchiveDbListener,
+		jobInsertListener:    jobInsertListener,
+		jobUpdateListener:    jobUpdateListener,
+		jobDeleteListener:    jobDeleteListener,
+		JobPollInterval:      1 * time.Minute,
+		tasks:                map[string]*model.Task{},
+		nextIntervalFuncs:    map[string]model.NextIntervalFunc{},
+		log:                  logger,
 	}
 }
 
@@ -156,12 +171,21 @@ func NewQueuerWithoutWorker() *Queuer {
 	}
 
 	// Job listeners
-	jobInsertListener, err := database.NewQueuerDBListener(dbConfig, "job.INSERT")
+	jobDbListener, err := database.NewQueuerDBListener(dbConfig, "job")
 	if err != nil {
 		logger.Panicf("failed to create job insert listener: %v", err)
 	}
+	jobArchiveDbListener, err := database.NewQueuerDBListener(dbConfig, "job_archive")
+	if err != nil {
+		logger.Panicf("failed to create job update listener: %v", err)
+	}
 
 	// Broadcasters for job updates and deletes
+	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
+	jobInsertListener, err := core.NewListener(broadcasterJobInsert)
+	if err != nil {
+		logger.Panicf("failed to create job insert listener: %v", err)
+	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	jobUpdateListener, err := core.NewListener(broadcasterJobUpdate)
 	if err != nil {
@@ -176,16 +200,18 @@ func NewQueuerWithoutWorker() *Queuer {
 	logger.Println("Queuer without worker created")
 
 	return &Queuer{
-		DB:                dbConnection.Instance,
-		dbJob:             dbJob,
-		dbWorker:          dbWorker,
-		jobInsertListener: jobInsertListener,
-		jobUpdateListener: jobUpdateListener,
-		jobDeleteListener: jobDeleteListener,
-		JobPollInterval:   1 * time.Minute,
-		tasks:             map[string]*model.Task{},
-		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
-		log:               logger,
+		DB:                   dbConnection.Instance,
+		dbJob:                dbJob,
+		dbWorker:             dbWorker,
+		jobDbListener:        jobDbListener,
+		jobArchiveDbListener: jobArchiveDbListener,
+		jobInsertListener:    jobInsertListener,
+		jobUpdateListener:    jobUpdateListener,
+		jobDeleteListener:    jobDeleteListener,
+		JobPollInterval:      1 * time.Minute,
+		tasks:                map[string]*model.Task{},
+		nextIntervalFuncs:    map[string]model.NextIntervalFunc{},
+		log:                  logger,
 	}
 }
 
@@ -193,7 +219,7 @@ func NewQueuerWithoutWorker() *Queuer {
 // It checks if the queuer is initialized properly, and if not, it logs a panic error and exits the program.
 // It runs the job processing in a separate goroutine and listens for job events.
 func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
-	if q.dbJob == nil || q.dbWorker == nil || q.jobInsertListener == nil || q.jobUpdateListener == nil || q.jobDeleteListener == nil {
+	if q.dbJob == nil || q.dbWorker == nil || q.jobDbListener == nil || q.jobUpdateListener == nil || q.jobDeleteListener == nil {
 		q.log.Panicln("worker is not initialized properly")
 	}
 
@@ -232,8 +258,8 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 // and cancelling the context to stop the queuer.
 func (q *Queuer) Stop() error {
 	// Close db listeners
-	if q.jobInsertListener != nil {
-		err := q.jobInsertListener.Listener.Close()
+	if q.jobDbListener != nil {
+		err := q.jobDbListener.Listener.Close()
 		if err != nil {
 			return fmt.Errorf("error closing job insert listener: %v", err)
 		}
@@ -259,11 +285,35 @@ func (q *Queuer) Stop() error {
 
 // listen listens to job events and runs the initial job processing.
 func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
-	go q.jobInsertListener.Listen(ctx, cancel, func(data string) {
-		err := q.runJobInitial()
+	go q.jobDbListener.Listen(ctx, cancel, func(data string) {
+		job := &model.JobFromNotification{}
+		err := json.Unmarshal([]byte(data), job)
 		if err != nil {
-			q.log.Printf("error running job: %v", err)
+			q.log.Printf("error unmarshalling job data: %v", err)
+			return
 		}
+
+		if job.Status == model.JobStatusQueued {
+			err = q.runJobInitial()
+			if err != nil {
+				q.log.Printf("error running job: %v", err)
+				return
+			}
+			q.jobInsertListener.Notify(job.ToJob())
+		} else {
+			q.jobUpdateListener.Notify(job.ToJob())
+		}
+	})
+
+	go q.jobArchiveDbListener.Listen(ctx, cancel, func(data string) {
+		job := &model.JobFromNotification{}
+		err := json.Unmarshal([]byte(data), job)
+		if err != nil {
+			q.log.Printf("error unmarshalling job data: %v", err)
+			return
+		}
+
+		q.jobDeleteListener.Notify(job.ToJob())
 	})
 }
 

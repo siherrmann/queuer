@@ -14,8 +14,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
-const maxDeviation = 100 * time.Millisecond
-
 var dbPort string
 
 func TestMain(m *testing.M) {
@@ -56,12 +54,21 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 	}
 
 	// Job listeners
-	jobInsertListener, err := database.NewQueuerDBListener(dbConfig, "job.INSERT")
+	jobDbListener, err := database.NewQueuerDBListener(dbConfig, "job")
 	if err != nil {
 		logger.Fatalf("failed to create job insert listener: %v", err)
 	}
+	jobArchiveDbListener, err := database.NewQueuerDBListener(dbConfig, "job_archive")
+	if err != nil {
+		logger.Fatalf("failed to create job archive listener: %v", err)
+	}
 
 	// Broadcasters for job updates and deletes
+	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
+	jobInsertListener, err := core.NewListener(broadcasterJobInsert)
+	if err != nil {
+		logger.Panicf("failed to create job insert listener: %v", err)
+	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	jobUpdateListener, err := core.NewListener(broadcasterJobUpdate)
 	if err != nil {
@@ -94,16 +101,18 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 	logger.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
 
 	return &Queuer{
-		worker:            worker,
-		DB:                dbConnection.Instance,
-		dbJob:             dbJob,
-		dbWorker:          dbWorker,
-		jobInsertListener: jobInsertListener,
-		jobUpdateListener: jobUpdateListener,
-		jobDeleteListener: jobDeleteListener,
-		JobPollInterval:   1 * time.Minute,
-		tasks:             map[string]*model.Task{},
-		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
-		log:               logger,
+		worker:               worker,
+		DB:                   dbConnection.Instance,
+		dbJob:                dbJob,
+		dbWorker:             dbWorker,
+		jobDbListener:        jobDbListener,
+		jobArchiveDbListener: jobArchiveDbListener,
+		jobInsertListener:    jobInsertListener,
+		jobUpdateListener:    jobUpdateListener,
+		jobDeleteListener:    jobDeleteListener,
+		JobPollInterval:      1 * time.Minute,
+		tasks:                map[string]*model.Task{},
+		nextIntervalFuncs:    map[string]model.NextIntervalFunc{},
+		log:                  logger,
 	}
 }

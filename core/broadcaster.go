@@ -9,6 +9,7 @@ type Broadcaster[T any] struct {
 
 func NewBroadcaster[T any](name string) *Broadcaster[T] {
 	return &Broadcaster[T]{
+		name:      name,
 		listeners: make(map[chan T]bool),
 	}
 }

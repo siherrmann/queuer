@@ -80,16 +80,21 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 
 	var connectOnce sync.Once
 	var db *sql.DB
-	var err error
-
-	logger.Printf("initializing the database with ip address: %v", dbConfig.Host)
 
 	connectOnce.Do(func() {
-		db, err = sql.Open("postgres", dbConfig.DatabaseConnectionString())
+		dsn, err := pq.ParseURL(dbConfig.DatabaseConnectionString())
 		if err != nil {
-			logger.Panicf("error establishing connection to db: %v. Trying again.", err.Error())
+			logger.Fatalf("error parsing database connection string: %v", err)
 		}
 
+		base, err := pq.NewConnector(dsn)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		db = sql.OpenDB(pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+			// log.Printf("Notice sent: %s", notice.Message)
+		}))
 		db.SetMaxOpenConns(10)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -106,7 +111,7 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 		if pingErr != nil {
 			logger.Fatal(pingErr)
 		}
-		logger.Println("connected to db")
+		logger.Println("Connected to db")
 	})
 
 	d.Instance = db
@@ -121,17 +126,25 @@ func (d *Database) AddNotifyFunction() error {
 		`CREATE OR REPLACE FUNCTION notify_event() RETURNS TRIGGER AS $$
 			DECLARE
 				data JSON;
+				channel TEXT;
 			BEGIN
-				PERFORM pg_notify(TG_TABLE_NAME || '.' || TG_OP, data::text);
+				IF (TG_TABLE_NAME = 'job') OR (TG_TABLE_NAME = 'worker') THEN
+					channel := TG_TABLE_NAME;
+				ELSE
+					channel := 'job_archive';
+				END IF;
+
+				IF (TG_OP = 'DELETE') THEN
+					data = row_to_json(OLD);
+				ELSE
+					data = row_to_json(NEW);
+				END IF;
+				PERFORM pg_notify(channel, data::text);
 				RETURN NEW;
 			END;
 		$$ LANGUAGE plpgsql;`,
 	)
-	// IF (TG_OP = 'DELETE') THEN
-	// 	data = row_to_json(OLD);
-	// ELSE
-	// 	data = row_to_json(NEW);
-	// END IF;
+
 	if err != nil {
 		return fmt.Errorf("error creating notify function: %#v", err)
 	}
@@ -329,15 +342,12 @@ func (d *Database) Health() map[string]string {
 	if dbStats.OpenConnections > 40 { // Assuming 50 is the max for this example
 		stats["message"] = "The database is experiencing heavy load."
 	}
-
 	if dbStats.WaitCount > 1000 {
 		stats["message"] = "The database has a high number of wait events, indicating potential bottlenecks."
 	}
-
 	if dbStats.MaxIdleClosed > int64(dbStats.OpenConnections)/2 {
 		stats["message"] = "Many idle connections are being closed, consider revising the connection pool settings."
 	}
-
 	if dbStats.MaxLifetimeClosed > int64(dbStats.OpenConnections)/2 {
 		stats["message"] = "Many connections are being closed due to max lifetime, consider increasing max lifetime or revising the connection usage pattern."
 	}
