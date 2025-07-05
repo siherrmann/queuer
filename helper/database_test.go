@@ -109,3 +109,160 @@ func TestClose(t *testing.T) {
 
 	assert.NotNil(t, database, "expected NewDatabase to return a non-nil instance")
 }
+
+func TestCheckTableExistance(t *testing.T) {
+	dbConfig := NewTestDatabaseConfig(dbPort)
+	database := NewTestDatabase(dbConfig)
+
+	_, err := database.Instance.Exec(
+		`CREATE TABLE IF NOT EXISTS test_table_existance (
+			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			name TEXT NOT NULL
+		);`,
+	)
+	if err != nil {
+		log.Panicf("error creating job table: %#v", err)
+	}
+
+	exists, err := database.CheckTableExistance("test_table_existance")
+	assert.NoError(t, err, "expected no error when checking table existence")
+	assert.True(t, exists, "expected 'workers' table to exist")
+
+	exists, err = database.CheckTableExistance("non_existing_table")
+	assert.NoError(t, err, "expected no error when checking non-existing table")
+	assert.False(t, exists, "expected 'non_existing_table' to not exist")
+}
+
+func TestCreateIndex(t *testing.T) {
+	dbConfig := NewTestDatabaseConfig(dbPort)
+	database := NewTestDatabase(dbConfig)
+
+	// Create a test table
+	_, err := database.Instance.Exec(
+		`CREATE TABLE IF NOT EXISTS test_index (
+			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			name TEXT NOT NULL
+		);`,
+	)
+	if err != nil {
+		log.Panicf("error creating test_index table: %#v", err)
+	}
+
+	err = database.CreateIndex("test_index", "name")
+	assert.NoError(t, err, "expected no error when creating index")
+
+	err = database.CreateIndex("test_index", "name")
+	assert.NoError(t, err, "expected no error when creating existing index")
+
+	// Clean up should work when the index exists
+	err = database.DropIndex("test_index", "name")
+	assert.NoError(t, err, "expected no error when dropping index")
+}
+
+func TestCreateIndexes(t *testing.T) {
+	dbConfig := NewTestDatabaseConfig(dbPort)
+	database := NewTestDatabase(dbConfig)
+
+	// Create a test table
+	_, err := database.Instance.Exec(
+		`CREATE TABLE IF NOT EXISTS test_indexes (
+			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			name1 TEXT NOT NULL,
+			name2 TEXT NOT NULL
+		);`,
+	)
+	if err != nil {
+		log.Panicf("error creating test_indexes table: %#v", err)
+	}
+
+	err = database.CreateIndexes("test_indexes", []string{"name1", "name2"}...)
+	assert.NoError(t, err, "expected no error when creating indexes")
+
+	err = database.CreateIndexes("test_indexes", []string{"name1"}...)
+	assert.NoError(t, err, "expected no error when creating existing indexes")
+
+	// Clean up should work when the index exists
+	err = database.DropIndex("test_indexes", "name1")
+	assert.NoError(t, err, "expected no error when dropping index for name1")
+	err = database.DropIndex("test_indexes", "name2")
+	assert.NoError(t, err, "expected no error when dropping index for name2")
+}
+
+func TestCreateCombinedIndex(t *testing.T) {
+	dbConfig := NewTestDatabaseConfig(dbPort)
+	database := NewTestDatabase(dbConfig)
+
+	// Create a test table
+	_, err := database.Instance.Exec(
+		`CREATE TABLE IF NOT EXISTS test_combined_index (
+			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			name1 TEXT NOT NULL,
+			name2 TEXT NOT NULL
+		);`,
+	)
+	if err != nil {
+		log.Panicf("error creating test_combined_index table: %#v", err)
+	}
+
+	err = database.CreateCombinedIndex("test_combined_index", "name1", "name2")
+	assert.NoError(t, err, "expected no error when creating combined index")
+
+	err = database.CreateCombinedIndex("test_combined_index", "name1", "name2")
+	assert.NoError(t, err, "expected no error when creating existing combined index")
+
+	// Clean up should work when the index exists
+	err = database.DropIndex("test_combined_index", "name1_name2")
+	assert.NoError(t, err, "expected no error when dropping combined index")
+}
+
+func TestCreateUniqueCombinedIndex(t *testing.T) {
+	dbConfig := NewTestDatabaseConfig(dbPort)
+	database := NewTestDatabase(dbConfig)
+
+	// Create a test table
+	_, err := database.Instance.Exec(
+		`CREATE TABLE IF NOT EXISTS test_unique_combined_index (
+			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			name1 TEXT NOT NULL,
+			name2 TEXT NOT NULL
+		);`,
+	)
+	if err != nil {
+		log.Panicf("error creating test_unique_combined_index table: %#v", err)
+	}
+
+	err = database.CreateUniqueCombinedIndex("test_unique_combined_index", "name1", "name2")
+	assert.NoError(t, err, "expected no error when creating unique combined index")
+
+	err = database.CreateUniqueCombinedIndex("test_unique_combined_index", "name1", "name2")
+	assert.NoError(t, err, "expected no error when creating existing unique combined index")
+
+	// Clean up should work when the index exists
+	err = database.DropIndex("test_unique_combined_index", "name1_name2")
+	assert.NoError(t, err, "expected no error when dropping unique combined index")
+}
+
+func TestDropIndex(t *testing.T) {
+	dbConfig := NewTestDatabaseConfig(dbPort)
+	database := NewTestDatabase(dbConfig)
+
+	// Create a test table
+	_, err := database.Instance.Exec(
+		`CREATE TABLE IF NOT EXISTS test_drop_index (
+			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			name TEXT NOT NULL
+		);`,
+	)
+	if err != nil {
+		log.Panicf("error creating test_drop_index table: %#v", err)
+	}
+
+	err = database.CreateIndex("test_drop_index", "name")
+	assert.NoError(t, err, "expected no error when creating index")
+
+	err = database.DropIndex("test_drop_index", "name")
+	assert.NoError(t, err, "expected no error when dropping index")
+
+	err = database.DropIndex("test_drop_index", "name")
+	assert.NoError(t, err, "expected no error when dropping non-existing index")
+}
