@@ -134,31 +134,40 @@ func NewJob(task interface{}, options *Options, parameters ...interface{}) (*Job
 }
 
 type JobFromNotification struct {
-	ID         int        `json:"id"`
-	RID        uuid.UUID  `json:"rid"`
-	WorkerID   int        `json:"worker_id"`
-	WorkerRID  uuid.UUID  `json:"worker_rid"`
-	TaskName   string     `json:"task_name"`
-	Parameters Parameters `json:"parameters"`
-	Status     string     `json:"status"`
-	Attempts   int        `json:"attempts"`
-	Result     Parameters `json:"result"`
-	CreatedAt  DBTime     `json:"created_at"`
-	UpdatedAt  DBTime     `json:"updated_at"`
+	ID          int        `json:"id"`
+	RID         uuid.UUID  `json:"rid"`
+	WorkerID    int        `json:"worker_id"`
+	WorkerRID   uuid.UUID  `json:"worker_rid"`
+	Options     *Options   `json:"options"`
+	TaskName    string     `json:"task_name"`
+	Parameters  Parameters `json:"parameters"`
+	Status      string     `json:"status"`
+	ScheduledAt DBTime     `json:"scheduled_at"`
+	StartedAt   DBTime     `json:"started_at"`
+	Attempts    int        `json:"attempts"`
+	Results     Parameters `json:"result"`
+	Error       string     `json:"error"`
+	CreatedAt   DBTime     `json:"created_at"`
+	UpdatedAt   DBTime     `json:"updated_at"`
 }
 
 func (jn *JobFromNotification) ToJob() *Job {
 	return &Job{
-		ID:         jn.ID,
-		RID:        jn.RID,
-		WorkerID:   jn.WorkerID,
-		WorkerRID:  jn.WorkerRID,
-		TaskName:   jn.TaskName,
-		Parameters: jn.Parameters,
-		Status:     jn.Status,
-		Attempts:   jn.Attempts,
-		CreatedAt:  jn.CreatedAt.Time,
-		UpdatedAt:  jn.UpdatedAt.Time,
+		ID:          jn.ID,
+		RID:         jn.RID,
+		WorkerID:    jn.WorkerID,
+		WorkerRID:   jn.WorkerRID,
+		Options:     jn.Options,
+		TaskName:    jn.TaskName,
+		Parameters:  jn.Parameters,
+		Status:      jn.Status,
+		ScheduledAt: &jn.ScheduledAt.Time,
+		StartedAt:   &jn.StartedAt.Time,
+		Attempts:    jn.Attempts,
+		Results:     jn.Results,
+		Error:       jn.Error,
+		CreatedAt:   jn.CreatedAt.Time,
+		UpdatedAt:   jn.UpdatedAt.Time,
 	}
 }
 
@@ -169,7 +178,14 @@ type DBTime struct {
 const dbTimeLayoutWithoutZeroes = "2006-01-02T15:04:05."
 const dbTimeLayout = "2006-01-02T15:04:05.000000"
 
-func (ct *DBTime) UnmarshalJSON(b []byte) error {
+func (ct *DBTime) Marshal() ([]byte, error) {
+	if ct.Time.IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(fmt.Sprintf("\"%s\"", ct.Time.Format(dbTimeLayout))), nil
+}
+
+func (ct *DBTime) Unmarshal(b []byte) error {
 	s := strings.Trim(string(b), "\"")
 	if s == "null" {
 		ct.Time = time.Time{}
@@ -188,13 +204,6 @@ func (ct *DBTime) UnmarshalJSON(b []byte) error {
 	}
 
 	return nil
-}
-
-func (ct *DBTime) MarshalJSON() ([]byte, error) {
-	if ct.Time.IsZero() {
-		return []byte("null"), nil
-	}
-	return []byte(fmt.Sprintf("\"%s\"", ct.Time.Format(dbTimeLayout))), nil
 }
 
 func (ct *DBTime) IsSet() bool {

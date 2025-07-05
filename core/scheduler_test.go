@@ -37,7 +37,6 @@ func (m *funcScheduler) Call() {
 	m.wg.Done()
 }
 
-// TestNewScheduler tests the NewScheduler constructor with valid inputs.
 func TestNewScheduler(t *testing.T) {
 	mockFn := func() {}
 	now := time.Now()
@@ -46,7 +45,7 @@ func TestNewScheduler(t *testing.T) {
 		name      string
 		task      interface{}
 		startTime time.Time
-		expected  time.Duration // Expected 'After' duration
+		expected  time.Duration
 		wantErr   bool
 	}{
 		{
@@ -100,7 +99,6 @@ func TestNewScheduler(t *testing.T) {
 	}
 }
 
-// TestScheduleWithDelay tests if the task executes after the specified delay.
 func TestScheduleWithDelay(t *testing.T) {
 	mockFn := newFuncScheduler(0)
 	delay := 1 * time.Second
@@ -130,7 +128,6 @@ func TestScheduleWithDelay(t *testing.T) {
 	}
 }
 
-// TestScheduleTimeInPast tests if the task executes immediately if startTime is in the past.
 func TestScheduleTimeInPast(t *testing.T) {
 	mockFn := newFuncScheduler(0)
 	startTime := time.Now().Add(-5 * time.Second) // Time in the past
@@ -158,7 +155,6 @@ func TestScheduleTimeInPast(t *testing.T) {
 	}
 }
 
-// TestScheduleNoDelay tests if the task executes immediately if delay is zero.
 func TestScheduleNoDelay(t *testing.T) {
 	mockFn := newFuncScheduler(0)
 	now := time.Now() // Current time
@@ -186,7 +182,6 @@ func TestScheduleNoDelay(t *testing.T) {
 	}
 }
 
-// TestScheduleWithWorkDuration tests a task that simulates work.
 func TestScheduleWithWorkDuration(t *testing.T) {
 	workDuration := 1 * time.Second
 	mockFn := newFuncScheduler(workDuration)
