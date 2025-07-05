@@ -9,12 +9,12 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
-var port string
+var dbPort string
 
 func TestMain(m *testing.M) {
 	var teardown func(ctx context.Context, opts ...testcontainers.TerminateOption) error
 	var err error
-	teardown, port, err = helper.MustStartPostgresContainer()
+	teardown, dbPort, err = helper.MustStartPostgresContainer()
 	if err != nil {
 		log.Fatalf("error starting postgres container: %v", err)
 	}
