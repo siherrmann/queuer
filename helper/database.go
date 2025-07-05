@@ -239,59 +239,6 @@ func (d *Database) CreateUniqueCombinedIndex(tableName string, columnName1 strin
 	return nil
 }
 
-func (d *Database) CreateJsonIndexNumber(tableName string, jsonMapKey string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	tableNameQuoted := pq.QuoteIdentifier(tableName)
-	indexQuoted := pq.QuoteIdentifier("idx_" + tableName + "_" + jsonMapKey)
-	_, err := d.Instance.ExecContext(
-		ctx,
-		`CREATE INDEX IF NOT EXISTS `+indexQuoted+` ON `+tableNameQuoted+`USING BTREE ((details->>'`+jsonMapKey+`'));`,
-	)
-	if err != nil {
-		return fmt.Errorf("error creating %s json index number: %#v", indexQuoted, err)
-	}
-	return nil
-}
-
-func (d *Database) CreateJsonIndexText(tableName string, jsonMapKey string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	tableNameQuoted := pq.QuoteIdentifier(tableName)
-	indexQuoted := pq.QuoteIdentifier("idx_" + tableName + "_" + jsonMapKey)
-	_, err := d.Instance.ExecContext(
-		ctx,
-		`CREATE INDEX IF NOT EXISTS `+indexQuoted+` ON `+tableNameQuoted+` USING GIN ((details->>'`+jsonMapKey+`') gin_trgm_ops);`,
-	)
-	if err != nil {
-		return fmt.Errorf("error creating %s json index text: %#v", indexQuoted, err)
-	}
-	return nil
-}
-
-func (d *Database) CreateJsonIndexArray(tableName string, jsonMapKey string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	tableNameQuoted := pq.QuoteIdentifier(tableName)
-	indexQuoted := pq.QuoteIdentifier("idx_" + tableName + "_" + jsonMapKey)
-	_, err := d.Instance.ExecContext(
-		ctx,
-		`CREATE INDEX `+indexQuoted+` ON `+tableNameQuoted+` USING GIN ((details->'`+jsonMapKey+`') jsonb_path_ops);`,
-	)
-	if err != nil {
-		return fmt.Errorf("error creating %s json index array: %#v", indexQuoted, err)
-	}
-	// select where array contains
-	// `SELECT * from $1 where details->$2 @> '["abc", "keh"]'::jsonb;`,
-	// tableName,
-	// jsonMapKey,
-	// array
-	return nil
-}
-
 func (d *Database) DropIndex(tableName string, jsonMapKey string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
