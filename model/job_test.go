@@ -227,26 +227,26 @@ func TestMarshalAndUnmarshalDBTime(t *testing.T) {
 		require.NoError(t, err, "Parsing current time should not return an error")
 		dbTime := &DBTime{now}
 
-		marshaled, err := dbTime.Marshal()
+		marshaled, err := dbTime.MarshalJSON()
 		require.NoError(t, err, "Marshalling DBTime should not return an error")
 		assert.NotEmpty(t, marshaled, "Marshaled DBTime should not be empty")
 
 		var unmarshaled DBTime
-		err = unmarshaled.Unmarshal(marshaled)
+		err = unmarshaled.UnmarshalJSON(marshaled)
 		require.NoError(t, err, "Unmarshalling DBTime should not return an error")
 		assert.Equal(t, dbTime.Time.Unix(), unmarshaled.Time.Unix(), "Unmarshaled DBTime should match the original time")
 	})
 
 	t.Run("Unmarshal null string as zero time", func(t *testing.T) {
 		var dbTime DBTime
-		err := dbTime.Unmarshal([]byte("null"))
+		err := dbTime.UnmarshalJSON([]byte("null"))
 		require.NoError(t, err, "Unmarshalling empty string should not return an error")
 		assert.True(t, dbTime.Time.IsZero(), "Unmarshaled DBTime should be zero time")
 	})
 
 	t.Run("Unmarshal invalid time format", func(t *testing.T) {
 		var dbTime DBTime
-		err := dbTime.Unmarshal([]byte("\"invalid-time-format\""))
+		err := dbTime.UnmarshalJSON([]byte("\"invalid-time-format\""))
 		assert.Error(t, err, "Unmarshalling invalid time format should return an error")
 	})
 

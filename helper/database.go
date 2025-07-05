@@ -121,6 +121,7 @@ func (d *Database) AddNotifyFunction() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// RAISE NOTICE 'Trigger called on table: %, operation: %', TG_TABLE_NAME, TG_OP;
 	_, err := d.Instance.ExecContext(
 		ctx,
 		`CREATE OR REPLACE FUNCTION notify_event() RETURNS TRIGGER AS $$

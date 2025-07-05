@@ -106,7 +106,7 @@ func (r JobDBHandler) CreateTable() error {
 	_, err = r.db.Instance.ExecContext(
 		ctx,
 		`CREATE OR REPLACE TRIGGER job_notify_event
-			AFTER INSERT OR UPDATE ON job
+			BEFORE INSERT OR UPDATE ON job
 			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
 	)
 	if err != nil {
@@ -116,7 +116,7 @@ func (r JobDBHandler) CreateTable() error {
 	_, err = r.db.Instance.ExecContext(
 		ctx,
 		`CREATE OR REPLACE TRIGGER job_archive_notify_event
-			AFTER INSERT ON job_archive
+			BEFORE INSERT ON job_archive
 			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
 	)
 	if err != nil {
@@ -336,7 +336,7 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 					job.task_name = ANY(cw.available_tasks::VARCHAR[])
 					AND (
 						job.status = 'QUEUED'
-						OR (job.status = 'SCHEDULED' AND CURRENT_TIMESTAMP >= (job.scheduled_at - '10 minutes'::INTERVAL))
+						OR (job.status = 'SCHEDULED' AND job.scheduled_at <= (CURRENT_TIMESTAMP + '10 minutes'::INTERVAL))
 					)
 				ORDER BY job.created_at ASC
 				LIMIT (cw.max_concurrency - COALESCE(cc.count, 0))

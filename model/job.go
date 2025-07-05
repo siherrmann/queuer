@@ -178,14 +178,14 @@ type DBTime struct {
 const dbTimeLayoutWithoutZeroes = "2006-01-02T15:04:05."
 const dbTimeLayout = "2006-01-02T15:04:05.000000"
 
-func (ct *DBTime) Marshal() ([]byte, error) {
+func (ct DBTime) MarshalJSON() ([]byte, error) {
 	if ct.Time.IsZero() {
 		return []byte("null"), nil
 	}
 	return []byte(fmt.Sprintf("\"%s\"", ct.Time.Format(dbTimeLayout))), nil
 }
 
-func (ct *DBTime) Unmarshal(b []byte) error {
+func (ct *DBTime) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), "\"")
 	if s == "null" {
 		ct.Time = time.Time{}

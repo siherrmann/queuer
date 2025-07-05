@@ -128,6 +128,7 @@ func TestAddJobRunning(t *testing.T) {
 				MaxCount: 3,
 			},
 		}
+
 		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
 		require.NoError(t, err, "AddJob should not return an error on success")
 
@@ -136,9 +137,23 @@ func TestAddJobRunning(t *testing.T) {
 		require.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
 		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Running status")
 
-		job = testQueuer.WaitForJobFinished(job.RID)
-		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
-		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
+		done := make(chan struct{})
+		go func() {
+			job = testQueuer.WaitForJobFinished(job.RID)
+			assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+			assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
+			close(done)
+		}()
+
+	outerloop:
+		for {
+			select {
+			case <-done:
+				break outerloop
+			case <-time.After(3 * time.Second):
+				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
+			}
+		}
 
 		// Check if the job is archived
 		jobNotExisting, err := testQueuer.GetJob(job.RID)

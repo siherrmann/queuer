@@ -231,7 +231,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 		ctx, cancel := context.WithCancel(q.ctx)
 		defer cancel()
 
-		go q.listen(ctx, cancel)
+		q.listen(ctx, cancel)
 
 		err := q.pollJobTicker(ctx)
 		if err != nil && ctx.Err() == nil {
@@ -285,36 +285,48 @@ func (q *Queuer) Stop() error {
 
 // listen listens to job events and runs the initial job processing.
 func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
-	go q.jobDbListener.Listen(ctx, cancel, func(data string) {
-		job := &model.JobFromNotification{}
-		err := json.Unmarshal([]byte(data), job)
-		if err != nil {
-			q.log.Printf("error unmarshalling job data: %v", err)
-			return
-		}
+	readyJob := make(chan struct{})
+	readyJobArchive := make(chan struct{})
 
-		if job.Status == model.JobStatusQueued {
-			err = q.runJobInitial()
+	go func() {
+		close(readyJob)
+		q.jobDbListener.Listen(ctx, cancel, func(data string) {
+			job := &model.JobFromNotification{}
+			err := json.Unmarshal([]byte(data), job)
 			if err != nil {
-				q.log.Printf("error running job: %v", err)
+				q.log.Printf("error unmarshalling job data: %v", err)
 				return
 			}
-			q.jobInsertListener.Notify(job.ToJob())
-		} else {
-			q.jobUpdateListener.Notify(job.ToJob())
-		}
-	})
 
-	go q.jobArchiveDbListener.Listen(ctx, cancel, func(data string) {
-		job := &model.JobFromNotification{}
-		err := json.Unmarshal([]byte(data), job)
-		if err != nil {
-			q.log.Printf("error unmarshalling job data: %v", err)
-			return
-		}
+			if job.Status == model.JobStatusQueued || job.Status == model.JobStatusScheduled {
+				q.jobInsertListener.Notify(job.ToJob())
+				err = q.runJobInitial()
+				if err != nil {
+					q.log.Printf("error running job: %v", err)
+					return
+				}
+			} else {
+				q.jobUpdateListener.Notify(job.ToJob())
+			}
+		})
+	}()
 
-		q.jobDeleteListener.Notify(job.ToJob())
-	})
+	<-readyJob
+	go func() {
+		close(readyJobArchive)
+		q.jobArchiveDbListener.Listen(ctx, cancel, func(data string) {
+			job := &model.JobFromNotification{}
+			err := json.Unmarshal([]byte(data), job)
+			if err != nil {
+				q.log.Printf("error unmarshalling job data: %v", err)
+				return
+			}
+
+			q.jobDeleteListener.Notify(job.ToJob())
+		})
+	}()
+
+	<-readyJobArchive
 }
 
 func (q *Queuer) pollJobTicker(ctx context.Context) error {

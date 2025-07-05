@@ -96,13 +96,18 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 // WaitForJobFinished waits for a job to finish and returns the job.
 func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
 	jobFinished := make(chan *model.Job, 1)
+	outerReady := make(chan struct{})
 	ready := make(chan struct{})
-	go q.jobDeleteListener.Listen(q.ctx, ready, func(job *model.Job) {
-		if job.RID == jobRid {
-			jobFinished <- job
-		}
-	})
+	go func() {
+		close(outerReady)
+		q.jobDeleteListener.Listen(q.ctx, ready, func(job *model.Job) {
+			if job.RID == jobRid {
+				jobFinished <- job
+			}
+		})
+	}()
 
+	<-outerReady
 	<-ready
 	for {
 		select {
