@@ -187,7 +187,8 @@ func (ct DBTime) MarshalJSON() ([]byte, error) {
 
 func (ct *DBTime) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), "\"")
-	if s == "null" {
+	// Handle db null value and zero time
+	if s == "null" || s == "0001-01-01T00:00:00" {
 		ct.Time = time.Time{}
 		return nil
 	}

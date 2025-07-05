@@ -102,7 +102,23 @@ func TestAddJobRunning(t *testing.T) {
 		assert.NoError(t, err, "GetJob should not return an error")
 		assert.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
 
-		time.Sleep(2 * time.Second)
+		done := make(chan struct{})
+		go func() {
+			job = testQueuer.WaitForJobFinished(job.RID)
+			assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+			assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
+			close(done)
+		}()
+
+	outerloop:
+		for {
+			select {
+			case <-done:
+				break outerloop
+			case <-time.After(2 * time.Second):
+				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
+			}
+		}
 
 		jobNotExisting, err := testQueuer.GetJob(job.RID)
 		assert.Error(t, err, "GetJob should return an error for ended job")
