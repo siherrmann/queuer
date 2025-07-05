@@ -479,6 +479,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 			status,
 			scheduled_at,
 			started_at,
+			schedule_count,
 			attempts,
 			results,
 			error,
