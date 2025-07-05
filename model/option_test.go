@@ -48,12 +48,33 @@ func TestIsValid(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Valid Schedule options",
+			name: "Valid Schedule options multiple executions with Interval",
 			options: &Options{
 				Schedule: &Schedule{
 					Start:    time.Now().Add(1 * time.Minute),
 					Interval: 1 * time.Minute,
 					MaxCount: 3,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid Schedule options multiple executions with NextInterval",
+			options: &Options{
+				Schedule: &Schedule{
+					Start:        time.Now().Add(1 * time.Minute),
+					MaxCount:     3,
+					NextInterval: "NextIntervalFunction",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid Schedule options single execution",
+			options: &Options{
+				Schedule: &Schedule{
+					Start:    time.Now().Add(1 * time.Minute),
+					MaxCount: 1,
 				},
 			},
 			wantErr: false,

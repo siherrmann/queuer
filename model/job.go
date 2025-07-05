@@ -77,21 +77,22 @@ func (r *Parameters) ToInterfaceSlice() []interface{} {
 }
 
 type Job struct {
-	ID          int        `json:"id"`
-	RID         uuid.UUID  `json:"rid"`
-	WorkerID    int        `json:"worker_id"`
-	WorkerRID   uuid.UUID  `json:"worker_rid"`
-	Options     *Options   `json:"options"`
-	TaskName    string     `json:"task_name"`
-	Parameters  Parameters `json:"parameters"`
-	Status      string     `json:"status"`
-	ScheduledAt *time.Time `json:"scheduled_at"`
-	StartedAt   *time.Time `json:"started_at"`
-	Attempts    int        `json:"attempts"`
-	Results     Parameters `json:"result"`
-	Error       string     `json:"error"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID            int        `json:"id"`
+	RID           uuid.UUID  `json:"rid"`
+	WorkerID      int        `json:"worker_id"`
+	WorkerRID     uuid.UUID  `json:"worker_rid"`
+	Options       *Options   `json:"options"`
+	TaskName      string     `json:"task_name"`
+	Parameters    Parameters `json:"parameters"`
+	Status        string     `json:"status"`
+	ScheduledAt   *time.Time `json:"scheduled_at"`
+	StartedAt     *time.Time `json:"started_at"`
+	ScheduleCount int        `json:"schedule_count"`
+	Attempts      int        `json:"attempts"`
+	Results       Parameters `json:"result"`
+	Error         string     `json:"error"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 func NewJob(task interface{}, options *Options, parameters ...interface{}) (*Job, error) {

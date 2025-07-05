@@ -25,7 +25,7 @@ func (c *Schedule) IsValid() error {
 	if c.MaxCount < 0 {
 		return errors.New("maxCount must be greater than or equal to 0")
 	}
-	if c.Interval <= time.Duration(0) && c.NextInterval == "" {
+	if c.MaxCount > 1 && c.Interval <= time.Duration(0) && c.NextInterval == "" {
 		return errors.New("interval must be greater than zero or nextInterval must be provided")
 	}
 	return nil

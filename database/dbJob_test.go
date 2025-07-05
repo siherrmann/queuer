@@ -54,7 +54,7 @@ func TestJobDropTable(t *testing.T) {
 	jobDBHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-	err = jobDBHandler.DropTable()
+	err = jobDBHandler.DropTables()
 	assert.NoError(t, err, "Expected DropTable to not return an error")
 }
 

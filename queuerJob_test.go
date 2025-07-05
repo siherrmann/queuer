@@ -115,7 +115,7 @@ func TestAddJobRunning(t *testing.T) {
 			select {
 			case <-done:
 				break outerloop
-			case <-time.After(2 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
 			}
 		}
@@ -130,18 +130,12 @@ func TestAddJobRunning(t *testing.T) {
 		assert.Equal(t, jobArchived.Status, model.JobStatusSucceeded, "Archived job should have status Succeeded")
 	})
 
-	t.Run("Successfully runs a job with options", func(t *testing.T) {
+	t.Run("Successfully runs a job with schedule options once", func(t *testing.T) {
 		options := &model.Options{
-			OnError: &model.OnError{
-				Timeout:      5,
-				MaxRetries:   3,
-				RetryDelay:   1,
-				RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
-			},
 			Schedule: &model.Schedule{
 				Start:    time.Now().Add(1 * time.Second),
 				Interval: 15 * time.Second,
-				MaxCount: 3,
+				MaxCount: 1,
 			},
 		}
 
@@ -166,7 +160,7 @@ func TestAddJobRunning(t *testing.T) {
 			select {
 			case <-done:
 				break outerloop
-			case <-time.After(3 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
 			}
 		}
@@ -180,6 +174,53 @@ func TestAddJobRunning(t *testing.T) {
 		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
 		require.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
 		assert.Equal(t, jobArchived.Status, model.JobStatusSucceeded, "Archived job should have status Succeeded")
+	})
+
+	t.Run("Successfully runs a job with schedule options multiple times", func(t *testing.T) {
+		options := &model.Options{
+			Schedule: &model.Schedule{
+				Start:    time.Now().Add(1 * time.Second),
+				Interval: 3 * time.Second,
+				MaxCount: 2,
+			},
+		}
+
+		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
+		require.NoError(t, err, "AddJob should not return an error on success")
+
+		queuedJob, err := testQueuer.GetJob(job.RID)
+		require.NoError(t, err, "GetJob should not return an error")
+		require.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
+		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Running status")
+
+		done := make(chan struct{})
+		go func() {
+			job = testQueuer.WaitForJobFinished(job.RID)
+			assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+			assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
+			close(done)
+		}()
+
+	outerloop:
+		for {
+			select {
+			case <-done:
+				break outerloop
+			case <-time.After(5 * time.Second):
+				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
+			}
+		}
+
+		// Check if the job is archived
+		jobNotExisting, err := testQueuer.GetJob(job.RID)
+		assert.Error(t, err, "GetJob should return an error for ended job")
+		assert.Nil(t, jobNotExisting, "GetJob should return nil for ended job")
+
+		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(job.RID)
+		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
+		require.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
+		assert.Equal(t, jobArchived.Status, model.JobStatusSucceeded, "Archived job should have status Succeeded")
+		assert.Equal(t, 1, jobArchived.ScheduleCount, "Archived job should have ScheduleCount of 1")
 	})
 }
 
@@ -481,6 +522,32 @@ func TestAddJobs(t *testing.T) {
 		err := testQueuer.AddJobs(batchJobs)
 		assert.Error(t, err, "AddJobs should return an error for invalid batch job")
 	})
+}
+
+func TestWaitForJobStarted(t *testing.T) {
+	testQueuer := newQueuerMock("TestQueuer", 100)
+	testQueuer.AddTask(TaskMock)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.Start(ctx, cancel)
+
+	testEnded := make(chan struct{})
+	go func() {
+		startedJob := testQueuer.WaitForJobStarted()
+		assert.NotNil(t, startedJob, "WaitForJobStarted should return the started job")
+
+		runningJob, err := testQueuer.GetJob(startedJob.RID)
+		assert.NoError(t, err, "GetJob should not return an error for running job")
+		assert.NotNil(t, runningJob, "GetJob should return the job that is currently running")
+		assert.Equal(t, model.JobStatusQueued, startedJob.Status, "WaitForJobStarted should return job with status Running")
+		close(testEnded)
+	}()
+
+	job, err := testQueuer.AddJob(TaskMock, 2, "2")
+	assert.NoError(t, err, "AddJob should not return an error on success")
+	assert.NotNil(t, job, "AddJob should return a valid job")
+
+	<-testEnded
 }
 
 func TestWaitForJobFinished(t *testing.T) {

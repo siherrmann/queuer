@@ -23,7 +23,8 @@ func NewQueuerDBListener(dbConfig *helper.DatabaseConfiguration, channel string)
 		}
 	})
 
-	if err := listener.Listen(channel); err != nil {
+	err := listener.Listen(channel)
+	if err != nil {
 		return nil, fmt.Errorf("error listening to channel %v: %v", channel, err)
 	}
 

@@ -18,9 +18,9 @@ func MockNextIntervalFunc2(start time.Time, currentCount int) time.Time {
 }
 
 func TestAddNextIntervalFunc(t *testing.T) {
-	t.Run("Successfully adds NextIntervalFunc", func(t *testing.T) {
-		testQueuer := newQueuerMock("TestQueuer", 100)
+	testQueuer := newQueuerMock("TestQueuer", 100)
 
+	t.Run("Successfully adds NextIntervalFunc", func(t *testing.T) {
 		worker := testQueuer.AddNextIntervalFunc(MockNextIntervalFunc1)
 		require.NotNil(t, worker, "Expected worker to be returned after adding NextIntervalFunc")
 		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "queuer.MockNextIntervalFunc1", "Expected NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
@@ -28,7 +28,10 @@ func TestAddNextIntervalFunc(t *testing.T) {
 	})
 
 	t.Run("Successfully adds multiple NextIntervalFuncs", func(t *testing.T) {
-		testQueuer := newQueuerMock("TestQueuer", 100)
+		// Reset the worker to ensure a clean state
+		testQueuer.worker.AvailableNextIntervalFuncs = []string{}
+		_, err := testQueuer.dbWorker.UpdateWorker(testQueuer.worker)
+		require.NoError(t, err, "Expected no error when updating worker after resetting AvailableNextIntervalFuncs")
 
 		testQueuer.AddNextIntervalFunc(MockNextIntervalFunc1)
 		worker := testQueuer.AddNextIntervalFunc(MockNextIntervalFunc2)
@@ -39,7 +42,10 @@ func TestAddNextIntervalFunc(t *testing.T) {
 	})
 
 	t.Run("Fails to add nil NextIntervalFunc", func(t *testing.T) {
-		testQueuer := newQueuerMock("TestQueuer", 100)
+		// Reset the worker to ensure a clean state
+		testQueuer.worker.AvailableNextIntervalFuncs = []string{}
+		_, err := testQueuer.dbWorker.UpdateWorker(testQueuer.worker)
+		require.NoError(t, err, "Expected no error when updating worker after resetting AvailableNextIntervalFuncs")
 
 		var worker *model.Worker
 		defer func() {
@@ -52,7 +58,10 @@ func TestAddNextIntervalFunc(t *testing.T) {
 	})
 
 	t.Run("Fails to add NextIntervalFunc with existing name", func(t *testing.T) {
-		testQueuer := newQueuerMock("TestQueuer", 100)
+		// Reset the worker to ensure a clean state
+		testQueuer.worker.AvailableNextIntervalFuncs = []string{}
+		_, err := testQueuer.dbWorker.UpdateWorker(testQueuer.worker)
+		require.NoError(t, err, "Expected no error when updating worker after resetting AvailableNextIntervalFuncs")
 
 		var worker *model.Worker
 		defer func() {
@@ -67,9 +76,9 @@ func TestAddNextIntervalFunc(t *testing.T) {
 }
 
 func TestAddNextIntervalFuncWithName(t *testing.T) {
-	t.Run("Successfully adds NextIntervalFunc with name", func(t *testing.T) {
-		testQueuer := newQueuerMock("TestQueuer", 100)
+	testQueuer := newQueuerMock("TestQueuer", 100)
 
+	t.Run("Successfully adds NextIntervalFunc with name", func(t *testing.T) {
 		worker := testQueuer.AddNextIntervalFuncWithName(MockNextIntervalFunc1, "CustomFuncName")
 		require.NotNil(t, worker, "Expected worker to be returned after adding NextIntervalFunc with name")
 		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "CustomFuncName", "Expected NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
@@ -77,8 +86,6 @@ func TestAddNextIntervalFuncWithName(t *testing.T) {
 	})
 
 	t.Run("Fails to add nil NextIntervalFunc with name", func(t *testing.T) {
-		testQueuer := newQueuerMock("TestQueuer", 100)
-
 		var worker *model.Worker
 		defer func() {
 			r := recover()
@@ -90,8 +97,6 @@ func TestAddNextIntervalFuncWithName(t *testing.T) {
 	})
 
 	t.Run("Fails to add NextIntervalFunc with existing name", func(t *testing.T) {
-		testQueuer := newQueuerMock("TestQueuer", 100)
-
 		var worker *model.Worker
 		defer func() {
 			r := recover()

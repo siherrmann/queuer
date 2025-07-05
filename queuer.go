@@ -235,7 +235,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 
 		err := q.pollJobTicker(ctx)
 		if err != nil && ctx.Err() == nil {
-			q.log.Printf("error starting job poll ticker: %v", err)
+			q.log.Printf("Error starting job poll ticker: %v", err)
 			return
 		}
 
@@ -294,7 +294,7 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 			job := &model.JobFromNotification{}
 			err := json.Unmarshal([]byte(data), job)
 			if err != nil {
-				q.log.Printf("error unmarshalling job data: %v", err)
+				q.log.Printf("Error unmarshalling job data: %v", err)
 				return
 			}
 
@@ -302,7 +302,7 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 				q.jobInsertListener.Notify(job.ToJob())
 				err = q.runJobInitial()
 				if err != nil {
-					q.log.Printf("error running job: %v", err)
+					q.log.Printf("Error running job: %v", err)
 					return
 				}
 			} else {
@@ -318,7 +318,7 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 			job := &model.JobFromNotification{}
 			err := json.Unmarshal([]byte(data), job)
 			if err != nil {
-				q.log.Printf("error unmarshalling job data: %v", err)
+				q.log.Printf("Error unmarshalling job data: %v", err)
 				return
 			}
 
@@ -336,7 +336,7 @@ func (q *Queuer) pollJobTicker(ctx context.Context) error {
 			q.log.Println("Polling jobs...")
 			err := q.runJobInitial()
 			if err != nil {
-				q.log.Printf("error running job: %v", err)
+				q.log.Printf("Error running job: %v", err)
 			}
 		},
 	)

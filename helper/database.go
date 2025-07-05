@@ -95,7 +95,7 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 		db = sql.OpenDB(pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
 			// log.Printf("Notice sent: %s", notice.Message)
 		}))
-		db.SetMaxOpenConns(10)
+		db.SetMaxOpenConns(200)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
