@@ -89,13 +89,13 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 
 		base, err := pq.NewConnector(dsn)
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 
 		db = sql.OpenDB(pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
 			// log.Printf("Notice sent: %s", notice.Message)
 		}))
-		db.SetMaxOpenConns(200)
+		db.SetMaxOpenConns(0)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

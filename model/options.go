@@ -7,8 +7,8 @@ import (
 )
 
 type Options struct {
-	OnError  *OnError
-	Schedule *Schedule
+	OnError  *OnError  `json:"on_error,omitempty"`
+	Schedule *Schedule `json:"schedule,omitempty"`
 }
 
 func (c *Options) IsValid() error {

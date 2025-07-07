@@ -116,3 +116,57 @@ func newQueuerMock(name string, maxConcurrency int, options ...*model.OnError) *
 		log:                  logger,
 	}
 }
+
+// newQueuerMockWithoutListeners creates a new Queuer instance for testing purposes.
+// It initializes a test database connection and worker.
+func newQueuerMockWithoutListeners(name string, maxConcurrency int, options ...*model.OnError) *Queuer {
+	// Logger
+	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
+
+	// Database
+	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	dbConnection := helper.NewTestDatabase(dbConfig)
+
+	// DBs
+	var dbJob database.JobDBHandlerFunctions
+	var dbWorker database.WorkerDBHandlerFunctions
+	dbJob, err := database.NewJobDBHandler(dbConnection, true)
+	if err != nil {
+		logger.Fatalf("failed to create job db handler: %v", err)
+	}
+	dbWorker, err = database.NewWorkerDBHandler(dbConnection, true)
+	if err != nil {
+		logger.Fatalf("failed to create worker db handler: %v", err)
+	}
+
+	// Inserting worker
+	var newWorker *model.Worker
+	if len(options) > 0 {
+		newWorker, err = model.NewWorkerWithOptions(name, maxConcurrency, options[0])
+		if err != nil {
+			logger.Fatalf("error creating new worker with options: %v", err)
+		}
+	} else {
+		newWorker, err = model.NewWorker(name, maxConcurrency)
+		if err != nil {
+			logger.Fatalf("error creating new worker: %v", err)
+		}
+	}
+
+	worker, err := dbWorker.InsertWorker(newWorker)
+	if err != nil {
+		logger.Fatalf("error inserting worker: %v", err)
+	}
+	logger.Printf("Worker %s created with RID %s", worker.Name, worker.RID.String())
+
+	return &Queuer{
+		worker:            worker,
+		DB:                dbConnection.Instance,
+		dbJob:             dbJob,
+		dbWorker:          dbWorker,
+		JobPollInterval:   1 * time.Minute,
+		tasks:             map[string]*model.Task{},
+		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
+		log:               logger,
+	}
+}

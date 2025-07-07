@@ -124,9 +124,16 @@ func (r JobDBHandler) CreateTable() error {
 		log.Panicf("error creating notify trigger on job_archive table: %#v", err)
 	}
 
+	_, err = r.db.Instance.Exec(
+		`CREATE INDEX idx_next_interval ON job USING HASH ((options->'schedule'->>'next_interval'));`,
+	)
+	if err != nil {
+		log.Panicf("error creating index on next_interval: %#v", err)
+	}
+
 	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "created_at", "updated_at")
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	r.db.Logger.Println("created table job")
@@ -326,7 +333,13 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 			AND status = 'RUNNING'
 		),
 		current_worker AS (
-			SELECT id, rid, available_tasks, max_concurrency, COALESCE(cc.count, 0) AS current_concurrency
+			SELECT
+				id,
+				rid,
+				available_tasks,
+				available_next_interval,
+				max_concurrency,
+				COALESCE(cc.count, 0) AS current_concurrency
 			FROM worker, current_concurrency AS cc
 			WHERE id = $1
 			AND (max_concurrency > COALESCE(cc.count, 0))
@@ -340,6 +353,10 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 				FROM job
 				WHERE
 					job.task_name = ANY(cw.available_tasks::VARCHAR[])
+					AND (
+						options->'schedule'->>'next_interval' IS NULL
+						OR options->'schedule'->>'next_interval' = ''
+						OR options->'schedule'->>'next_interval' = ANY(cw.available_next_interval::VARCHAR[]))
 					AND (
 						job.status = 'QUEUED'
 						OR (job.status = 'SCHEDULED' AND job.scheduled_at <= (CURRENT_TIMESTAMP + '10 minutes'::INTERVAL))

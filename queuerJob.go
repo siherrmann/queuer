@@ -94,15 +94,14 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	return nil
 }
 
-// WaitForJobStarted waits for any job to start and returns the job.
-func (q *Queuer) WaitForJobStarted() *model.Job {
+// WaitForJobAdded waits for any job to start and returns the job.
+func (q *Queuer) WaitForJobAdded() *model.Job {
 	jobStarted := make(chan *model.Job, 1)
 	outerReady := make(chan struct{})
 	ready := make(chan struct{})
 	go func() {
 		close(outerReady)
 		q.jobInsertListener.Listen(q.ctx, ready, func(job *model.Job) {
-			log.Printf("Job started %v", job)
 			jobStarted <- job
 		})
 	}()
@@ -112,7 +111,6 @@ func (q *Queuer) WaitForJobStarted() *model.Job {
 	for {
 		select {
 		case job := <-jobStarted:
-			log.Printf("Job started: %v", job)
 			return job
 		case <-q.ctx.Done():
 			return nil
@@ -214,6 +212,15 @@ func (q *Queuer) GetJobs(lastId int, entries int) ([]*model.Job, error) {
 	return jobs, nil
 }
 
+// GetJobsEnded retrieves all jobs that have ended (succeeded, cancelled or failed).
+func (q *Queuer) GetJobsEnded(lastId int, entries int) ([]*model.Job, error) {
+	jobs, err := q.dbJob.SelectAllJobsFromArchive(lastId, entries)
+	if err != nil {
+		return nil, fmt.Errorf("error selecting ended jobs: %v", err)
+	}
+	return jobs, nil
+}
+
 // GetJobsByWorkerRID retrieves jobs assigned to a specific worker by its RID.
 func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int) ([]*model.Job, error) {
 	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, lastId, entries)
@@ -274,6 +281,7 @@ func (q *Queuer) runJobInitial() error {
 	if err != nil {
 		return fmt.Errorf("error updating job status to running: %v", err)
 	} else if len(jobs) == 0 {
+		log.Println("No jobs to run at the moment")
 		return nil
 	}
 
@@ -423,8 +431,10 @@ func (q *Queuer) endJob(job *model.Job) {
 
 		// Readd scheduled jobs to the queue
 		if endedJob.Options != nil && endedJob.Options.Schedule != nil && endedJob.ScheduleCount < endedJob.Options.Schedule.MaxCount {
+			// if len(endedJob.Options.Schedule.NextInterval) > 0 {
 			newScheduledAt := endedJob.ScheduledAt.Add(time.Duration(endedJob.ScheduleCount) * endedJob.Options.Schedule.Interval)
 			endedJob.ScheduledAt = &newScheduledAt
+			endedJob.Status = model.JobStatusScheduled
 			job, err := q.dbJob.InsertJob(endedJob)
 			if err != nil {
 				q.log.Printf("Error readding scheduled job with RID %v to the queue: %v", endedJob.RID, err)

@@ -264,6 +264,12 @@ func (q *Queuer) Stop() error {
 			return fmt.Errorf("error closing job insert listener: %v", err)
 		}
 	}
+	if q.jobArchiveDbListener != nil {
+		err := q.jobArchiveDbListener.Listener.Close()
+		if err != nil {
+			return fmt.Errorf("error closing job update listener: %v", err)
+		}
+	}
 
 	// Cancel all queued and running jobs
 	err := q.CancelAllJobsByWorker(q.worker.RID, 100)
