@@ -6,7 +6,7 @@
 
 Queueing package based on postgres written in Go.
 
-## Goal of this package
+## 💡 Goal of this package
 
 This queuer is meant to be as easy as possible to use. No specific function signature (except for an error as the last output parameter, if you want to give back an error), easy setup and still fast.
 
@@ -14,7 +14,7 @@ The job table contains only queued, scheduled and running tasks. The ended jobs 
 
 ---
 
-## Getting started
+## 🚀 Getting started
 
 The full initialisation is (in the easiest case):
 
@@ -81,6 +81,40 @@ func NewQueuerWithoutWorker() *Queuer
 ```
 
 This function only initializes the database connection and job listeners. It omits the worker component, making it suitable for services that might, for example, serve job status endpoints or solely add jobs to the queue, without consuming computational resources for job execution. Similar to `NewQueuer`, any initialization errors will result in a panic and program exit. It returns a pointer to the newly created `Queuer` instance.
+
+---
+
+## Add Task
+
+The `AddTask` method registers a new job task with the queuer. A task is the actual function that will be executed when a job associated with it is processed.
+
+```go
+func (q *Queuer) AddTask(task interface{}) *model.Task
+
+func (q *Queuer) AddTaskWithName(task interface{}, name string) *model.Task
+```
+
+- `task`: An `interface{}` representing the function that will serve as the job's executable logic. The queuer will automatically derive a name for this task based on its function signature (e.g., `main.MyTaskFunction`). The derived name must be unique if no `name` is given.
+- `name`: A `string` specifying the custom name for this task. This name must be unique within the queuer's tasks.
+
+This method handles the registration of a task, making the worker able to pick up and execute a job of this task type. It also updates the worker's available tasks in the database. The task should be added before starting the queuer. If there's an issue during task creation or database update, the program will panic.
+
+---
+
+## Add NextIntervalFunc
+
+The `AddNextIntervalFunc` method registers a custom function that determines the next execution time for scheduled jobs. This is useful for implementing complex scheduling logic beyond simple fixed intervals.
+
+```go
+func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker
+
+func (q *Queuer) AddNextIntervalFuncWithName(nif model.NextIntervalFunc, name string) *model.Worker
+```
+
+- `nif`: An instance of `model.NextIntervalFunc`, which is a function type defining custom logic for calculating the next interval. The queuer will automatically derive a name for this function. The derived name must be unique if no `name` is given.
+- `name`: A string specifying the custom name for this `NextIntervalFunc`. This name must be unique within the queuer's NextIntervalFuncs.
+
+This method adds the provided `NextIntervalFunc` to the queuer's available functions, making it usable for jobs with custom scheduling requirements. It updates the worker's configuration in the database. If `nif` is nil, if the function name cannot be derived, or if a function with the same name already exists, the program will panic.
 
 ---
 
@@ -156,18 +190,20 @@ The Schedule struct is used to define recurring jobs.
 ```go
 type Schedule struct {
     Start        time.Time       `json:"start"`
-    Interval     time.Duration   `json:"interval"`
     MaxCount     int             `json:"max_count"`
+    Interval     time.Duration   `json:"interval"`
+    NextInterval string          `json:"next_interval"`
 }
 ```
 
 - `Start`: The initial time at which the scheduled job should first run.
-- `Interval`: The duration between consecutive executions of the scheduled job.
 - `MaxCount`: The maximum number of times the job should be executed. A value 0 indicates an indefinite number of repetitions (run forever).
+- `Interval`: The duration between consecutive executions of the scheduled job.
+- `NextInterval`: Function name of the `NextIntervalFunc` returning the time of the next execution of the scheduled job. **Either `Interval` or `NextInterval` have to be set if the `MaxCount` is 0 or greater 1.**
 
 ---
 
-# Features
+# ⭐ Features
 
 - Insert job batches using the `COPY FROM` postgres feature.
 - Insert a job in a transaction to rollback if eg. the step after job insertion fails.

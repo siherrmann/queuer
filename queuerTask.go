@@ -1,8 +1,8 @@
 package queuer
 
 import (
-	"log"
 	"queuer/model"
+	"slices"
 )
 
 // AddTask adds a new task to the queuer.
@@ -14,7 +14,10 @@ import (
 func (q *Queuer) AddTask(task interface{}) *model.Task {
 	newTask, err := model.NewTask(task)
 	if err != nil {
-		log.Panicf("error creating new task: %v", err)
+		q.log.Panicf("error creating new task: %v", err)
+	}
+	if slices.Contains(q.worker.AvailableTasks, newTask.Name) {
+		q.log.Panicf("Task with name %v already exists", newTask.Name)
 	}
 
 	q.tasks[newTask.Name] = newTask
@@ -23,7 +26,7 @@ func (q *Queuer) AddTask(task interface{}) *model.Task {
 	// Update worker in DB
 	_, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		log.Panicf("error updating worker: %v", err)
+		q.log.Panicf("error updating worker: %v", err)
 	}
 
 	q.log.Printf("Task added with name %v", newTask.Name)
@@ -39,7 +42,10 @@ func (q *Queuer) AddTask(task interface{}) *model.Task {
 func (q *Queuer) AddTaskWithName(task interface{}, name string) *model.Task {
 	newTask, err := model.NewTaskWithName(task, name)
 	if err != nil {
-		log.Panicf("error creating new task: %v", err)
+		q.log.Panicf("error creating new task: %v", err)
+	}
+	if slices.Contains(q.worker.AvailableTasks, name) {
+		q.log.Panicf("Task with name %v already exists", name)
 	}
 
 	q.tasks[newTask.Name] = newTask
@@ -48,7 +54,7 @@ func (q *Queuer) AddTaskWithName(task interface{}, name string) *model.Task {
 	// Update worker in DB
 	_, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		log.Panicf("error updating worker: %v", err)
+		q.log.Panicf("error updating worker: %v", err)
 	}
 
 	q.log.Printf("Task added with name %v", newTask.Name)

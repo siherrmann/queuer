@@ -13,8 +13,8 @@ type NextIntervalFunc func(start time.Time, currentCount int) time.Time
 
 type Schedule struct {
 	Start        time.Time     `json:"start"`
-	Interval     time.Duration `json:"interval"`
 	MaxCount     int           `json:"max_count"`
+	Interval     time.Duration `json:"interval"`
 	NextInterval string        `json:"next_interval,omitempty"`
 }
 

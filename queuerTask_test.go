@@ -34,6 +34,21 @@ func TestAddTask(t *testing.T) {
 		var task func()
 		newTask = testQueuer.AddTask(task)
 	})
+
+	t.Run("Panics on already existing task", func(t *testing.T) {
+		task := func() {}
+		testQueuer.AddTask(task)
+
+		var newTask *model.Task
+		defer func() {
+			r := recover()
+			assert.NotNil(t, r, "expected panic for already existing task")
+			assert.Nil(t, newTask, "expected no task to be created for already existing task")
+		}()
+
+		// Try to add the same task again
+		newTask = testQueuer.AddTask(task)
+	})
 }
 
 func TestAddTaskWithName(t *testing.T) {
@@ -73,5 +88,20 @@ func TestAddTaskWithName(t *testing.T) {
 
 		task := func() {}
 		newTask = testQueuer.AddTaskWithName(task, "")
+	})
+
+	t.Run("Panics on already existing task with name", func(t *testing.T) {
+		task := func() {}
+		testQueuer.AddTaskWithName(task, "ExistingTaskName")
+
+		var newTask *model.Task
+		defer func() {
+			r := recover()
+			assert.NotNil(t, r, "expected panic for already existing task with name")
+			assert.Nil(t, newTask, "expected no task to be created for already existing task with name")
+		}()
+
+		// Try to add the same task with the same name again
+		newTask = testQueuer.AddTaskWithName(task, "ExistingTaskName")
 	})
 }

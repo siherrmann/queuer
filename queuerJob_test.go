@@ -137,8 +137,8 @@ func TestAddJobRunning(t *testing.T) {
 		options := &model.Options{
 			Schedule: &model.Schedule{
 				Start:    time.Now().Add(1 * time.Second),
-				Interval: 15 * time.Second,
 				MaxCount: 1,
+				Interval: 15 * time.Second,
 			},
 		}
 
@@ -183,8 +183,8 @@ func TestAddJobRunning(t *testing.T) {
 		options := &model.Options{
 			Schedule: &model.Schedule{
 				Start:    time.Now().Add(1 * time.Second),
-				Interval: 3 * time.Second,
 				MaxCount: 2,
+				Interval: 3 * time.Second,
 			},
 		}
 
@@ -295,8 +295,8 @@ func TestAddJobWithOptions(t *testing.T) {
 			},
 			Schedule: &model.Schedule{
 				Start:    time.Now().Add(10 * time.Minute),
-				Interval: 15 * time.Minute,
 				MaxCount: 3,
+				Interval: 15 * time.Minute,
 			},
 		}
 		expectedJob := &model.Job{
@@ -339,8 +339,8 @@ func TestAddJobWithOptions(t *testing.T) {
 			},
 			Schedule: &model.Schedule{
 				Start:    time.Now().Add(10 * time.Minute),
-				Interval: 15 * time.Minute,
 				MaxCount: 3,
+				Interval: 15 * time.Minute,
 			},
 		}
 
@@ -534,8 +534,8 @@ func TestAddJobWithOptionsTx(t *testing.T) {
 			},
 			Schedule: &model.Schedule{
 				Start:    time.Now().Add(10 * time.Minute),
-				Interval: 15 * time.Minute,
 				MaxCount: 3,
+				Interval: 15 * time.Minute,
 			},
 		}
 		expectedJob := &model.Job{
