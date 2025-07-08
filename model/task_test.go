@@ -19,13 +19,13 @@ func TestNewTask(t *testing.T) {
 		{
 			name:    "Valid task with no parameters",
 			task:    func() {},
-			expName: "queuer/model.TestNewTask.func1",
+			expName: "github.com/siherrmann/queuer/model.TestNewTask.func1",
 			wantErr: false,
 		},
 		{
 			name:         "Task with input parameters",
 			task:         func(a int, b string) {},
-			expName:      "queuer/model.TestNewTask.func2",
+			expName:      "github.com/siherrmann/queuer/model.TestNewTask.func2",
 			expInParams:  2,
 			expOutParams: 0,
 			wantErr:      false,
@@ -33,7 +33,7 @@ func TestNewTask(t *testing.T) {
 		{
 			name:         "Task with output parameters",
 			task:         func() (int, string) { return 1, "test" },
-			expName:      "queuer/model.TestNewTask.func3",
+			expName:      "github.com/siherrmann/queuer/model.TestNewTask.func3",
 			expInParams:  0,
 			expOutParams: 2,
 			wantErr:      false,
@@ -41,7 +41,7 @@ func TestNewTask(t *testing.T) {
 		{
 			name:         "Task with multiple input and output parameters",
 			task:         func(a int, b string, c float64) (bool, error) { return true, nil },
-			expName:      "queuer/model.TestNewTask.func4",
+			expName:      "github.com/siherrmann/queuer/model.TestNewTask.func4",
 			expInParams:  3,
 			expOutParams: 2,
 			wantErr:      false,

@@ -21,7 +21,7 @@ func TestAddTask(t *testing.T) {
 		task := func() {}
 		newTask := testQueuer.AddTask(task)
 		require.NotNil(t, newTask, "expected task to be created")
-		assert.Equal(t, "queuer.TestAddTask.func1.1", newTask.Name, "expected task name to match the function name")
+		assert.Equal(t, "github.com/siherrmann/queuer.TestAddTask.func1.1", newTask.Name, "expected task name to match the function name")
 
 		updatedWorker, err := testQueuer.GetWorker(testQueuer.worker.RID)
 		require.NoError(t, err, "expected no error when getting updated worker")

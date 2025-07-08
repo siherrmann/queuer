@@ -29,7 +29,7 @@ func TestAddNextIntervalFunc(t *testing.T) {
 	t.Run("Successfully adds NextIntervalFunc", func(t *testing.T) {
 		worker := testQueuer.AddNextIntervalFunc(MockNextIntervalFunc1)
 		require.NotNil(t, worker, "Expected worker to be returned after adding NextIntervalFunc")
-		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "queuer.MockNextIntervalFunc1", "Expected NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
+		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "github.com/siherrmann/queuer.MockNextIntervalFunc1", "Expected NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
 		assert.Equal(t, 1, len(testQueuer.worker.AvailableNextIntervalFuncs), "Expected only one NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
 	})
 
@@ -42,8 +42,8 @@ func TestAddNextIntervalFunc(t *testing.T) {
 		testQueuer.AddNextIntervalFunc(MockNextIntervalFunc1)
 		worker := testQueuer.AddNextIntervalFunc(MockNextIntervalFunc2)
 		require.NotNil(t, worker, "Expected worker to be returned after adding NextIntervalFunc")
-		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "queuer.MockNextIntervalFunc1", "Expected NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
-		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "queuer.MockNextIntervalFunc2", "Expected second NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
+		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "github.com/siherrmann/queuer.MockNextIntervalFunc1", "Expected NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
+		assert.Contains(t, testQueuer.worker.AvailableNextIntervalFuncs, "github.com/siherrmann/queuer.MockNextIntervalFunc2", "Expected second NextIntervalFunc to be added to worker's AvailableNextIntervalFuncs")
 		assert.Equal(t, 2, len(testQueuer.worker.AvailableNextIntervalFuncs), "Expected two NextIntervalFuncs to be added to worker's AvailableNextIntervalFuncs")
 	})
 

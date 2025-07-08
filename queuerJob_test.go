@@ -63,7 +63,7 @@ func TestAddJob(t *testing.T) {
 	log.Println("Adding task to test queuer")
 	t.Run("Successfully adds a job with nil options", func(t *testing.T) {
 		expectedJob := &model.Job{
-			TaskName:   "queuer.TaskMock",
+			TaskName:   "github.com/siherrmann/queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
 		}
 
@@ -246,7 +246,7 @@ func TestAddJobTx(t *testing.T) {
 
 	t.Run("Successfully adds a job with nil options in transaction", func(t *testing.T) {
 		expectedJob := &model.Job{
-			TaskName:   "queuer.TaskMock",
+			TaskName:   "github.com/siherrmann/queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
 		}
 
@@ -316,7 +316,7 @@ func TestAddJobWithOptions(t *testing.T) {
 			},
 		}
 		expectedJob := &model.Job{
-			TaskName:   "queuer.TaskMock",
+			TaskName:   "github.com/siherrmann/queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
 			Options:    options,
 		}
@@ -333,7 +333,7 @@ func TestAddJobWithOptions(t *testing.T) {
 
 	t.Run("Successfully adds a job with nil options", func(t *testing.T) {
 		expectedJob := &model.Job{
-			TaskName:   "queuer.TaskMock",
+			TaskName:   "github.com/siherrmann/queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
 		}
 
@@ -561,7 +561,7 @@ func TestAddJobWithOptionsTx(t *testing.T) {
 			},
 		}
 		expectedJob := &model.Job{
-			TaskName:   "queuer.TaskMock",
+			TaskName:   "github.com/siherrmann/queuer.TaskMock",
 			Parameters: model.Parameters{1.0, "2"},
 			Options:    options,
 		}
