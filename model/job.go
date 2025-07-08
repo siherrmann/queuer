@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"queuer/helper"
 	"reflect"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/helper"
 )
 
 const (

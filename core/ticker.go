@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"queuer/helper"
 	"reflect"
 	"time"
+
+	"github.com/siherrmann/queuer/helper"
 )
 
 // Ticker represents a recurring task runner.

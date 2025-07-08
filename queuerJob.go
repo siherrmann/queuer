@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"queuer/core"
-	"queuer/model"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/core"
+	"github.com/siherrmann/queuer/model"
 )
 
 // AddJob adds a job to the queue with the given task and parameters.

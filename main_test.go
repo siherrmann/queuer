@@ -3,9 +3,9 @@ package queuer
 import (
 	"context"
 	"log"
-	"queuer/helper"
 	"testing"
 
+	"github.com/siherrmann/queuer/helper"
 	"github.com/testcontainers/testcontainers-go"
 )
 

@@ -2,9 +2,9 @@ package queuer
 
 import (
 	"fmt"
-	"queuer/model"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/model"
 )
 
 // GetWorker retrieves a worker by its RID (Resource Identifier).

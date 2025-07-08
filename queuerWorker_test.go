@@ -2,10 +2,10 @@ package queuer
 
 import (
 	"context"
-	"queuer/helper"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/helper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

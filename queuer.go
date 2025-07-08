@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"queuer/core"
-	"queuer/database"
-	"queuer/helper"
-	"queuer/model"
 	"sync"
 	"time"
+
+	"github.com/siherrmann/queuer/core"
+	"github.com/siherrmann/queuer/database"
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 )
 
 type Queuer struct {

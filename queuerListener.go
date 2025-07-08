@@ -2,7 +2,8 @@ package queuer
 
 import (
 	"fmt"
-	"queuer/model"
+
+	"github.com/siherrmann/queuer/model"
 )
 
 func (q *Queuer) ListenForJobUpdate(notifyFunction func(data *model.Job)) error {

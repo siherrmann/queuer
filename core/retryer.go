@@ -2,8 +2,9 @@ package core
 
 import (
 	"fmt"
-	"queuer/model"
 	"time"
+
+	"github.com/siherrmann/queuer/model"
 )
 
 type Retryer struct {

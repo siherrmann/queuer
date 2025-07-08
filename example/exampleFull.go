@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"log"
-	"queuer"
-	"queuer/model"
 	"time"
+
+	"github.com/siherrmann/queuer"
+	"github.com/siherrmann/queuer/model"
 )
 
 func ExampleFull() {

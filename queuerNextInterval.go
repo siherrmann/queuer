@@ -1,9 +1,10 @@
 package queuer
 
 import (
-	"queuer/helper"
-	"queuer/model"
 	"slices"
+
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 )
 
 func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {

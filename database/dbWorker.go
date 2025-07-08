@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"queuer/helper"
-	"queuer/model"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 )
 
 // WorkerDBHandlerFunctions defines the interface for Worker database operations.

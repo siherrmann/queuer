@@ -3,11 +3,11 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"queuer/helper"
-	"queuer/model"
 	"testing"
 	"time"
 
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

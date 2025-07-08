@@ -2,11 +2,11 @@ package database
 
 import (
 	"context"
-	"queuer/helper"
 	"testing"
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/siherrmann/queuer/helper"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"queuer/helper"
-	"queuer/model"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 )
 
 // JobDBHandlerFunctions defines the interface for Job database operations.

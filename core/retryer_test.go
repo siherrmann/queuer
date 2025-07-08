@@ -2,11 +2,11 @@ package core
 
 import (
 	"errors"
-	"queuer/model"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 )
 

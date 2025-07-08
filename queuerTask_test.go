@@ -2,10 +2,10 @@ package queuer
 
 import (
 	"context"
-	"queuer/helper"
-	"queuer/model"
 	"testing"
 
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

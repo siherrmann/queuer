@@ -2,8 +2,9 @@ package model
 
 import (
 	"fmt"
-	"queuer/helper"
 	"reflect"
+
+	"github.com/siherrmann/queuer/helper"
 )
 
 type Task struct {

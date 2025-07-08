@@ -1,4 +1,4 @@
-module queuer
+module github.com/siherrmann/queuer
 
 go 1.23.5
 

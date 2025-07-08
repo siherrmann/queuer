@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"queuer/helper"
-	"queuer/model"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

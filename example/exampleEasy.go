@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"log"
-	"queuer"
+
+	"github.com/siherrmann/queuer"
 )
 
 func ExampleEasy() {

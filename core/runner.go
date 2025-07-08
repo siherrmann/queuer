@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"queuer/helper"
-	"queuer/model"
 	"reflect"
 	"time"
+
+	"github.com/siherrmann/queuer/helper"
+	"github.com/siherrmann/queuer/model"
 )
 
 type Runner struct {

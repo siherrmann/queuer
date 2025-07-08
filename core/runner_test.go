@@ -7,8 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"queuer/model"
-
+	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

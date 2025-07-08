@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"queuer/helper"
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/siherrmann/queuer/helper"
 )
 
 type QueuerListener struct {

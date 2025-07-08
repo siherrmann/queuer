@@ -1,8 +1,9 @@
 package queuer
 
 import (
-	"queuer/model"
 	"slices"
+
+	"github.com/siherrmann/queuer/model"
 )
 
 // AddTask adds a new task to the queuer.
