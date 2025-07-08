@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"queuer/helper"
 	"queuer/model"
 	"strconv"
 	"testing"
@@ -52,8 +53,14 @@ func (m *MockFailer) TaskMockFailing(duration int, maxFailCount string) (int, er
 }
 
 func TestAddJob(t *testing.T) {
-	testQueuer := newQueuerMockWithoutListeners("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	log.Println("Starting test queuer without worker")
+	testQueuer.StartWithoutWorker(ctx, cancel, false)
 
+	log.Println("Adding task to test queuer")
 	t.Run("Successfully adds a job with nil options", func(t *testing.T) {
 		expectedJob := &model.Job{
 			TaskName:   "queuer.TaskMock",
@@ -62,6 +69,7 @@ func TestAddJob(t *testing.T) {
 
 		params := []interface{}{1, "2"}
 		job, err := testQueuer.AddJob(TaskMock, params...)
+		log.Printf("Job added 1: %v", job)
 
 		assert.NoError(t, err, "AddJob should not return an error on success")
 		assert.Equal(t, expectedJob.TaskName, job.TaskName, "AddJob should return the correct task name")
@@ -72,6 +80,7 @@ func TestAddJob(t *testing.T) {
 	t.Run("Returns error for nil function", func(t *testing.T) {
 		var nilTask func() // Invalid nil function
 		job, err := testQueuer.AddJob(nilTask, "param1")
+		log.Printf("Job added 2: %v", job)
 
 		assert.Error(t, err, "AddJob should return an error for nil task (via addJobFn)")
 		assert.Nil(t, job, "Job should be nil for nil task")
@@ -81,6 +90,7 @@ func TestAddJob(t *testing.T) {
 	t.Run("Returns error for invalid task type", func(t *testing.T) {
 		invalidTask := 123 // Invalid integer type instead of a function
 		job, err := testQueuer.AddJob(invalidTask, "param1")
+		log.Printf("Job added 3: %v", job)
 
 		assert.Error(t, err, "AddJob should return an error for invalid task type")
 		assert.Nil(t, job, "Job should be nil for invalid task type")
@@ -91,7 +101,8 @@ func TestAddJob(t *testing.T) {
 }
 
 func TestAddJobRunning(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
 	testQueuer.AddTask(TaskMock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -227,7 +238,11 @@ func TestAddJobRunning(t *testing.T) {
 }
 
 func TestAddJobTx(t *testing.T) {
-	testQueuer := newQueuerMockWithoutListeners("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully adds a job with nil options in transaction", func(t *testing.T) {
 		expectedJob := &model.Job{
@@ -280,7 +295,11 @@ func TestAddJobTx(t *testing.T) {
 }
 
 func TestAddJobWithOptions(t *testing.T) {
-	testQueuer := newQueuerMockWithoutListeners("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully adds a job with options", func(t *testing.T) {
 		options := &model.Options{
@@ -354,7 +373,8 @@ func TestAddJobWithOptions(t *testing.T) {
 func TestAddJobWithOptionsRunning(t *testing.T) {
 	newMockFailer := &MockFailer{}
 
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
 	testQueuer.AddTask(newMockFailer.TaskMockFailing)
 	testQueuer.AddTask(TaskMock)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -450,7 +470,8 @@ func TestAddJobWithOptionsRunning(t *testing.T) {
 }
 
 func TestAddJobWithScheduleOptionsRunning(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
 	testQueuer.AddTask(TaskMock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -519,7 +540,11 @@ func TestAddJobWithScheduleOptionsRunning(t *testing.T) {
 }
 
 func TestAddJobWithOptionsTx(t *testing.T) {
-	testQueuer := newQueuerMockWithoutListeners("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully adds a job with options in transaction", func(t *testing.T) {
 		options := &model.Options{
@@ -587,7 +612,11 @@ func TestAddJobWithOptionsTx(t *testing.T) {
 }
 
 func TestAddJobs(t *testing.T) {
-	testQueuer := newQueuerMockWithoutListeners("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully adds multiple jobs with nil options", func(t *testing.T) {
 		batchJobs := []model.BatchJob{
@@ -628,7 +657,31 @@ func TestAddJobs(t *testing.T) {
 }
 
 func TestWaitForJobStarted(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	testQueuer.AddTask(TaskMock)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, false)
+
+	testEnded := make(chan struct{})
+	go func() {
+		startedJob := testQueuer.WaitForJobAdded()
+		assert.NotNil(t, startedJob, "WaitForJobStarted should return the started job")
+		close(testEnded)
+	}()
+
+	job, err := testQueuer.AddJob(TaskMock, 2, "2")
+	assert.NoError(t, err, "AddJob should not return an error on success")
+	assert.NotNil(t, job, "AddJob should return a valid job")
+
+	<-testEnded
+	testQueuer.Stop()
+}
+
+func TestWaitForJobStartedRunning(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
 	testQueuer.AddTask(TaskMock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -655,7 +708,8 @@ func TestWaitForJobStarted(t *testing.T) {
 }
 
 func TestWaitForJobFinished(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
 	testQueuer.AddTask(TaskMock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -692,7 +746,11 @@ func TestWaitForJobFinished(t *testing.T) {
 }
 
 func TestCancelJob(t *testing.T) {
-	testQueuer := newQueuerMockWithoutListeners("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully cancels a queued job", func(t *testing.T) {
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
@@ -721,7 +779,8 @@ func TestCancelJob(t *testing.T) {
 func TestCancelJobRunning(t *testing.T) {
 	// Only works with a running queuer because the worker needs to process jobs
 	// to be able to cancel them.
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
 	testQueuer.AddTask(TaskMock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -757,7 +816,8 @@ func TestCancelJobRunning(t *testing.T) {
 func TestCancelAllJobsByWorkerRunning(t *testing.T) {
 	// Only works with a running queuer because the worker needs to process jobs
 	// to be able to cancel them.
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
 	testQueuer.AddTask(TaskMock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -801,7 +861,11 @@ func TestCancelAllJobsByWorkerRunning(t *testing.T) {
 }
 
 func TestReaddJobFromArchive(t *testing.T) {
-	testQueuer := newQueuerMockWithoutListeners("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully readds a job from archive", func(t *testing.T) {
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")

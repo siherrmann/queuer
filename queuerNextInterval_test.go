@@ -1,6 +1,8 @@
 package queuer
 
 import (
+	"context"
+	"queuer/helper"
 	"queuer/model"
 	"testing"
 	"time"
@@ -18,7 +20,11 @@ func MockNextIntervalFunc2(start time.Time, currentCount int) time.Time {
 }
 
 func TestAddNextIntervalFunc(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully adds NextIntervalFunc", func(t *testing.T) {
 		worker := testQueuer.AddNextIntervalFunc(MockNextIntervalFunc1)
@@ -76,7 +82,11 @@ func TestAddNextIntervalFunc(t *testing.T) {
 }
 
 func TestAddNextIntervalFuncWithName(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully adds NextIntervalFunc with name", func(t *testing.T) {
 		worker := testQueuer.AddNextIntervalFuncWithName(MockNextIntervalFunc1, "CustomFuncName")

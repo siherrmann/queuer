@@ -12,7 +12,11 @@ import (
 )
 
 func TestWorkerNewWorkerDBHandler(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -24,7 +28,11 @@ func TestWorkerNewWorkerDBHandler(t *testing.T) {
 }
 
 func TestWorkerCheckTableExistance(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -36,7 +44,11 @@ func TestWorkerCheckTableExistance(t *testing.T) {
 }
 
 func TestWorkerCreateTable(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -47,7 +59,11 @@ func TestWorkerCreateTable(t *testing.T) {
 }
 
 func TestWorkerDropTable(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -58,7 +74,11 @@ func TestWorkerDropTable(t *testing.T) {
 }
 
 func TestWorkerInsertWorker(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -78,7 +98,11 @@ func TestWorkerInsertWorker(t *testing.T) {
 }
 
 func TestWorkerUpdateWorker(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -111,7 +135,11 @@ func TestWorkerUpdateWorker(t *testing.T) {
 }
 
 func TestWorkerDeleteWorker(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -133,7 +161,11 @@ func TestWorkerDeleteWorker(t *testing.T) {
 }
 
 func TestWorkerSelectWorker(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -153,7 +185,11 @@ func TestWorkerSelectWorker(t *testing.T) {
 }
 
 func TestWorkerSelectAllWorkers(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)
@@ -179,7 +215,11 @@ func TestWorkerSelectAllWorkers(t *testing.T) {
 }
 
 func TestWorkerSelectAllWorkersBySearch(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerDBHandler, err := NewWorkerDBHandler(database, true)

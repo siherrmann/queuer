@@ -56,31 +56,78 @@ You can find a full example (the same as above plus a more detailed example) in 
 
 ---
 
-## New queuer
+## NewQueuer
 
-The `NewQueuer` function initializes a new Queuer instance, setting up the core components for job processing.
+`NewQueuer` is a convenience constructor that creates a new Queuer instance using default database configuration derived from environment variables. It acts as a wrapper around `NewQueuerWithDB`.
+`NewQueuerWithDB` is the primary constructor for creating a new Queuer instance. It allows for explicit database configuration and initializes all necessary components, including database handlers, internal event listeners, and the worker.
 
 ```go
-func NewQueuer(name string, maxConcurrency int, opts ...WorkerOption) *Queuer
+func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queuer
+
+func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseConfiguration, options ...*model.OnError) *Queuer
 ```
 
-- `name`: A string identifier for this specific queuer instance. This is useful for distinguishing between multiple queuers in your application or logs.
-- `maxConcurrency`: An integer representing the maximum number of jobs that this queuer can process concurrently. This controls the worker's parallelism.
-- `opts ...WorkerOption`: Optional `WorkerOption` configurations that allow you to customize the worker's behavior, such as error handling strategies.
+- `name`: A `string` identifier for this queuer instance.
+- `maxConcurrency`: An `int` specifying the maximum number of jobs this queuer can process concurrently.
+- `dbConfig`: An optional `*helper.DatabaseConfiguration`. If nil, the configuration will be loaded from environment variables.
+- `options`: Optional `OnError` configurations to apply to the worker.
 
-This function handles the entire setup process: it establishes the database connection, configures the necessary job listeners, and creates an associated worker. If any part of this initialization fails, `NewQueuer` will log a panic error and exit the program to prevent an improperly configured queuer from running. It returns a pointer to the newly created `Queuer` instance, ready to accept and process jobs.
+This function performs the following setup:
+- Initializes a logger.
+- Sets up the database connection using the provided `dbConfig` or environment variables.
+- Creates `JobDBHandler` and `WorkerDBHandler` instances for database interactions.
+- Initializes internal `core.Listener` instances for `jobInsert`, `jobUpdate`, and `jobDelete` events.
+- Creates and inserts a new `model.Worker` into the database based on the provided `name`, `maxConcurrency`, and `options`.
+- If any critical error occurs during this initialization (e.g., database connection failure, worker creation error), the function will log a panic error and exit the program. It returns a pointer to the newly configured `Queuer` instance.
 
 ---
 
-## New queuer without worker
+## Start
 
-The `NewQueuerWithoutWorker` function provides a way to initialize a `Queuer` instance without an active worker. This is particularly useful for scenarios where you need to interact with the job queue (e.g., add jobs, check job status) but don't intend for this specific instance to actively process them.
+The Start method initiates the operational lifecycle of the Queuer. It sets up the main context, initializes database listeners, and begins the job processing and polling loops in a dedicated goroutine.
 
 ```go
-func NewQueuerWithoutWorker() *Queuer
+func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc)
 ```
 
-This function only initializes the database connection and job listeners. It omits the worker component, making it suitable for services that might, for example, serve job status endpoints or solely add jobs to the queue, without consuming computational resources for job execution. Similar to `NewQueuer`, any initialization errors will result in a panic and program exit. It returns a pointer to the newly created `Queuer` instance.
+- `ctx`: The parent context.Context for the queuer's operations. This context will control the overall lifetime of the queuer.
+- `cancel`: The context.CancelFunc associated with the provided ctx. This function should be called to gracefully stop the queuer.
+
+Upon calling Start:
+- It performs a basic check to ensure internal listeners are initialized.
+- Db listeners and broadcasters are created to listen to job events (inserts, updates, deletes).
+- It starts a poller to periodically poll the database for new jobs to process (5 minute interval).
+- It signals its readiness via an internal channel, ensuring the `Start` method returns only when the core loops are active.
+
+The method includes a timeout mechanism (5 seconds) to detect if the queuer fails to start its internal processes promptly, panicking if the timeout is exceeded.
+If the queuer is not not properly initialized (created by calling `NewQueuer`), or if there's an error creating the database listeners, the function will panic.
+
+---
+
+## StartWithoutWorker
+
+The `StartWithoutWorker` method provides a way to start the `Queuer` instance without an active worker. This is particularly useful for scenarios where you need to interact with the job queue (e.g., add jobs, check job status) but don't intend for this specific instance to actively process them.
+
+```go
+func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFunc, withoutListeners bool, dbConnection ...*sql.DB)
+```
+
+- `ctx`: The parent context.Context for the queuer's operations.
+- `cancel`: The context.CancelFunc associated with the provided ctx.
+- `withoutListeners`: A `bool` flag. If true, the database.NewQueuerDBListener instances for job and job_archive tables will not be created.
+- `dbConnection`: An optional existing `*sql.DB` connection to use. If provided, the queuer will use this connection; otherwise, it will create a new one based on environment variables.
+
+---
+
+## Stop
+
+The `Stop` method gracefully shuts down the Queuer instance, releasing resources and ensuring ongoing operations are properly concluded.
+
+```go
+func (q *Queuer) Stop() error
+```
+
+The `Stop` method cancels all jobs, closes db listeners and returns an error if any step of the stopping process encounters an issue
 
 ---
 

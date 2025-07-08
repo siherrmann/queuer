@@ -2,6 +2,7 @@ package queuer
 
 import (
 	"context"
+	"queuer/helper"
 	"queuer/model"
 	"testing"
 	"time"
@@ -12,10 +13,11 @@ import (
 )
 
 func TestListenForJobUpdate(t *testing.T) {
-	q := newQueuerMock("testQueuer", 1)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	q := NewQueuer("testQueuer", 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	q.Start(ctx, cancel)
 	defer cancel()
+	q.Start(ctx, cancel)
 
 	data := &model.Job{RID: uuid.New()}
 	notifyChannel := make(chan *model.Job, 1)
@@ -41,10 +43,11 @@ func TestListenForJobUpdate(t *testing.T) {
 }
 
 func TestListenForJobDelete(t *testing.T) {
-	q := newQueuerMock("testQueuer", 1)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	q := NewQueuer("testQueuer", 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	q.Start(ctx, cancel)
 	defer cancel()
+	q.Start(ctx, cancel)
 
 	data := &model.Job{RID: uuid.New()}
 	notifyChannel := make(chan *model.Job, 1)

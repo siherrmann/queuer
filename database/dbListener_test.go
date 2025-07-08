@@ -11,7 +11,11 @@ import (
 )
 
 func TestNewQueuerDBListener(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	listener, err := NewQueuerDBListener(dbConfig, "test_channel")
 	assert.NoError(t, err, "Expected NewQueuerDBListener to not return an error")
 	assert.NotNil(t, listener, "Expected listener to be created")
@@ -23,7 +27,11 @@ func TestNewQueuerDBListener(t *testing.T) {
 }
 
 func TestListen(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	listener, err := NewQueuerDBListener(dbConfig, "test_channel")
 	assert.NoError(t, err, "Expected NewQueuerDBListener to not return an error")
 	assert.NotNil(t, listener, "Expected listener to be created")

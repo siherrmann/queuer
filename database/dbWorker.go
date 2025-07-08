@@ -32,6 +32,10 @@ type WorkerDBHandler struct {
 
 // NewWorkerDBHandler creates a new instance of WorkerDBHandler.
 func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*WorkerDBHandler, error) {
+	if dbConnection == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+
 	workerDbHandler := &WorkerDBHandler{
 		db: dbConnection,
 	}

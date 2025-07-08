@@ -39,27 +39,42 @@ func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
 
 		return db
 	} else {
-		return &Database{name, logger, nil}
+		return &Database{
+			Name:     name,
+			Logger:   logger,
+			Instance: nil,
+		}
+	}
+}
+
+func NewDatabaseWithDB(name string, dbConnnection *sql.DB) *Database {
+	logger := log.New(os.Stdout, "Database "+name+": ", log.Ltime)
+	return &Database{
+		Name:     name,
+		Logger:   logger,
+		Instance: dbConnnection,
 	}
 }
 
 type DatabaseConfiguration struct {
-	Host     string
-	Port     string
-	Database string
-	Username string
-	Password string
-	Schema   string
+	Host          string
+	Port          string
+	Database      string
+	Username      string
+	Password      string
+	Schema        string
+	WithTableDrop bool
 }
 
 func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 	config := &DatabaseConfiguration{
-		Host:     os.Getenv("QUEUER_DB_HOST"),
-		Port:     os.Getenv("QUEUER_DB_PORT"),
-		Database: os.Getenv("QUEUER_DB_DATABASE"),
-		Username: os.Getenv("QUEUER_DB_USERNAME"),
-		Password: os.Getenv("QUEUER_DB_PASSWORD"),
-		Schema:   os.Getenv("QUEUER_DB_SCHEMA"),
+		Host:          os.Getenv("QUEUER_DB_HOST"),
+		Port:          os.Getenv("QUEUER_DB_PORT"),
+		Database:      os.Getenv("QUEUER_DB_DATABASE"),
+		Username:      os.Getenv("QUEUER_DB_USERNAME"),
+		Password:      os.Getenv("QUEUER_DB_PASSWORD"),
+		Schema:        os.Getenv("QUEUER_DB_SCHEMA"),
+		WithTableDrop: os.Getenv("QUEUER_DB_WITH_TABLE_DROP") == "true",
 	}
 	if len(strings.TrimSpace(config.Host)) == 0 || len(strings.TrimSpace(config.Port)) == 0 || len(strings.TrimSpace(config.Database)) == 0 || len(strings.TrimSpace(config.Username)) == 0 || len(strings.TrimSpace(config.Password)) == 0 || len(strings.TrimSpace(config.Schema)) == 0 {
 		return nil, fmt.Errorf("QUEUER_DB_HOST, QUEUER_DB_PORT, QUEUER_DB_DATABASE, QUEUER_DB_USERNAME, QUEUER_DB_PASSWORD and QUEUER_DB_SCHEMA environment variables must be set")

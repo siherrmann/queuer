@@ -1,6 +1,8 @@
 package queuer
 
 import (
+	"context"
+	"queuer/helper"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,7 +11,11 @@ import (
 )
 
 func TestGetWorker(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully get worker created by the new queuer", func(t *testing.T) {
 		retrievedWorker, err := testQueuer.GetWorker(testQueuer.worker.RID)
@@ -27,7 +33,11 @@ func TestGetWorker(t *testing.T) {
 }
 
 func TestGetWorkers(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully get workers starting from the lastId", func(t *testing.T) {
 		workers, err := testQueuer.GetWorkers(0, 10)

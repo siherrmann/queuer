@@ -1,6 +1,8 @@
 package queuer
 
 import (
+	"context"
+	"queuer/helper"
 	"queuer/model"
 	"testing"
 
@@ -9,7 +11,11 @@ import (
 )
 
 func TestAddTask(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully add task", func(t *testing.T) {
 		task := func() {}
@@ -52,7 +58,11 @@ func TestAddTask(t *testing.T) {
 }
 
 func TestAddTaskWithName(t *testing.T) {
-	testQueuer := newQueuerMock("TestQueuer", 100)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully add task with name", func(t *testing.T) {
 		task := func() {}

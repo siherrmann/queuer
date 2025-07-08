@@ -126,60 +126,6 @@ func TestNewQueuer(t *testing.T) {
 	}
 }
 
-func TestNewQueuerWithoutWorker(t *testing.T) {
-	tests := []struct {
-		name        string
-		dbEnvs      map[string]string
-		expectError bool
-	}{
-		{
-			name: "Valid queuer without worker",
-			dbEnvs: map[string]string{
-				"QUEUER_DB_HOST":     "localhost",
-				"QUEUER_DB_PORT":     dbPort,
-				"QUEUER_DB_DATABASE": "database",
-				"QUEUER_DB_USERNAME": "user",
-				"QUEUER_DB_PASSWORD": "password",
-				"QUEUER_DB_SCHEMA":   "public",
-			},
-			expectError: false,
-		},
-		{
-			name: "Missing DB environment variable",
-			dbEnvs: map[string]string{
-				"QUEUER_DB_HOST": "localhost",
-				"QUEUER_DB_PORT": dbPort,
-				// "QUEUER_DB_DATABASE": "database", // Intentionally missing
-				"QUEUER_DB_USERNAME": "user",
-				"QUEUER_DB_PASSWORD": "password",
-				"QUEUER_DB_SCHEMA":   "public",
-			},
-			expectError: true,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			for key, value := range test.dbEnvs {
-				t.Setenv(key, value)
-			}
-
-			if test.expectError {
-				defer func() {
-					if r := recover(); r == nil {
-						t.Errorf("Expected panic for %s, but did not get one", test.name)
-					}
-				}()
-			}
-
-			queuer := NewQueuerWithoutWorker()
-			if !test.expectError {
-				require.NotNil(t, queuer, "Expected Queuer to be created successfully")
-			}
-		})
-	}
-}
-
 func TestStop(t *testing.T) {
 	envs := map[string]string{
 		"QUEUER_DB_HOST":     "localhost",

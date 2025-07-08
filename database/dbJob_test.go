@@ -13,7 +13,11 @@ import (
 )
 
 func TestJobNewJobDBHandler(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -25,7 +29,11 @@ func TestJobNewJobDBHandler(t *testing.T) {
 }
 
 func TestJobCheckTableExistance(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -37,7 +45,11 @@ func TestJobCheckTableExistance(t *testing.T) {
 }
 
 func TestJobCreateTable(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -48,7 +60,11 @@ func TestJobCreateTable(t *testing.T) {
 }
 
 func TestJobDropTable(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -59,7 +75,11 @@ func TestJobDropTable(t *testing.T) {
 }
 
 func TestJobInsertJob(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -79,7 +99,11 @@ func TestJobInsertJob(t *testing.T) {
 }
 
 func TestJobInsertJobTx(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -105,7 +129,11 @@ func TestJobInsertJobTx(t *testing.T) {
 }
 
 func TestJobBatchInsertJobs(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -125,7 +153,11 @@ func TestJobBatchInsertJobs(t *testing.T) {
 }
 
 func TestJobUpdateJobsInitial(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	// Prerequisite: Insert a worker for the job to be associated with
@@ -164,7 +196,11 @@ func TestJobUpdateJobsInitial(t *testing.T) {
 }
 
 func TestJobUpdateJobFinal(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -186,7 +222,11 @@ func TestJobUpdateJobFinal(t *testing.T) {
 }
 
 func TestJobDeleteJob(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -209,7 +249,11 @@ func TestJobDeleteJob(t *testing.T) {
 }
 
 func TestJobSelectJob(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -228,7 +272,11 @@ func TestJobSelectJob(t *testing.T) {
 }
 
 func TestJobSelectAllJobs(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	newJobCount := 5
@@ -254,7 +302,11 @@ func TestJobSelectAllJobs(t *testing.T) {
 }
 
 func TestJobSelectAllJobsByWorkerRID(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	workerConcurrency := 3
@@ -297,7 +349,11 @@ func TestJobSelectAllJobsByWorkerRID(t *testing.T) {
 }
 
 func TestJobSelectAllJobsBySearch(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	searchTerm := "TestTaskSearch"
@@ -335,7 +391,11 @@ func TestJobSelectAllJobsBySearch(t *testing.T) {
 }
 
 func TestJobSelectJobFromArchive(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -361,7 +421,11 @@ func TestJobSelectJobFromArchive(t *testing.T) {
 }
 
 func TestJobSelectAllJobsFromArchive(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	jobDBHandler, err := NewJobDBHandler(database, true)
@@ -392,7 +456,11 @@ func TestJobSelectAllJobsFromArchive(t *testing.T) {
 }
 
 func TestJobSelectAllJobsFromArchiveBySearch(t *testing.T) {
-	dbConfig := helper.NewTestDatabaseConfig(dbPort)
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := helper.NewTestDatabase(dbConfig)
 
 	searchTerm := "TestTaskSearch"

@@ -69,9 +69,9 @@ func TestNewDatabaseConfig(t *testing.T) {
 			dbConfig, err := NewDatabaseConfiguration()
 			if test.expectError {
 				assert.NotNil(t, err, "expected an error for %s, but got none", test.name)
-				assert.Nil(t, dbConfig, "expected NewTestDatabaseConfig to return nil on error")
+				assert.Nil(t, dbConfig, "expected NewDatabaseConfiguration to return nil on error")
 			} else {
-				assert.NotNil(t, dbConfig, "expected NewTestDatabaseConfig to return a non-nil instance")
+				assert.NotNil(t, dbConfig, "expected NewDatabaseConfiguration to return a non-nil instance")
 				assert.Equal(t, test.envs["QUEUER_DB_HOST"], dbConfig.Host, "expected host to be 'localhost', got %s", dbConfig.Host)
 				assert.Equal(t, test.envs["QUEUER_DB_PORT"], dbConfig.Port, "expected port to be %s, got %s", dbPort, dbConfig.Port)
 				assert.Equal(t, test.envs["QUEUER_DB_DATABASE"], dbConfig.Database, "expected database to be 'queuer_test', got %s", dbConfig.Database)
@@ -85,14 +85,22 @@ func TestNewDatabaseConfig(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	assert.NotNil(t, database, "expected NewDatabase to return a non-nil instance")
 }
 
 func TestHealth(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	stats := database.Health()
@@ -104,17 +112,25 @@ func TestHealth(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	assert.NotNil(t, database, "expected NewDatabase to return a non-nil instance")
 }
 
 func TestCheckTableExistance(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
-	_, err := database.Instance.Exec(
+	_, err = database.Instance.Exec(
 		`CREATE TABLE IF NOT EXISTS test_table_existance (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			name TEXT NOT NULL
@@ -134,11 +150,15 @@ func TestCheckTableExistance(t *testing.T) {
 }
 
 func TestCreateIndex(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	// Create a test table
-	_, err := database.Instance.Exec(
+	_, err = database.Instance.Exec(
 		`CREATE TABLE IF NOT EXISTS test_index (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			name TEXT NOT NULL
@@ -160,11 +180,15 @@ func TestCreateIndex(t *testing.T) {
 }
 
 func TestCreateIndexes(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	// Create a test table
-	_, err := database.Instance.Exec(
+	_, err = database.Instance.Exec(
 		`CREATE TABLE IF NOT EXISTS test_indexes (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			name1 TEXT NOT NULL,
@@ -189,11 +213,15 @@ func TestCreateIndexes(t *testing.T) {
 }
 
 func TestCreateCombinedIndex(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	// Create a test table
-	_, err := database.Instance.Exec(
+	_, err = database.Instance.Exec(
 		`CREATE TABLE IF NOT EXISTS test_combined_index (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			name1 TEXT NOT NULL,
@@ -216,11 +244,15 @@ func TestCreateCombinedIndex(t *testing.T) {
 }
 
 func TestCreateUniqueCombinedIndex(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	// Create a test table
-	_, err := database.Instance.Exec(
+	_, err = database.Instance.Exec(
 		`CREATE TABLE IF NOT EXISTS test_unique_combined_index (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			name1 TEXT NOT NULL,
@@ -243,11 +275,15 @@ func TestCreateUniqueCombinedIndex(t *testing.T) {
 }
 
 func TestDropIndex(t *testing.T) {
-	dbConfig := NewTestDatabaseConfig(dbPort)
+	SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
 	database := NewTestDatabase(dbConfig)
 
 	// Create a test table
-	_, err := database.Instance.Exec(
+	_, err = database.Instance.Exec(
 		`CREATE TABLE IF NOT EXISTS test_drop_index (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			name TEXT NOT NULL

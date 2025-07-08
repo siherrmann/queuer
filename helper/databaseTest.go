@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"testing"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
@@ -56,13 +57,12 @@ func NewTestDatabase(config *DatabaseConfiguration) *Database {
 	)
 }
 
-func NewTestDatabaseConfig(port string) *DatabaseConfiguration {
-	return &DatabaseConfiguration{
-		Host:     "localhost",
-		Port:     port,
-		Database: dbName,
-		Username: dbUser,
-		Password: dbPwd,
-		Schema:   "public",
-	}
+func SetTestDatabaseConfigEnvs(t *testing.T, port string) {
+	t.Setenv("QUEUER_DB_HOST", "localhost")
+	t.Setenv("QUEUER_DB_PORT", port)
+	t.Setenv("QUEUER_DB_DATABASE", dbName)
+	t.Setenv("QUEUER_DB_USERNAME", dbUser)
+	t.Setenv("QUEUER_DB_PASSWORD", dbPwd)
+	t.Setenv("QUEUER_DB_SCHEMA", "public")
+	t.Setenv("QUEUER_DB_WITH_TABLE_DROP", "true")
 }

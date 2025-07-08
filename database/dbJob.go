@@ -41,6 +41,10 @@ type JobDBHandler struct {
 
 // NewJobDBHandler creates a new instance of JobDBHandler.
 func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBHandler, error) {
+	if dbConnection == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+
 	jobDbHandler := &JobDBHandler{
 		db: dbConnection,
 	}
