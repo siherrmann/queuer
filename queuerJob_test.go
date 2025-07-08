@@ -190,11 +190,8 @@ func TestAddJobRunning(t *testing.T) {
 
 		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
 		require.NoError(t, err, "AddJob should not return an error on success")
-
-		queuedJob, err := testQueuer.GetJob(job.RID)
-		require.NoError(t, err, "GetJob should not return an error")
-		require.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
-		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Running status")
+		require.NotNil(t, job, "GetJob should return the job that is currently running")
+		assert.Equal(t, model.JobStatusScheduled, job.Status, "Job should be in Scheduled status")
 
 		done := make(chan struct{})
 		go func() {

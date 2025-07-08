@@ -125,7 +125,9 @@ func (r JobDBHandler) CreateTable() error {
 	}
 
 	_, err = r.db.Instance.Exec(
-		`CREATE INDEX idx_next_interval ON job USING HASH ((options->'schedule'->>'next_interval'));`,
+		`CREATE INDEX IF NOT EXISTS idx_next_interval
+		ON job
+		USING HASH ((options->'schedule'->>'next_interval'));`,
 	)
 	if err != nil {
 		log.Panicf("error creating index on next_interval: %#v", err)
