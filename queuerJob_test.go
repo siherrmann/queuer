@@ -477,7 +477,9 @@ func TestAddJobWithScheduleOptionsRunning(t *testing.T) {
 	defer cancel()
 	testQueuer.Start(ctx, cancel)
 
+	nextIntervalFuncCalled := false
 	nextIntervalFunc := func(start time.Time, currentCount int) time.Time {
+		nextIntervalFuncCalled = true
 		return start.Add(time.Duration(currentCount) * time.Second)
 	}
 	testQueuer.AddNextIntervalFuncWithName(nextIntervalFunc, "nextIntervalFunc")
@@ -523,6 +525,8 @@ func TestAddJobWithScheduleOptionsRunning(t *testing.T) {
 
 	// Check if both jobs are archived
 	<-secondJobFinished
+	assert.Equal(t, nextIntervalFuncCalled, true, "NextIntervalFunc should be called during job execution")
+
 	jobs, err := testQueuer.GetJobs(0, 10)
 	log.Printf("Jobs after running: %v", jobs)
 	assert.NoError(t, err, "GetJobs should not return an error")

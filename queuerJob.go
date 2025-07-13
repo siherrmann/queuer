@@ -431,8 +431,19 @@ func (q *Queuer) endJob(job *model.Job) {
 
 		// Readd scheduled jobs to the queue
 		if endedJob.Options != nil && endedJob.Options.Schedule != nil && endedJob.ScheduleCount < endedJob.Options.Schedule.MaxCount {
-			// if len(endedJob.Options.Schedule.NextInterval) > 0 {
-			newScheduledAt := endedJob.ScheduledAt.Add(time.Duration(endedJob.ScheduleCount) * endedJob.Options.Schedule.Interval)
+			var newScheduledAt time.Time
+			if len(endedJob.Options.Schedule.NextInterval) > 0 {
+				// This worker should only have the current job if the NextIntervalFunc is available.
+				nextIntervalFunc, ok := q.nextIntervalFuncs[endedJob.Options.Schedule.NextInterval]
+				if !ok {
+					q.log.Printf("NextIntervalFunc %v not found for job with RID %v", endedJob.Options.Schedule.NextInterval, endedJob.RID)
+					return
+				}
+				newScheduledAt = nextIntervalFunc(*endedJob.ScheduledAt, endedJob.ScheduleCount)
+			} else {
+				newScheduledAt = endedJob.ScheduledAt.Add(time.Duration(endedJob.ScheduleCount) * endedJob.Options.Schedule.Interval)
+			}
+
 			endedJob.ScheduledAt = &newScheduledAt
 			endedJob.Status = model.JobStatusScheduled
 			job, err := q.dbJob.InsertJob(endedJob)
