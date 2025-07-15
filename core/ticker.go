@@ -17,6 +17,9 @@ type Ticker struct {
 }
 
 // NewTicker creates and returns a new Ticker instance.
+// It initializes the ticker with a specified interval and a task to run.
+// The task must be valid and compatible with the provided parameters.
+// It returns a pointer to the new Ticker instance or an error if the interval, task or parameters are invalid.
 func NewTicker(interval time.Duration, task interface{}, parameters ...interface{}) (*Ticker, error) {
 	if interval <= 0 {
 		return nil, fmt.Errorf("ticker interval must be greater than zero")
@@ -40,6 +43,11 @@ func NewTicker(interval time.Duration, task interface{}, parameters ...interface
 
 // Go starts the Ticker. It runs the task at the specified interval
 // until the provided context is cancelled.
+// It uses a ticker to trigger the task execution at the specified interval.
+// If the context is done, it will stop the ticker and return.
+// The task is run in a separate goroutine to avoid blocking the ticker.
+// If the task returns an error, it will log the error.
+// The ticker will continue to run until the context is cancelled or an error occurs.
 func (t *Ticker) Go(ctx context.Context) {
 	go t.runner.Run(ctx)
 

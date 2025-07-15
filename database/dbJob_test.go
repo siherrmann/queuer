@@ -39,7 +39,7 @@ func TestJobCheckTableExistance(t *testing.T) {
 	jobDBHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-	exists, err := jobDBHandler.CheckTableExistance()
+	exists, err := jobDBHandler.CheckTablesExistance()
 	assert.NoError(t, err, "Expected CheckTableExistance to not return an error")
 	assert.True(t, exists, "Expected job table to exist")
 }

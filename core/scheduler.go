@@ -17,6 +17,9 @@ type Scheduler struct {
 	StartTime  *time.Time
 }
 
+// NewScheduler creates a new Scheduler instance for the specified task and parameters.
+// It checks if the task and parameters are valid and returns a pointer to the new Scheduler instance.
+// It returns an error if the task or parameters are invalid.
 func NewScheduler(startTime *time.Time, task interface{}, parameters ...interface{}) (*Scheduler, error) {
 	err := helper.CheckValidTaskWithParameters(task, parameters...)
 	if err != nil {
@@ -30,6 +33,12 @@ func NewScheduler(startTime *time.Time, task interface{}, parameters ...interfac
 	}, nil
 }
 
+// Go starts the scheduler to run the task at the specified start time.
+// It creates a new Runner instance and runs the task after the specified duration.
+// If the start time is nil, it runs the task immediately.
+// It uses a context to manage cancellation and timeout.
+// If the context is done, it will cancel the task and return an error.
+// The context's timeout is set based on the OnError options if provided, otherwise it uses a cancelable context.
 func (s *Scheduler) Go(ctx context.Context) {
 	var duration time.Duration
 	if s.StartTime != nil {

@@ -6,6 +6,7 @@ import (
 	"github.com/siherrmann/queuer/model"
 )
 
+// ListenForJobInsert listens for job insert events and notifies the provided function when a job is added.
 func (q *Queuer) ListenForJobUpdate(notifyFunction func(data *model.Job)) error {
 	if q == nil || q.ctx == nil {
 		return fmt.Errorf("cannot listen with uninitialized or not running Queuer")
@@ -23,6 +24,7 @@ func (q *Queuer) ListenForJobUpdate(notifyFunction func(data *model.Job)) error 
 	return nil
 }
 
+// ListenForJobInsert listens for job insert events and notifies the provided function when a job is added.
 func (q *Queuer) ListenForJobDelete(notifyFunction func(data *model.Job)) error {
 	if q == nil || q.ctx == nil {
 		return fmt.Errorf("cannot listen with uninitialized or not running Queuer")

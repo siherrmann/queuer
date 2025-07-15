@@ -12,6 +12,19 @@ const (
 	RETRY_BACKOFF_EXPONENTIAL = "exponential"
 )
 
+// OptionsOnError represents the options to handle errors during job execution.
+// It includes timeout, maximum retries, retry delay, and retry backoff strategy.
+// It is used to define how the system should behave when a job fails.
+//
+// Parameters:
+// - Timeout is the maximum time in seconds to wait for a job to complete before considering it failed.
+// - MaxRetries is the maximum number of retries to attempt if a job fails.
+// - RetryDelay is the delay in seconds before retrying a failed job.
+// - RetryBackoff is the strategy to use for retrying failed jobs. It can be one of the following:
+//   - none: no retry, the job will fail immediately.
+//   - linear: retry with a fixed delay.
+//   - exponential: retry with an exponentially increasing delay.
+//     If RetryBackoff is not provided, it defaults to "none".
 type OnError struct {
 	Timeout      float64 `json:"timeout"`
 	MaxRetries   int     `json:"max_retries"`
@@ -19,6 +32,10 @@ type OnError struct {
 	RetryBackoff string  `json:"retry_backoff"`
 }
 
+// IsValid checks if the OnError options are valid.
+// Timeout, MaxRetries, and RetryDelay must be non-negative.
+// RetryBackoff must be one of the predefined strategies: none, linear, or exponential.
+// It returns an error if any of the conditions are not met.
 func (c *OnError) IsValid() error {
 	if c.Timeout < 0 {
 		return errors.New("timeout cannot be negative")

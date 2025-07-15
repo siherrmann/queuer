@@ -76,6 +76,14 @@ func (r *Parameters) ToInterfaceSlice() []interface{} {
 	return interfaceSlice
 }
 
+// Job represents an assigned task to a worker.
+// It contains all necessary information to execute the task,
+// including OnError and Schedule options, parameters, and status.
+//
+// ID, RID, CreatedAt, and UpdatedAt are set automatically on creation.
+//
+// Status, ScheduledAt, StartedAt, ScheduleCount, Attempts,
+// Results, Error, CreatedAt, and UpdatedAt are set automatically on update.
 type Job struct {
 	ID            int        `json:"id"`
 	RID           uuid.UUID  `json:"rid"`
@@ -95,6 +103,9 @@ type Job struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
+// NewJob creates a new Job instance with the provided task, options, and parameters.
+// It validates the task name and options, and initializes the job status and scheduled time if applicable.
+// It returns a pointer to the new Job instance or an error if something is invalid.
 func NewJob(task interface{}, options *Options, parameters ...interface{}) (*Job, error) {
 	taskName, err := helper.GetTaskNameFromInterface(task)
 	if err != nil {
@@ -134,6 +145,9 @@ func NewJob(task interface{}, options *Options, parameters ...interface{}) (*Job
 	}, nil
 }
 
+// JobFromNotification represents a job received from a notification.
+// It contains all fields from Job, but with DBTime
+// for time fields to handle database-specific time formats.
 type JobFromNotification struct {
 	ID          int        `json:"id"`
 	RID         uuid.UUID  `json:"rid"`
@@ -152,6 +166,7 @@ type JobFromNotification struct {
 	UpdatedAt   DBTime     `json:"updated_at"`
 }
 
+// ToJob converts a JobFromNotification to a Job instance.
 func (jn *JobFromNotification) ToJob() *Job {
 	return &Job{
 		ID:          jn.ID,
@@ -172,6 +187,7 @@ func (jn *JobFromNotification) ToJob() *Job {
 	}
 }
 
+// DBTime is a custom time type for handling database-specific time formats.
 type DBTime struct {
 	time.Time
 }

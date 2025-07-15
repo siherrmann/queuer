@@ -16,6 +16,10 @@ import (
 	"github.com/siherrmann/queuer/model"
 )
 
+// Queuer represents the main queuing system.
+// It manages job scheduling, execution, and error handling.
+// It provides methods to start, stop, and manage jobs and workers.
+// It also handles database connections and listeners for job events.
 type Queuer struct {
 	// Context
 	ctx    context.Context
@@ -46,6 +50,8 @@ type Queuer struct {
 	WithTableDrop bool
 }
 
+// NewQueuer creates a new Queuer instance with the given name and max concurrency.
+// It wraps NewQueuerWithDB to initialize the queuer without an external db config.
 func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queuer {
 	return NewQueuerWithDB(name, maxConcurrency, nil, options...)
 }
@@ -127,6 +133,13 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 // Start starts the queuer by initializing the job listeners and starting the job poll ticker.
 // It checks if the queuer is initialized properly, and if not, it logs a panic error and exits the program.
 // It runs the job processing in a separate goroutine and listens for job events.
+//
+// Detailed steps include:
+// 1. Create job and job archive database listeners.
+// 2. Create broadcasters for job insert, update, and delete events.
+// 3. Start the job listeners to listen for job events.
+// 4. Start the job poll ticker to periodically check for new jobs.
+// 5. Wait for the queuer to be ready or log a panic error if it fails to start within 5 seconds.
 func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 	q.ctx = ctx
 	q.cancel = cancel
@@ -188,6 +201,10 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 // Start starts the queuer by initializing the job listeners and starting the job poll ticker.
 // It checks if the queuer is initialized properly, and if not, it logs a panic error and exits the program.
 // It runs the job processing in a separate goroutine and listens for job events.
+//
+// This version does not run the job processing, allowing the queuer to be started without a worker.
+// Is is useful if you want to run a queuer instance in a seperate service without a worker,
+// for example to handle listening to job events and providing a central frontend.
 func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFunc, withoutListeners bool) {
 	q.ctx = ctx
 	q.cancel = cancel

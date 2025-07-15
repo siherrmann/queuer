@@ -66,6 +66,9 @@ type DatabaseConfiguration struct {
 	WithTableDrop bool
 }
 
+// NewDatabaseConfiguration creates a new DatabaseConfiguration instance.
+// It reads the database configuration from environment variables.
+// It returns a pointer to the new DatabaseConfiguration instance or an error if any required environment variable is not set.
 func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 	config := &DatabaseConfiguration{
 		Host:          os.Getenv("QUEUER_DB_HOST"),
@@ -88,6 +91,7 @@ func (d *DatabaseConfiguration) DatabaseConnectionString() string {
 
 // Internal function for the service creation to connect to a database.
 // DatabaseConfiguration must contain uri, username and password.
+// It initializes the database connection and sets the Instance field of the Database struct.
 func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *log.Logger) {
 	if len(strings.TrimSpace(dbConfig.Host)) == 0 || len(strings.TrimSpace(dbConfig.Port)) == 0 || len(strings.TrimSpace(dbConfig.Database)) == 0 || len(strings.TrimSpace(dbConfig.Username)) == 0 || len(strings.TrimSpace(dbConfig.Password)) == 0 || len(strings.TrimSpace(dbConfig.Schema)) == 0 {
 		logger.Fatalln("database configuration must contain uri, username and password.")
@@ -132,6 +136,11 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 	d.Instance = db
 }
 
+// AddNotifyFunction adds a PostgreSQL function to the database that will be called on certain table operations.
+// It creates a function that raises a notification on the specified channel when a row is inserted,
+// updated, or deleted in the job or worker table.
+// The function uses the row_to_json function to convert the row data to JSON format.
+// It returns an error if the function creation fails.
 func (d *Database) AddNotifyFunction() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -167,6 +176,9 @@ func (d *Database) AddNotifyFunction() error {
 	return nil
 }
 
+// CheckTableExistance checks if a table with the specified name exists in the database.
+// It queries the information_schema.tables to check for the existence of the table.
+// It returns true if the table exists, false otherwise, and an error if the query fails.
 func (d *Database) CheckTableExistance(tableName string) (bool, error) {
 	exists := false
 
@@ -191,6 +203,10 @@ func (d *Database) CheckTableExistance(tableName string) (bool, error) {
 	return exists, nil
 }
 
+// CreateIndex creates an index on the specified column of the specified table.
+// It uses the PostgreSQL CREATE INDEX statement to create the index.
+// If the index already exists, it will not create a new one.
+// It returns an error if the index creation fails.
 func (d *Database) CreateIndex(tableName string, columnName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -208,6 +224,9 @@ func (d *Database) CreateIndex(tableName string, columnName string) error {
 	return nil
 }
 
+// CreateIndexes creates indexes on the specified columns of the specified table.
+// It iterates over the column names and calls CreateIndex for each one.
+// It returns an error if any of the index creations fail.
 func (d *Database) CreateIndexes(tableName string, columnNames ...string) error {
 	for _, columnName := range columnNames {
 		err := d.CreateIndex(tableName, columnName)
@@ -218,6 +237,10 @@ func (d *Database) CreateIndexes(tableName string, columnNames ...string) error 
 	return nil
 }
 
+// CreateCombinedIndex creates a combined index on the specified columns of the specified table.
+// It uses the PostgreSQL CREATE INDEX statement to create the index.
+// If the index already exists, it will not create a new one.
+// It returns an error if the index creation fails.
 func (d *Database) CreateCombinedIndex(tableName string, columnName1 string, columnName2 string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -236,6 +259,10 @@ func (d *Database) CreateCombinedIndex(tableName string, columnName1 string, col
 	return nil
 }
 
+// CreateUniqueCombinedIndex creates a unique combined index on the specified columns of the specified table.
+// It uses the PostgreSQL CREATE UNIQUE INDEX statement to create the index.
+// If the index already exists, it will not create a new one.
+// It returns an error if the index creation fails.
 func (d *Database) CreateUniqueCombinedIndex(tableName string, columnName1 string, columnName2 string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -254,6 +281,10 @@ func (d *Database) CreateUniqueCombinedIndex(tableName string, columnName1 strin
 	return nil
 }
 
+// DropIndex drops the index on the specified table and column.
+// It uses the PostgreSQL DROP INDEX statement to drop the index.
+// If the index does not exist, it will not return an error.
+// It returns an error if the index dropping fails.
 func (d *Database) DropIndex(tableName string, jsonMapKey string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

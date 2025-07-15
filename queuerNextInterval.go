@@ -7,6 +7,14 @@ import (
 	"github.com/siherrmann/queuer/model"
 )
 
+// AddNextIntervalFunc adds a NextIntervalFunc to the worker's available next interval functions.
+// It takes a NextIntervalFunc and adds it to the worker's AvailableNextIntervalFuncs.
+// The function name is derived from the NextIntervalFunc interface using helper.GetTaskNameFromInterface.
+// The function is meant to be used before starting the Queuer to ensure that the worker has access to the function.
+// It checks if the function is nil or already exists in the worker's available next interval functions.
+//
+// If the function is nil or already exists, it panics.
+// It returns the updated worker after adding the function.
 func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {
 	if nif == nil {
 		q.log.Panicf("error adding next interval: NextIntervalFunc cannot be nil")
@@ -33,6 +41,19 @@ func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {
 	return worker
 }
 
+// AddNextIntervalFuncWithName adds a NextIntervalFunc to
+// the worker's available next interval functions with a specific name.
+// It takes a NextIntervalFunc and a name, checks if the function is nil
+// or already exists in the worker's available next interval functions,
+// and adds it to the worker's AvailableNextIntervalFuncs.
+//
+// This function is useful when you want to add a NextIntervalFunc
+// with a specific name that you control, rather than deriving it from the function itself.
+// It ensures that the function is not nil and that the name does not already exist
+// in the worker's available next interval functions.
+//
+// If the function is nil or already exists, it panics.
+// It returns the updated worker after adding the function with the specified name.
 func (q *Queuer) AddNextIntervalFuncWithName(nif model.NextIntervalFunc, name string) *model.Worker {
 	if nif == nil {
 		q.log.Panicf("NextIntervalFunc cannot be nil")

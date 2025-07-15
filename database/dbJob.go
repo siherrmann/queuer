@@ -15,7 +15,7 @@ import (
 
 // JobDBHandlerFunctions defines the interface for Job database operations.
 type JobDBHandlerFunctions interface {
-	CheckTableExistance() (bool, error)
+	CheckTablesExistance() (bool, error)
 	CreateTable() error
 	DropTables() error
 	InsertJob(job *model.Job) (*model.Job, error)
@@ -40,6 +40,8 @@ type JobDBHandler struct {
 }
 
 // NewJobDBHandler creates a new instance of JobDBHandler.
+// It initializes the database connection and optionally drops existing tables.
+// If withTableDrop is true, it will drop the existing job tables before creating new ones
 func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBHandler, error) {
 	if dbConnection == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -64,14 +66,22 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBH
 	return jobDbHandler, nil
 }
 
-// CheckTableExistance checks if the 'job' table exists in the database.
-func (r JobDBHandler) CheckTableExistance() (bool, error) {
-	exists := false
-	exists, err := r.db.CheckTableExistance("job")
-	return exists, err
+// CheckTablesExistance checks if the 'job' and 'job_archive' tables exist in the database.
+// It returns true if both tables exist, otherwise false.
+func (r JobDBHandler) CheckTablesExistance() (bool, error) {
+	jobExists, err := r.db.CheckTableExistance("job")
+	if err != nil {
+		return false, fmt.Errorf("error checking job table existence: %w", err)
+	}
+	jobArchiveExists, err := r.db.CheckTableExistance("job_archive")
+	if err != nil {
+		return false, fmt.Errorf("error checking job archive table existence: %w", err)
+	}
+	return jobExists && jobArchiveExists, err
 }
 
-// CreateTable creates the 'job' table in the database if it doesn't already exist.
+// CreateTable creates the 'job' and 'job_archive' tables in the database.
+// If the tables already exist, it does not create them again.
 // It also creates a trigger for notifying events on the table and all necessary indexes.
 func (r JobDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -146,7 +156,7 @@ func (r JobDBHandler) CreateTable() error {
 	return nil
 }
 
-// DropTables drops the 'job' table from the database.
+// DropTables drops the 'job' and 'job_archive' tables from the database.
 func (r JobDBHandler) DropTables() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -217,6 +227,7 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	return newJob, nil
 }
 
+// InsertJobTx inserts a new job record into the database within a transaction.
 func (r JobDBHandler) InsertJobTx(tx *sql.Tx, job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := tx.QueryRow(
@@ -265,6 +276,7 @@ func (r JobDBHandler) InsertJobTx(tx *sql.Tx, job *model.Job) (*model.Job, error
 	return newJob, nil
 }
 
+// BatchInsertJobs inserts multiple job records into the database in a single transaction.
 func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 	if len(jobs) == 0 {
 		return nil
@@ -329,7 +341,14 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 }
 
 // UpdateJobsInitial updates an existing queued non locked job record in the database.
+//
 // Checks if the job is in 'QUEUED' or 'FAILED' status and if the worker can handle the task.
+// The worker must have the task in its available tasks and the next interval must be available if set.
+// If the job is scheduled it must be scheduled within the next 10 minutes.
+// It updates the job to 'RUNNING' status, increments the schedule count and attempts, and sets the started_at timestamp.
+// It uses the `FOR UPDATE SKIP LOCKED` clause to avoid locking issues with concurrent updates.
+//
+// It returns the updated job records.
 func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
 		`WITH current_concurrency AS (
@@ -436,6 +455,11 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 }
 
 // UpdateJobFinal updates an existing job record in the database to state 'FAILED' or 'SUCCEEDED'.
+//
+// It deletes the job from the 'job' table and inserts it into the 'job_archive' table.
+// The archived job will have the status set to the provided status, and it will include results and error information.
+//
+// It returns the archived job record.
 func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
 		`WITH jobs_old AS (
@@ -607,7 +631,8 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 	return job, nil
 }
 
-// SelectAllJobs retrieves a paginated list of jobs for a specific worker.
+// SelectAllJobs retrieves a paginated list of jobs for a all workers.
+// It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
 		`SELECT
@@ -681,6 +706,7 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 }
 
 // SelectAllJobsByWorkerRID retrieves a paginated list of jobs for a specific worker, filtered by worker RID.
+// It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
 		`SELECT
@@ -754,7 +780,11 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 }
 
 // SelectAllJobsBySearch retrieves a paginated list of jobs for a worker, filtered by search string.
+//
 // It searches across 'rid', 'worker_id', and 'status' fields.
+// The search is case-insensitive and uses ILIKE for partial matches.
+//
+// It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(`
 		SELECT
@@ -836,6 +866,8 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 }
 
 // Job Archive
+
+// SelectJobFromArchive retrieves a single archived job record from the database based on its RID.
 func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
 		`SELECT
@@ -888,6 +920,8 @@ func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 	return job, nil
 }
 
+// SelectAllJobsFromArchive retrieves a paginated list of archived jobs.
+// It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
 		`SELECT
@@ -960,6 +994,9 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 	return jobs, nil
 }
 
+// SelectAllJobsFromArchiveBySearch retrieves a paginated list of archived jobs filtered by search string.
+// It searches across 'rid', 'worker_id', 'task_name', and 'status' fields.
+// It returns jobs that were created before the specified lastID, or the newest jobs if lastID
 func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(`
 		SELECT

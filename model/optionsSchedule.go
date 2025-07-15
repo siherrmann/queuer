@@ -11,6 +11,18 @@ import (
 // based on the start time and the current count of executions.
 type NextIntervalFunc func(start time.Time, currentCount int) time.Time
 
+// Schedule represents the scheduling options for a job.
+// It includes the start time, maximum count of executions, interval between executions,
+// and an optional next interval function to calculate the next execution time.
+// It is used to define how often a job should be executed.
+//
+// Parameters:
+// - Start is the time when the job should start executing.
+// - If MaxCount is 0, the job will run indefinitely.
+// - If MaxCount greater 0, the job will run MaxCount times.
+// - Interval is the duration between executions.
+// - If MaxCount is equal or greater than 0, Interval must be greater than zero or NextInterval must be provided.
+// - If MaxCount is 1, NextInterval can be provided to specify the next execution time.
 type Schedule struct {
 	Start        time.Time     `json:"start"`
 	MaxCount     int           `json:"max_count"`
@@ -18,6 +30,10 @@ type Schedule struct {
 	NextInterval string        `json:"next_interval,omitempty"`
 }
 
+// IsValid checks if the Schedule options are valid.
+// Start time must not be zero, MaxCount must be non-negative,
+// Interval must be greater than zero if MaxCount is greater than 1,
+// or NextInterval must be provided.
 func (c *Schedule) IsValid() error {
 	if c.Start.IsZero() {
 		return errors.New("start time cannot be zero")

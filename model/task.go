@@ -7,6 +7,13 @@ import (
 	"github.com/siherrmann/queuer/helper"
 )
 
+// Task represents a job task with its function, name, input parameters, and output parameters.
+// It is used to define a job that can be executed by the queuer system.
+//
+// Parameters:
+// - Task is the function that will be executed as a job.
+// - Name is the name of the task, which should be unique and descriptive.
+// - InputParameters is a slice of reflect.Type representing the types of input parameters for the task.
 type Task struct {
 	Task             interface{}
 	Name             string

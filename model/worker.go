@@ -12,6 +12,19 @@ const (
 	WorkerStatusFailed  = "FAILED"
 )
 
+// Worker represents a worker that can execute tasks.
+// It includes the worker's ID, name, options for error handling, maximum concurrency,
+// available tasks, and status.
+//
+// ID, RID, Status, CreatedAt, and UpdatedAt are set automatically on creation.
+//
+// Parameters:
+//   - Name is the name of the worker, which should be unique and descriptive.
+//   - Options is an optional field that can be used to specify error handling options.
+//     If the Job has options set, the Job options are used as primary options.
+//   - MaxConcurrency is the maximum number of tasks that can be executed concurrently by the worker.
+//   - AvailableTasks is a list of task names that the worker can execute.
+//   - AvailableNextIntervalFuncs is a list of next interval functions that the worker can use for
 type Worker struct {
 	ID                         int       `json:"id"`
 	RID                        uuid.UUID `json:"rid"`
@@ -25,6 +38,9 @@ type Worker struct {
 	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
+// NewWorker creates a new Worker with the specified name and maximum concurrency.
+// It validates the name and maximum concurrency, and initializes the worker status to running.
+// It returns a pointer to the new Worker instance or an error if something is invalid.
 func NewWorker(name string, maxConcurrency int) (*Worker, error) {
 	if len(name) == 0 || len(name) > 100 {
 		return nil, fmt.Errorf("name must have a length between 1 and 100")
@@ -41,6 +57,9 @@ func NewWorker(name string, maxConcurrency int) (*Worker, error) {
 	}, nil
 }
 
+// NewWorkerWithOptions creates a new Worker with the specified name, maximum concurrency, and error handling options.
+// It validates the name, maximum concurrency, and options, and initializes the worker status to running.
+// It returns a pointer to the new Worker instance or an error if something is invalid.
 func NewWorkerWithOptions(name string, maxConcurrency int, options *OnError) (*Worker, error) {
 	if len(name) == 0 || len(name) > 100 {
 		return nil, fmt.Errorf("name must have a length between 1 and 100")

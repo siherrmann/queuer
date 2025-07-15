@@ -21,6 +21,9 @@ type Runner struct {
 	ErrorChannel   chan error
 }
 
+// NewRunner creates a new Runner instance for the specified task and parameters.
+// It checks if the task and parameters are valid and returns a pointer to the new Runner instance.
+// It returns an error if the task or parameters are invalid.
 func NewRunner(options *model.Options, task interface{}, parameters ...interface{}) (*Runner, error) {
 	taskInputParameters, err := helper.GetInputParametersFromTask(task)
 	if err != nil {
@@ -52,6 +55,9 @@ func NewRunner(options *model.Options, task interface{}, parameters ...interface
 	}, nil
 }
 
+// NewRunnerFromJob creates a new Runner instance from a job.
+// It initializes the runner with the job's task and parameters.
+// It returns a pointer to the new Runner instance or an error if the job is invalid.
 func NewRunnerFromJob(task *model.Task, job *model.Job) (*Runner, error) {
 	if task == nil || job == nil {
 		return nil, fmt.Errorf("task and job cannot be nil")
@@ -71,7 +77,10 @@ func NewRunnerFromJob(task *model.Task, job *model.Job) (*Runner, error) {
 // Run executes the task with the provided parameters.
 // It will return results on ResultsChannel and errors on ErrorChannel.
 // If the task panics, it will send the panic value to ErrorChannel.
-// The main intended use of this function is to run the task in a separate goroutine
+// The main intended use of this function is to run the task in a separate goroutine with panic recovery.
+// It uses a context to manage cancellation and timeout.
+// If the context is done, it will cancel the task and return an error.
+// The context's timeout is set based on the OnError options if provided, otherwise it uses a cancelable context.
 func (r *Runner) Run(ctx context.Context) {
 	if r.Options != nil && r.Options.OnError != nil && r.Options.OnError.Timeout > 0 {
 		ctx, r.cancel = context.WithTimeout(

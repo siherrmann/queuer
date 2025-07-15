@@ -31,6 +31,8 @@ type WorkerDBHandler struct {
 }
 
 // NewWorkerDBHandler creates a new instance of WorkerDBHandler.
+// It initializes the database connection and optionally drops the existing worker table.
+// If withTableDrop is true, it will drop the existing worker table before creating a new one.
 func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*WorkerDBHandler, error) {
 	if dbConnection == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -56,6 +58,7 @@ func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Wor
 }
 
 // CheckTableExistance checks if the 'worker' table exists in the database.
+// It returns true if the table exists, otherwise false.
 func (r WorkerDBHandler) CheckTableExistance() (bool, error) {
 	exists := false
 	exists, err := r.db.CheckTableExistance("worker")
@@ -63,6 +66,9 @@ func (r WorkerDBHandler) CheckTableExistance() (bool, error) {
 }
 
 // CreateTable creates the 'worker' table in the database if it doesn't already exist.
+// It defines the structure of the table with appropriate columns and types.
+// If the table already exists, it will not create it again.
+// It also creates necessary indexes for efficient querying.
 func (r WorkerDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -97,6 +103,10 @@ func (r WorkerDBHandler) CreateTable() error {
 }
 
 // DropTable drops the 'worker' table from the database.
+// It will remove the table and all its data.
+// This operation is irreversible, so it should be used with caution.
+// It is used during testing or when resetting the database schema.
+// If the table does not exist, it will not return an error.
 func (r WorkerDBHandler) DropTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -111,7 +121,9 @@ func (r WorkerDBHandler) DropTable() error {
 	return nil
 }
 
-// InsertWorker inserts a new worker record into the database.
+// InsertWorker inserts a new worker record with name, otpions and max concurrency into the database.
+// It returns the newly created worker with an automatically generated RID.
+// If the insertion fails, it returns an error.
 func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, error) {
 	row := r.db.Instance.QueryRow(
 		`INSERT INTO worker (name, options, max_concurrency)
@@ -142,6 +154,9 @@ func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, erro
 }
 
 // UpdateWorker updates an existing worker record in the database based on its RID.
+// It updates the worker's name, options, available tasks, next interval functions, max concurrency, and status.
+// It returns the updated worker record with an automatically updated updated_at timestamp.
+// If the update fails, it returns an error.
 func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, error) {
 	row := r.db.Instance.QueryRow(
 		`UPDATE
@@ -197,6 +212,7 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 }
 
 // DeleteWorker deletes a worker record from the database based on its RID.
+// It removes the worker from the database and returns an error if the deletion fails.
 func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 	_, err := r.db.Instance.Exec(
 		`DELETE FROM worker
@@ -211,6 +227,8 @@ func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 }
 
 // SelectWorker retrieves a single worker record from the database based on its RID.
+// It returns the worker record.
+// If the worker is not found or an error occurs during the query, it returns an error.
 func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 	worker := &model.Worker{}
 
@@ -252,6 +270,8 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 }
 
 // SelectAllWorkers retrieves a paginated list of all workers.
+// It returns a slice of worker records, ordered by creation date in descending order.
+// It returns workers that were created before the specified lastID, or the newest workers if lastID is 0.
 func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error) {
 	var workers []*model.Worker
 
@@ -318,6 +338,9 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 
 // SelectAllWorkersBySearch retrieves a paginated list of workers, filtered by search string.
 // It searches across 'queue_name', 'name', and 'status' fields.
+// The search is case-insensitive and uses ILIKE for partial matches.
+// It returns a slice of worker records, ordered by creation date in descending order.
+// It returns workers that were created before the specified lastID, or the newest workers if last
 func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, entries int) ([]*model.Worker, error) {
 	var workers []*model.Worker
 

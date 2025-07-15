@@ -14,6 +14,7 @@ import (
 // AddJob adds a job to the queue with the given task and parameters.
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
+// It returns the created job or an error if something goes wrong.
 func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
 	options := q.mergeOptions(nil)
 	job, err := q.addJob(task, options, parameters...)
@@ -29,6 +30,7 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 // AddJobTx adds a job to the queue with the given task and parameters within a transaction.
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
+// It returns the created job or an error if something goes wrong.
 func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{}) (*model.Job, error) {
 	options := q.mergeOptions(nil)
 	job, err := q.addJobTx(tx, task, options, parameters...)
@@ -44,6 +46,37 @@ func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{
 // AddJobWithOptions adds a job with the given task, options, and parameters.
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
+//
+// It returns the created job or an error if something goes wrong.
+//
+// The options parameter allows you to specify additional options for the job,
+// such as scheduling, retry policies, and error handling.
+// If options are nil, the worker's default options will be used.
+//
+// Example usage:
+// ```go
+//
+//	options := &model.Options{
+//		OnError: &model.OnError{
+//			Timeout:      5,
+//			MaxRetries:   2, // Runs 3 times, first is not a retry
+//			RetryDelay:   1,
+//			RetryBackoff: model.RETRY_BACKOFF_NONE,
+//		},
+//		Schedule: &model.Schedule{
+//			Start:         time.Now().Add(10 * time.Second),
+//			Interval:      5 * time.Second,
+//			MaxCount:      3,
+//		},
+//	}
+//
+// job, err := queuer.AddJobWithOptions(options, myTaskFunction, param1, param2)
+//
+//	if err != nil {
+//	    log.Fatalf("Failed to add job: %v", err)
+//	}
+//
+// ```
 func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
 	job, err := q.addJob(task, options, parameters...)
@@ -59,6 +92,7 @@ func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, par
 // AddJobWithOptionsTx adds a job with the given task, options, and parameters within a transaction.
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
+// It returns the created job or an error if something goes wrong.
 func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
 	job, err := q.addJobTx(tx, task, options, parameters...)
@@ -72,6 +106,8 @@ func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task in
 }
 
 // AddJobs adds a batch of jobs to the queue.
+// It takes a slice of BatchJob, which contains the task, options, and parameters for each job.
+// It returns an error if something goes wrong during the process.
 func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	var jobs []*model.Job
 	for _, batchJob := range batchJobs {
@@ -95,6 +131,7 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 }
 
 // WaitForJobAdded waits for any job to start and returns the job.
+// It listens for job insert events and returns the job when it is added to the queue.
 func (q *Queuer) WaitForJobAdded() *model.Job {
 	jobStarted := make(chan *model.Job, 1)
 	outerReady := make(chan struct{})
@@ -119,6 +156,7 @@ func (q *Queuer) WaitForJobAdded() *model.Job {
 }
 
 // WaitForJobFinished waits for a job to finish and returns the job.
+// It listens for job delete events and returns the job when it is finished.
 func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
 	jobFinished := make(chan *model.Job, 1)
 	outerReady := make(chan struct{})
@@ -145,6 +183,8 @@ func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
 }
 
 // CancelJob cancels a job with the given job RID.
+// It retrieves the job from the database and cancels it.
+// If the job is not found or already cancelled, it returns an error.
 func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJob(jobRid)
 	if err != nil {
@@ -159,6 +199,9 @@ func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 	return job, nil
 }
 
+// CancelAllJobsByWorker cancels all jobs assigned to a specific worker by its RID.
+// It retrieves all jobs assigned to the worker and cancels each one.
+// It returns an error if something goes wrong during the process.
 func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID, entries int) error {
 	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, 0, entries)
 	if err != nil {

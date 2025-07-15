@@ -10,6 +10,7 @@ import (
 // It creates a new task with the provided task interface, adds it to the worker's available tasks,
 // and updates the worker in the database.
 // The task name is automatically generated based on the task's function name (eg. main.TestTask).
+//
 // If the task creation fails, it logs a panic error and exits the program.
 // It returns the newly created task.
 func (q *Queuer) AddTask(task interface{}) *model.Task {
@@ -38,6 +39,7 @@ func (q *Queuer) AddTask(task interface{}) *model.Task {
 // AddTaskWithName adds a new task with a specific name to the queuer.
 // It creates a new task with the provided task interface and name, adds it to the worker's available tasks,
 // and updates the worker in the database.
+//
 // If task creation fails, it logs a panic error and exits the program.
 // It returns the newly created task.
 func (q *Queuer) AddTaskWithName(task interface{}, name string) *model.Task {

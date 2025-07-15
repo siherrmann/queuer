@@ -19,6 +19,9 @@ const (
 )
 
 // MustStartPostgresContainer starts a PostgreSQL container for testing purposes.
+// It uses the timescale/timescaledb image with PostgreSQL 17.
+// It returns a function to terminate the container, the port on which the database is accessible,
+// and an error if the container could not be started.
 func MustStartPostgresContainer() (func(ctx context.Context, opts ...testcontainers.TerminateOption) error, string, error) {
 	ctx := context.Background()
 
@@ -50,6 +53,9 @@ func MustStartPostgresContainer() (func(ctx context.Context, opts ...testcontain
 	return pgContainer.Terminate, u.Port(), err
 }
 
+// NewTestDatabase creates a new Database instance for testing purposes.
+// It initializes the database with the provided configuration and the name "test_db".
+// It returns a pointer to the new Database instance.
 func NewTestDatabase(config *DatabaseConfiguration) *Database {
 	return NewDatabase(
 		"test_db",
@@ -57,6 +63,9 @@ func NewTestDatabase(config *DatabaseConfiguration) *Database {
 	)
 }
 
+// SetTestDatabaseConfigEnvs sets the environment variables for the test database configuration.
+// It sets the host, port, database name, username, password, schema,
+// and table drop options for the test database.
 func SetTestDatabaseConfigEnvs(t *testing.T, port string) {
 	t.Setenv("QUEUER_DB_HOST", "localhost")
 	t.Setenv("QUEUER_DB_PORT", port)
