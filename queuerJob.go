@@ -43,40 +43,38 @@ func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{
 	return job, nil
 }
 
-// AddJobWithOptions adds a job with the given task, options, and parameters.
-// As a task you can either pass a function or a string with the task name
-// (necessary if you want to use a task with a name set by you).
-//
-// It returns the created job or an error if something goes wrong.
-//
-// The options parameter allows you to specify additional options for the job,
-// such as scheduling, retry policies, and error handling.
-// If options are nil, the worker's default options will be used.
-//
-// Example usage:
-// ```go
-//
-//	options := &model.Options{
-//		OnError: &model.OnError{
-//			Timeout:      5,
-//			MaxRetries:   2, // Runs 3 times, first is not a retry
-//			RetryDelay:   1,
-//			RetryBackoff: model.RETRY_BACKOFF_NONE,
-//		},
-//		Schedule: &model.Schedule{
-//			Start:         time.Now().Add(10 * time.Second),
-//			Interval:      5 * time.Second,
-//			MaxCount:      3,
-//		},
-//	}
-//
-// job, err := queuer.AddJobWithOptions(options, myTaskFunction, param1, param2)
-//
-//	if err != nil {
-//	    log.Fatalf("Failed to add job: %v", err)
-//	}
-//
-// ```
+/*
+AddJobWithOptions adds a job with the given task, options, and parameters.
+As a task you can either pass a function or a string with the task name
+(necessary if you want to use a task with a name set by you).
+
+It returns the created job or an error if something goes wrong.
+The options parameter allows you to specify additional options for the job,
+such as scheduling, retry policies, and error handling.
+If options are nil, the worker's default options will be used.
+
+Example usage:
+
+	func AddJobExample(queuer *Queuer, param1 string, param2 int) {
+		options := &model.Options{
+			OnError: &model.OnError{
+				Timeout:      5,
+				MaxRetries:   2, Runs 3 times, first is not a retry
+				RetryDelay:   1,
+				RetryBackoff: model.RETRY_BACKOFF_NONE,
+			},
+			Schedule: &model.Schedule{
+				Start:         time.Now().Add(10 * time.Second),
+				Interval:      5 * time.Second,
+				MaxCount:      3,
+			},
+		}
+		job, err := queuer.AddJobWithOptions(options, myTaskFunction, param1, param2)
+		if err != nil {
+			log.Fatalf("Failed to add job: %v", err)
+		}
+	}
+*/
 func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
 	job, err := q.addJob(task, options, parameters...)

@@ -21,6 +21,8 @@ import (
 // It provides methods to start, stop, and manage jobs and workers.
 // It also handles database connections and listeners for job events.
 type Queuer struct {
+	DB              *sql.DB
+	JobPollInterval time.Duration
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -31,7 +33,6 @@ type Queuer struct {
 	// Worker
 	worker *model.Worker
 	// DBs
-	DB       *sql.DB
 	dbConfig *helper.DatabaseConfiguration
 	dbJob    database.JobDBHandlerFunctions
 	dbWorker database.WorkerDBHandlerFunctions
@@ -42,12 +43,9 @@ type Queuer struct {
 	jobInsertListener *core.Listener[*model.Job]
 	jobUpdateListener *core.Listener[*model.Job]
 	jobDeleteListener *core.Listener[*model.Job]
-	JobPollInterval   time.Duration
 	// Available functions
 	tasks             map[string]*model.Task
 	nextIntervalFuncs map[string]model.NextIntervalFunc
-	// Queuer options before starting
-	WithTableDrop bool
 }
 
 // NewQueuer creates a new Queuer instance with the given name and max concurrency.
