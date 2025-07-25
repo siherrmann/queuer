@@ -173,7 +173,7 @@ func (r JobDBHandler) DropTables() error {
 		return fmt.Errorf("error dropping job table: %#v", err)
 	}
 
-	r.db.Logger.Printf("dropped table job")
+	r.db.Logger.Printf("Dropped table job")
 	return nil
 }
 
@@ -866,6 +866,20 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 }
 
 // Job Archive
+
+// AddRetentionArchive updates the retention archive settings for the job archive.
+func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
+	_, err := r.db.Instance.Exec(
+		`SELECT add_retention_policy('job_archive', $1);`,
+		retention,
+	)
+	if err != nil {
+		return fmt.Errorf("error updating retention archive: %w", err)
+	}
+
+	r.db.Logger.Printf("updated retention archive to %s", retention)
+	return nil
+}
 
 // SelectJobFromArchive retrieves a single archived job record from the database based on its RID.
 func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {

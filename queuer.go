@@ -21,8 +21,9 @@ import (
 // It provides methods to start, stop, and manage jobs and workers.
 // It also handles database connections and listeners for job events.
 type Queuer struct {
-	DB              *sql.DB
-	JobPollInterval time.Duration
+	DB               *sql.DB
+	JobPollInterval  time.Duration
+	RetentionArchive time.Duration
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc

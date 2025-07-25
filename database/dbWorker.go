@@ -117,7 +117,7 @@ func (r WorkerDBHandler) DropTable() error {
 		return fmt.Errorf("error dropping worker table: %#v", err)
 	}
 
-	r.db.Logger.Printf("dropped table worker")
+	r.db.Logger.Printf("Dropped table worker")
 	return nil
 }
 

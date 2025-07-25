@@ -14,6 +14,18 @@ The job table contains only queued, scheduled and running tasks. The ended jobs 
 
 ---
 
+# 🛠️ Installation
+
+To integrate the queuer package into your Go project, use the standard go get command:
+
+```
+go get github.com/siherrmann/queuer
+```
+
+To use the package you also need a running postgres database with the timescaleDB extension. You can use the `docker-compose.yml` file in the example folder or start a Docker container with the `timescale/timescaledb:latest-pg17` image.
+
+---
+
 ## 🚀 Getting started
 
 The full initialisation is (in the easiest case):
