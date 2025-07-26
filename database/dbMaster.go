@@ -16,7 +16,7 @@ type MasterDBHandlerFunctions interface {
 	CheckTableExistance() (bool, error)
 	CreateTable() error
 	DropTable() error
-	UpdateMasterInitial(worker *model.Worker, settings *model.MasterSettings) (*model.Master, error)
+	UpdateMaster(worker *model.Worker, settings *model.MasterSettings) (*model.Master, error)
 	SelectMaster() (*model.Master, error)
 }
 
@@ -73,7 +73,7 @@ func (r MasterDBHandler) CreateTable() error {
 		`CREATE TABLE IF NOT EXISTS master (
 			id INTEGER PRIMARY KEY DEFAULT 1,
 			worker_id BIGINT DEFAULT 0,
-            worker_rid UUID,
+			worker_rid UUID,
 			settings JSONB DEFAULT '{}'::JSONB,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -111,12 +111,19 @@ func (r MasterDBHandler) DropTable() error {
 	return nil
 }
 
-// UpdateMasterInitial updates the master entry with the given worker's ID and settings.
+// UpdateMaster updates the master entry with the given worker's ID and settings.
 // It locks the row for update to ensure that only one worker can update the master at a time.
-func (r MasterDBHandler) UpdateMasterInitial(worker *model.Worker, settings *model.MasterSettings) (*model.Master, error) {
+// It returns the old master entry if it was successfully updated, or nil if no update was done.
+func (r MasterDBHandler) UpdateMaster(worker *model.Worker, settings *model.MasterSettings) (*model.Master, error) {
 	row := r.db.Instance.QueryRow(
 		`WITH current_master AS (
-			SELECT id
+			SELECT
+				id,
+				worker_id,
+				worker_rid,
+				settings,
+				created_at,
+				updated_at
 			FROM master
 			WHERE id = 1
 			AND (
@@ -135,12 +142,12 @@ func (r MasterDBHandler) UpdateMasterInitial(worker *model.Worker, settings *mod
 		FROM current_master
 		WHERE master.id = current_master.id
 		RETURNING
-			master.id,
-			master.worker_id,
-			master.worker_rid,
-			master.settings,
-			master.created_at,
-			master.updated_at;`,
+			current_master.id,
+			current_master.worker_id,
+			current_master.worker_rid,
+			current_master.settings,
+			current_master.created_at,
+			current_master.updated_at;`,
 		worker.ID,
 		worker.RID,
 		settings,
@@ -170,12 +177,12 @@ func (r MasterDBHandler) UpdateMasterInitial(worker *model.Worker, settings *mod
 func (r MasterDBHandler) SelectMaster() (*model.Master, error) {
 	row := r.db.Instance.QueryRow(
 		`SELECT
-            id,
-            worker_id,
-            worker_rid,
-            settings,
-            created_at,
-            updated_at
+			id,
+			worker_id,
+			worker_rid,
+			settings,
+			created_at,
+			updated_at
         FROM master
         WHERE id = 1;`,
 	)

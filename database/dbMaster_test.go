@@ -84,7 +84,7 @@ func TestMasterCreateTable(t *testing.T) {
 	assert.True(t, exists, "Expected table to exist after create")
 }
 
-func TestMasterUpdateMasterInitial(t *testing.T) {
+func TestMasterUpdateMaster(t *testing.T) {
 	helper.SetTestDatabaseConfigEnvs(t, dbPort)
 	dbConfig, err := helper.NewDatabaseConfiguration()
 	if err != nil {
@@ -104,9 +104,17 @@ func TestMasterUpdateMasterInitial(t *testing.T) {
 		RetentionArchive:  30,
 		MasterLockTimeout: 10 * time.Minute,
 	}
-	master, err := workerDbHandler.UpdateMasterInitial(worker1, settings)
+	masterOld, err := workerDbHandler.UpdateMaster(worker1, settings)
 	assert.NoError(t, err, "Expected no error updating master")
-	require.NotNil(t, master, "Expected master to not be nil")
+	require.NotNil(t, masterOld, "Expected old master to not be nil")
+	assert.Equal(t, 1, masterOld.ID, "Expected old master ID to be 1")
+	assert.Equal(t, 0, masterOld.WorkerID, "Expected old master WorkerID to be 0")
+	assert.Equal(t, uuid.UUID{}, masterOld.WorkerRID, "Expected old master WorkerRID to match worker RID")
+	assert.Equal(t, model.MasterSettings{}, masterOld.Settings, "Expected old master RetentionArchive to match settings")
+
+	master, err := workerDbHandler.SelectMaster()
+	assert.NoError(t, err, "Expected no error selecting master")
+	assert.NotNil(t, master, "Expected master to not be nil")
 	assert.Equal(t, worker1.ID, master.WorkerID, "Expected master worker ID to match worker ID")
 	assert.Equal(t, worker1.RID, master.WorkerRID, "Expected master worker RID to match worker RID")
 	assert.Equal(t, settings.RetentionArchive, master.Settings.RetentionArchive, "Expected master retention archive to match")
@@ -115,7 +123,7 @@ func TestMasterUpdateMasterInitial(t *testing.T) {
 		ID:  2,
 		RID: uuid.New(),
 	}
-	master, err = workerDbHandler.UpdateMasterInitial(worker2, settings)
+	master, err = workerDbHandler.UpdateMaster(worker2, settings)
 	assert.NoError(t, err, "Expected no error updating master again")
 	assert.Nil(t, master, "Expected master to be nil")
 }
@@ -140,7 +148,7 @@ func TestMasterSelectMaster(t *testing.T) {
 		RetentionArchive:  30,
 		MasterLockTimeout: 10 * time.Minute,
 	}
-	master, err := workerDbHandler.UpdateMasterInitial(worker, settings)
+	master, err := workerDbHandler.UpdateMaster(worker, settings)
 	require.NoError(t, err, "Expected no error updating master")
 	require.NotNil(t, master, "Expected master to not be nil")
 

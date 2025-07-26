@@ -29,6 +29,8 @@ type JobDBHandlerFunctions interface {
 	SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, entries int) ([]*model.Job, error)
 	SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error)
 	// Job Archive
+	AddRetentionArchive(retention time.Duration) error
+	RemoveRetentionArchive() error
 	SelectJobFromArchive(rid uuid.UUID) (*model.Job, error)
 	SelectAllJobsFromArchive(lastID int, entries int) ([]*model.Job, error)
 	SelectAllJobsFromArchiveBySearch(search string, lastID int, entries int) ([]*model.Job, error)
@@ -870,14 +872,25 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 // AddRetentionArchive updates the retention archive settings for the job archive.
 func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
 	_, err := r.db.Instance.Exec(
-		`SELECT add_retention_policy('job_archive', $1);`,
-		retention,
+		`SELECT add_retention_policy('job_archive', ($1 * INTERVAL '1 day'));`,
+		int(retention.Hours()/24),
 	)
 	if err != nil {
 		return fmt.Errorf("error updating retention archive: %w", err)
 	}
 
-	r.db.Logger.Printf("updated retention archive to %s", retention)
+	return nil
+}
+
+// RemoveRetentionArchive removes the retention archive settings for the job archive.
+func (r JobDBHandler) RemoveRetentionArchive() error {
+	_, err := r.db.Instance.Exec(
+		`SELECT remove_retention_policy('job_archive');`,
+	)
+	if err != nil {
+		return fmt.Errorf("error removing retention archive: %w", err)
+	}
+
 	return nil
 }
 

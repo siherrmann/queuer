@@ -146,6 +146,10 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 // 4. Start the job poll ticker to periodically check for new jobs.
 // 5. Wait for the queuer to be ready or log a panic error if it fails to start within 5 seconds.
 func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSettings ...*model.MasterSettings) {
+	if ctx == nil || ctx == context.TODO() || cancel == nil {
+		q.log.Panicln("ctx and cancel must be set")
+	}
+
 	q.ctx = ctx
 	q.cancel = cancel
 
@@ -419,17 +423,17 @@ func (q *Queuer) pollJobTicker(ctx context.Context) error {
 func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.MasterSettings) error {
 	ctxInner, cancel := context.WithCancel(ctx)
 	ticker, err := core.NewTicker(
-		q.JobPollInterval,
+		masterSettings.MasterPollInterval,
 		func() {
 			q.log.Println("Polling master...")
-			master, err := q.dbMaster.UpdateMasterInitial(q.worker, masterSettings)
+			master, err := q.dbMaster.UpdateMaster(q.worker, masterSettings)
 			if err != nil {
 				q.log.Printf("Error updating master: %v", err)
 			}
 
 			if master != nil {
 				q.log.Printf("Worker %v is now the current master", q.worker.RID)
-				err := q.masterTicker(ctx, masterSettings)
+				err := q.masterTicker(ctx, master, masterSettings)
 				if err != nil {
 					q.log.Printf("Error starting master ticker: %v", err)
 				} else {
@@ -448,21 +452,44 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 	return nil
 }
 
-func (q *Queuer) masterTicker(ctx context.Context, masterSettings *model.MasterSettings) error {
+func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, masterSettings *model.MasterSettings) error {
+	if oldMaster == nil {
+		return fmt.Errorf("old master is nil")
+	}
+
+	if oldMaster.Settings.RetentionArchive == 0 {
+		err := q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
+		if err != nil {
+			return fmt.Errorf("error adding retention archive: %v", err)
+		}
+	} else if oldMaster.Settings.RetentionArchive != masterSettings.RetentionArchive {
+		err := q.dbJob.RemoveRetentionArchive()
+		if err != nil {
+			return fmt.Errorf("error removing retention archive: %v", err)
+		}
+
+		err = q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
+		if err != nil {
+			return fmt.Errorf("error adding retention archive: %v", err)
+		}
+	}
+
 	ctxInner, cancel := context.WithCancel(ctx)
 	ticker, err := core.NewTicker(
-		q.JobPollInterval,
+		masterSettings.MasterPollInterval,
 		func() {
-			q.log.Println("Polling master...")
-			master, err := q.dbMaster.UpdateMasterInitial(q.worker, masterSettings)
+			master, err := q.dbMaster.UpdateMaster(q.worker, masterSettings)
 			if err != nil {
 				q.log.Printf("Error updating master: %v", err)
 			}
-
-			if master != nil {
-				q.log.Printf("Worker %v is now the current master", q.worker.RID)
+			if master == nil {
+				q.log.Printf("Worker %v is no longer the master", q.worker.RID)
+				q.pollMasterTicker(ctx, masterSettings)
 				cancel()
 			}
+
+			// Here we can add any additional logic that needs to run periodically while the worker is master.
+			// This could include stale jobs, cleaning up the job database etc.
 		},
 	)
 	if err != nil {
