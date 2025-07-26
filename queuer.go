@@ -484,7 +484,10 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 			}
 			if master == nil {
 				q.log.Printf("Worker %v is no longer the master", q.worker.RID)
-				q.pollMasterTicker(ctx, masterSettings)
+				err := q.pollMasterTicker(ctx, masterSettings)
+				if err != nil {
+					q.log.Printf("Error restarting poll master ticker: %v", err)
+				}
 				cancel()
 			}
 
