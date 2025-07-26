@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"time"
@@ -15,7 +16,7 @@ type MasterDBHandlerFunctions interface {
 	CheckTableExistance() (bool, error)
 	CreateTable() error
 	DropTable() error
-	UpdateMasterInitial(worker *model.Worker) (*model.Master, error)
+	UpdateMasterInitial(worker *model.Worker, settings *model.MasterSettings) (*model.Master, error)
 	SelectMaster() (*model.Master, error)
 }
 
@@ -25,8 +26,7 @@ type MasterDBHandler struct {
 }
 
 // NewMasterDBHandler creates a new instance of MasterDBHandler.
-// It initializes the database connection and optionally drops existing tables.
-// If withTableDrop is true, it will drop the existing mater tables before creating new ones
+// It initializes the database connection and creates the master table if it does not exist.
 func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*MasterDBHandler, error) {
 	if dbConnection == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -34,6 +34,13 @@ func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Mas
 
 	masterDbHandler := &MasterDBHandler{
 		db: dbConnection,
+	}
+
+	if withTableDrop {
+		err := masterDbHandler.DropTable()
+		if err != nil {
+			return nil, fmt.Errorf("error dropping master table: %w", err)
+		}
 	}
 
 	err := masterDbHandler.CreateTable()
@@ -66,6 +73,7 @@ func (r MasterDBHandler) CreateTable() error {
 		`CREATE TABLE IF NOT EXISTS master (
 			id INTEGER PRIMARY KEY DEFAULT 1,
 			worker_id BIGINT DEFAULT 0,
+            worker_rid UUID,
 			settings JSONB DEFAULT '{}'::JSONB,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -77,7 +85,7 @@ func (r MasterDBHandler) CreateTable() error {
 
 	_, err = r.db.Instance.ExecContext(
 		ctx,
-		`INSERT INTO master DEFAULT VALUES;
+		`INSERT INTO master DEFAULT VALUES
 		ON CONFLICT (id) DO NOTHING;`,
 	)
 	if err != nil {
@@ -103,20 +111,25 @@ func (r MasterDBHandler) DropTable() error {
 	return nil
 }
 
-func (r MasterDBHandler) UpdateMasterInitial(worker *model.Worker) (*model.Master, error) {
+// UpdateMasterInitial updates the master entry with the given worker's ID and settings.
+// It locks the row for update to ensure that only one worker can update the master at a time.
+func (r MasterDBHandler) UpdateMasterInitial(worker *model.Worker, settings *model.MasterSettings) (*model.Master, error) {
 	row := r.db.Instance.QueryRow(
 		`WITH current_master AS (
 			SELECT id
 			FROM master
 			WHERE id = 1
 			AND (
-				updated_at < $1 OR worker_id = $2
+				updated_at < (CURRENT_TIMESTAMP - ($4 * INTERVAL '1 minute'))
+				OR worker_id = $1
+				OR worker_id = 0
 			)
 			FOR UPDATE SKIP LOCKED
 		)
 		UPDATE master
 		SET
-			worker_id = $2,
+			worker_id = $1,
+			worker_rid = $2,
 			settings = $3::JSONB,
 			updated_at = CURRENT_TIMESTAMP
 		FROM current_master
@@ -124,21 +137,29 @@ func (r MasterDBHandler) UpdateMasterInitial(worker *model.Worker) (*model.Maste
 		RETURNING
 			master.id,
 			master.worker_id,
+			master.worker_rid,
 			master.settings,
 			master.created_at,
 			master.updated_at;`,
 		worker.ID,
+		worker.RID,
+		settings,
+		int(settings.MasterLockTimeout.Minutes()),
 	)
 
 	master := &model.Master{}
 	err := row.Scan(
 		&master.ID,
 		&master.WorkerID,
+		&master.WorkerRID,
 		&master.Settings,
 		&master.CreatedAt,
 		&master.UpdatedAt,
 	)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("error scanning master for worker id %v: %w", worker.ID, err)
 	}
 
@@ -151,6 +172,7 @@ func (r MasterDBHandler) SelectMaster() (*model.Master, error) {
 		`SELECT
             id,
             worker_id,
+            worker_rid,
             settings,
             created_at,
             updated_at
@@ -162,6 +184,7 @@ func (r MasterDBHandler) SelectMaster() (*model.Master, error) {
 	err := row.Scan(
 		&master.ID,
 		&master.WorkerID,
+		&master.WorkerRID,
 		&master.Settings,
 		&master.CreatedAt,
 		&master.UpdatedAt,

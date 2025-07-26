@@ -20,12 +20,18 @@ func TestJobNewJobDBHandler(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+	require.NotNil(t, jobDbHandler, "Expected NewJobDBHandler to return a non-nil instance")
+	require.NotNil(t, jobDbHandler.db, "Expected NewJobDBHandler to have a non-nil database instance")
+	require.NotNil(t, jobDbHandler.db.Instance, "Expected NewJobDBHandler to have a non-nil database connection instance")
 
-	if jobDBHandler == nil || jobDBHandler.db == nil || jobDBHandler.db.Instance == nil {
-		t.Error("Expected NewJobDBHandler to return a non-nil instance")
-	}
+	exists, err := jobDbHandler.CheckTablesExistance()
+	assert.NoError(t, err)
+	assert.True(t, exists)
+
+	err = jobDbHandler.DropTables()
+	assert.NoError(t, err)
 }
 
 func TestJobCheckTableExistance(t *testing.T) {
@@ -36,10 +42,10 @@ func TestJobCheckTableExistance(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-	exists, err := jobDBHandler.CheckTablesExistance()
+	exists, err := jobDbHandler.CheckTablesExistance()
 	assert.NoError(t, err, "Expected CheckTableExistance to not return an error")
 	assert.True(t, exists, "Expected job table to exist")
 }
@@ -52,10 +58,10 @@ func TestJobCreateTable(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-	err = jobDBHandler.CreateTable()
+	err = jobDbHandler.CreateTable()
 	assert.NoError(t, err, "Expected CreateTable to not return an error")
 }
 
@@ -67,10 +73,10 @@ func TestJobDropTable(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-	err = jobDBHandler.DropTables()
+	err = jobDbHandler.DropTables()
 	assert.NoError(t, err, "Expected DropTable to not return an error")
 }
 
@@ -82,13 +88,13 @@ func TestJobInsertJob(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil)
 	require.NoError(t, err, "Expected NewJob to not return an error")
 
-	insertedJob, err := jobDBHandler.InsertJob(job)
+	insertedJob, err := jobDbHandler.InsertJob(job)
 	assert.NoError(t, err, "Expected InsertJob to not return an error")
 	assert.NotNil(t, insertedJob, "Expected InsertJob to return a non-nil job")
 	assert.Equal(t, insertedJob.TaskName, job.TaskName, "Expected task name to match")
@@ -106,7 +112,7 @@ func TestJobInsertJobTx(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil)
@@ -115,7 +121,7 @@ func TestJobInsertJobTx(t *testing.T) {
 	tx, err := database.Instance.Begin()
 	require.NoError(t, err, "Expected Begin to not return an error")
 
-	insertedJob, err := jobDBHandler.InsertJobTx(tx, job)
+	insertedJob, err := jobDbHandler.InsertJobTx(tx, job)
 	assert.NoError(t, err, "Expected InsertJobTx to not return an error")
 	assert.NotNil(t, insertedJob, "Expected InsertJobTx to return a non-nil job")
 	assert.Equal(t, insertedJob.TaskName, job.TaskName, "Expected task name to match")
@@ -136,7 +142,7 @@ func TestJobBatchInsertJobs(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	jobCount := 5
@@ -148,7 +154,7 @@ func TestJobBatchInsertJobs(t *testing.T) {
 		jobs = append(jobs, job)
 	}
 
-	err = jobDBHandler.BatchInsertJobs(jobs)
+	err = jobDbHandler.BatchInsertJobs(jobs)
 	assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
 }
 
@@ -176,16 +182,16 @@ func TestJobUpdateJobsInitial(t *testing.T) {
 	require.NoError(t, err, "Expected UpdateWorker to not return an error")
 
 	// Now we can proceed with the job insertion and update
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil)
 	require.NoError(t, err, "Expected NewJob to not return an error")
 
-	insertedJob, err := jobDBHandler.InsertJob(job)
+	insertedJob, err := jobDbHandler.InsertJob(job)
 	require.NoError(t, err, "Expected InsertJob to not return an error")
 
-	updatedJobs, err := jobDBHandler.UpdateJobsInitial(updatedWorker)
+	updatedJobs, err := jobDbHandler.UpdateJobsInitial(updatedWorker)
 	assert.NoError(t, err, "Expected UpdateJobsInitial to not return an error")
 	require.Len(t, updatedJobs, 1, "Expected one job to be updated")
 	assert.Equal(t, updatedJobs[0].ID, insertedJob.ID, "Expected updated job ID to match inserted job ID")
@@ -203,18 +209,18 @@ func TestJobUpdateJobFinal(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil)
 	require.NoError(t, err, "Expected NewJob to not return an error")
 
-	insertedJob, err := jobDBHandler.InsertJob(job)
+	insertedJob, err := jobDbHandler.InsertJob(job)
 	require.NoError(t, err, "Expected InsertJob to not return an error")
 
 	// Update the job status to SUCCEEDED
 	insertedJob.Status = model.JobStatusSucceeded
-	updatedJob, err := jobDBHandler.UpdateJobFinal(insertedJob)
+	updatedJob, err := jobDbHandler.UpdateJobFinal(insertedJob)
 	assert.NoError(t, err, "Expected UpdateJobFinal to not return an error")
 	assert.Equal(t, updatedJob.ID, insertedJob.ID, "Expected updated job ID to match inserted job ID")
 	assert.Equal(t, updatedJob.Status, model.JobStatusSucceeded, "Expected job status to be SUCCEEDED")
@@ -229,20 +235,20 @@ func TestJobDeleteJob(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil)
 	require.NoError(t, err, "Expected NewJob to not return an error")
 
-	insertedJob, err := jobDBHandler.InsertJob(job)
+	insertedJob, err := jobDbHandler.InsertJob(job)
 	require.NoError(t, err, "Expected InsertJob to not return an error")
 
-	err = jobDBHandler.DeleteJob(insertedJob.RID)
+	err = jobDbHandler.DeleteJob(insertedJob.RID)
 	assert.NoError(t, err, "Expected DeleteJob to not return an error")
 
 	// Verify that the job no longer exists
-	deletedJob, err := jobDBHandler.SelectJob(insertedJob.RID)
+	deletedJob, err := jobDbHandler.SelectJob(insertedJob.RID)
 	require.Error(t, err, "Expected SelectJob to return an error")
 	assert.Contains(t, err.Error(), sql.ErrNoRows.Error(), "Expected error to contain sql.ErrNoRows for deleted job")
 	assert.Nil(t, deletedJob, "Expected deleted job to be nil")
@@ -256,16 +262,16 @@ func TestJobSelectJob(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil)
 	require.NoError(t, err, "Expected NewJob to not return an error")
 
-	insertedJob, err := jobDBHandler.InsertJob(job)
+	insertedJob, err := jobDbHandler.InsertJob(job)
 	require.NoError(t, err, "Expected InsertJob to not return an error")
 
-	selectedJob, err := jobDBHandler.SelectJob(insertedJob.RID)
+	selectedJob, err := jobDbHandler.SelectJob(insertedJob.RID)
 	assert.NoError(t, err, "Expected SelectJob to not return an error")
 	assert.NotNil(t, selectedJob, "Expected SelectJob to return a non-nil job")
 	assert.Equal(t, selectedJob.RID, insertedJob.RID, "Expected selected job RID to match inserted job RID")
@@ -280,23 +286,23 @@ func TestJobSelectAllJobs(t *testing.T) {
 	database := helper.NewTestDatabase(dbConfig)
 
 	newJobCount := 5
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	for i := 0; i < newJobCount; i++ {
 		job, err := model.NewJob(fmt.Sprintf("TestJob%v", i), nil)
 		require.NoError(t, err, "Expected NewJob to not return an error")
 
-		_, err = jobDBHandler.InsertJob(job)
+		_, err = jobDbHandler.InsertJob(job)
 		require.NoError(t, err, "Expected InsertJob to not return an error")
 	}
 
-	jobs, err := jobDBHandler.SelectAllJobs(0, 10)
+	jobs, err := jobDbHandler.SelectAllJobs(0, 10)
 	assert.NoError(t, err, "Expected SelectAllJobs to not return an error")
 	assert.Len(t, jobs, newJobCount, "Expected SelectAllJobs to return two jobs")
 
 	pageLength := 3
-	paginatedJobs, err := jobDBHandler.SelectAllJobs(0, pageLength)
+	paginatedJobs, err := jobDbHandler.SelectAllJobs(0, pageLength)
 	assert.NoError(t, err, "Expected SelectAllJobs to not return an error")
 	assert.Len(t, paginatedJobs, pageLength, "Expected SelectAllJobs to return two jobs")
 }
@@ -328,22 +334,22 @@ func TestJobSelectAllJobsByWorkerRID(t *testing.T) {
 	require.NoError(t, err, "Expected UpdateWorker to not return an error")
 
 	// Insert jobs associated with the worker
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	for i := 0; i < newJobCount; i++ {
 		job, err := model.NewJob("TestTask", nil)
 		require.NoError(t, err, "Expected NewJob to not return an error")
 
-		_, err = jobDBHandler.InsertJob(job)
+		_, err = jobDbHandler.InsertJob(job)
 		require.NoError(t, err, "Expected InsertJob to not return an error")
 	}
 
-	updatedJobs, err := jobDBHandler.UpdateJobsInitial(updatedWorker)
+	updatedJobs, err := jobDbHandler.UpdateJobsInitial(updatedWorker)
 	require.NoError(t, err, "Expected UpdateJobsInitial to not return an error")
 	require.Len(t, updatedJobs, workerConcurrency, "Expected UpdateJobsInitial to update 3 jobs for the worker")
 
-	jobsByWorkerRID, err := jobDBHandler.SelectAllJobsByWorkerRID(updatedWorker.RID, 0, 10)
+	jobsByWorkerRID, err := jobDbHandler.SelectAllJobsByWorkerRID(updatedWorker.RID, 0, 10)
 	assert.NoError(t, err, "Expected SelectAllJobsByWorkerRID to not return an error")
 	assert.Len(t, jobsByWorkerRID, workerConcurrency, "Expected SelectAllJobsByWorkerRID to return 3 jobs")
 }
@@ -360,7 +366,7 @@ func TestJobSelectAllJobsBySearch(t *testing.T) {
 	newJobCountSearch := 5
 	newJobCountOther := 3
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	// Insert multiple jobs with different names
@@ -368,7 +374,7 @@ func TestJobSelectAllJobsBySearch(t *testing.T) {
 		job, err := model.NewJob(searchTerm, nil)
 		require.NoError(t, err, "Expected NewJob to not return an error")
 
-		_, err = jobDBHandler.InsertJob(job)
+		_, err = jobDbHandler.InsertJob(job)
 		require.NoError(t, err, "Expected InsertJob to not return an error")
 	}
 
@@ -376,16 +382,16 @@ func TestJobSelectAllJobsBySearch(t *testing.T) {
 		job, err := model.NewJob("TestTask", nil)
 		require.NoError(t, err, "Expected NewJob to not return an error")
 
-		_, err = jobDBHandler.InsertJob(job)
+		_, err = jobDbHandler.InsertJob(job)
 		require.NoError(t, err, "Expected InsertJob to not return an error")
 	}
 
-	jobsBySearch, err := jobDBHandler.SelectAllJobsBySearch(searchTerm, 0, 10)
+	jobsBySearch, err := jobDbHandler.SelectAllJobsBySearch(searchTerm, 0, 10)
 	assert.NoError(t, err, "Expected SelectAllJobsBySearch to not return an error")
 	assert.Len(t, jobsBySearch, newJobCountSearch, "Expected SelectAllJobsBySearch to return all jobs matching the search term")
 
 	pageLength := 3
-	paginatedJobsBySearch, err := jobDBHandler.SelectAllJobsBySearch(searchTerm, 0, pageLength)
+	paginatedJobsBySearch, err := jobDbHandler.SelectAllJobsBySearch(searchTerm, 0, pageLength)
 	assert.NoError(t, err, "Expected SelectAllJobsBySearch to not return an error")
 	assert.Len(t, paginatedJobsBySearch, pageLength, "Expected SelectAllJobsBySearch to return 3 jobs")
 }
@@ -398,22 +404,22 @@ func TestJobSelectJobFromArchive(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil)
 	require.NoError(t, err, "Expected NewJob to not return an error")
 
-	insertedJob, err := jobDBHandler.InsertJob(job)
+	insertedJob, err := jobDbHandler.InsertJob(job)
 	require.NoError(t, err, "Expected InsertJob to not return an error")
 
 	// Update the job status to SUCCEEDED
 	insertedJob.Status = model.JobStatusSucceeded
-	updatedJob, err := jobDBHandler.UpdateJobFinal(insertedJob)
+	updatedJob, err := jobDbHandler.UpdateJobFinal(insertedJob)
 	require.NoError(t, err, "Expected UpdateJobFinal to not return an error")
 
 	// Now select the job from archive
-	archivedJob, err := jobDBHandler.SelectJobFromArchive(updatedJob.RID)
+	archivedJob, err := jobDbHandler.SelectJobFromArchive(updatedJob.RID)
 	assert.NoError(t, err, "Expected SelectJobFromArchive to not return an error")
 	assert.NotNil(t, archivedJob, "Expected SelectJobFromArchive to return a non-nil job")
 	assert.Equal(t, archivedJob.RID, insertedJob.RID, "Expected archived job RID to match inserted job RID")
@@ -428,7 +434,7 @@ func TestJobSelectAllJobsFromArchive(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	newJobCount := 5
@@ -436,21 +442,21 @@ func TestJobSelectAllJobsFromArchive(t *testing.T) {
 		job, err := model.NewJob(fmt.Sprintf("TestJob%v", i), nil)
 		require.NoError(t, err, "Expected NewJob to not return an error")
 
-		insertedJob, err := jobDBHandler.InsertJob(job)
+		insertedJob, err := jobDbHandler.InsertJob(job)
 		require.NoError(t, err, "Expected InsertJob to not return an error")
 
 		// Update the job status to SUCCEEDED
 		insertedJob.Status = model.JobStatusSucceeded
-		_, err = jobDBHandler.UpdateJobFinal(insertedJob)
+		_, err = jobDbHandler.UpdateJobFinal(insertedJob)
 		require.NoError(t, err, "Expected UpdateJobFinal to not return an error")
 	}
 
-	jobsFromArchive, err := jobDBHandler.SelectAllJobsFromArchive(0, 10)
+	jobsFromArchive, err := jobDbHandler.SelectAllJobsFromArchive(0, 10)
 	assert.NoError(t, err, "Expected SelectAllJobsFromArchive to not return an error")
 	assert.Len(t, jobsFromArchive, newJobCount, "Expected SelectAllJobsFromArchive to return all archived jobs")
 
 	pageLength := 3
-	paginatedJobsFromArchive, err := jobDBHandler.SelectAllJobsFromArchive(0, pageLength)
+	paginatedJobsFromArchive, err := jobDbHandler.SelectAllJobsFromArchive(0, pageLength)
 	assert.NoError(t, err, "Expected SelectAllJobsFromArchive to not return an error")
 	assert.Len(t, paginatedJobsFromArchive, pageLength, "Expected SelectAllJobsFromArchive to return 3 archived jobs")
 }
@@ -467,7 +473,7 @@ func TestJobSelectAllJobsFromArchiveBySearch(t *testing.T) {
 	newJobCountSearch := 5
 	newJobCountOther := 3
 
-	jobDBHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	// Insert multiple jobs with different names
@@ -475,12 +481,12 @@ func TestJobSelectAllJobsFromArchiveBySearch(t *testing.T) {
 		job, err := model.NewJob(searchTerm, nil)
 		require.NoError(t, err, "Expected NewJob to not return an error")
 
-		insertedJob, err := jobDBHandler.InsertJob(job)
+		insertedJob, err := jobDbHandler.InsertJob(job)
 		require.NoError(t, err, "Expected InsertJob to not return an error")
 
 		// Update the job status to SUCCEEDED
 		insertedJob.Status = model.JobStatusSucceeded
-		_, err = jobDBHandler.UpdateJobFinal(insertedJob)
+		_, err = jobDbHandler.UpdateJobFinal(insertedJob)
 		require.NoError(t, err, "Expected UpdateJobFinal to not return an error")
 	}
 
@@ -488,21 +494,21 @@ func TestJobSelectAllJobsFromArchiveBySearch(t *testing.T) {
 		job, err := model.NewJob("TestTask", nil)
 		require.NoError(t, err, "Expected NewJob to not return an error")
 
-		insertedJob, err := jobDBHandler.InsertJob(job)
+		insertedJob, err := jobDbHandler.InsertJob(job)
 		require.NoError(t, err, "Expected InsertJob to not return an error")
 
 		// Update the job status to SUCCEEDED
 		insertedJob.Status = model.JobStatusSucceeded
-		_, err = jobDBHandler.UpdateJobFinal(insertedJob)
+		_, err = jobDbHandler.UpdateJobFinal(insertedJob)
 		require.NoError(t, err, "Expected UpdateJobFinal to not return an error")
 	}
 
-	jobsBySearchFromArchive, err := jobDBHandler.SelectAllJobsFromArchiveBySearch(searchTerm, 0, 10)
+	jobsBySearchFromArchive, err := jobDbHandler.SelectAllJobsFromArchiveBySearch(searchTerm, 0, 10)
 	assert.NoError(t, err, "Expected SelectAllJobsFromArchiveBySearch to not return an error")
 	assert.Len(t, jobsBySearchFromArchive, newJobCountSearch, "Expected SelectAllJobsFromArchiveBySearch to return all archived jobs matching the search term")
 
 	pageLength := 3
-	paginatedJobsBySearchFromArchive, err := jobDBHandler.SelectAllJobsFromArchiveBySearch(searchTerm, 0, pageLength)
+	paginatedJobsBySearchFromArchive, err := jobDbHandler.SelectAllJobsFromArchiveBySearch(searchTerm, 0, pageLength)
 	assert.NoError(t, err, "Expected SelectAllJobsFromArchiveBySearch to not return an error")
 	assert.Len(t, paginatedJobsBySearchFromArchive, pageLength, "Expected SelectAllJobsFromArchiveBySearch to return 3 archived jobs")
 }

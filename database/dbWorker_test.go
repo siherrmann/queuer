@@ -19,12 +19,18 @@ func TestWorkerNewWorkerDBHandler(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
+	require.NotNil(t, workerDbHandler, "Expected NewWorkerDBHandler to return a non-nil instance")
+	require.NotNil(t, workerDbHandler.db, "Expected NewWorkerDBHandler to have a non-nil database instance")
+	require.NotNil(t, workerDbHandler.db.Instance, "Expected NewWorkerDBHandler to have a non-nil database connection instance")
 
-	if workerDBHandler == nil || workerDBHandler.db == nil || workerDBHandler.db.Instance == nil {
-		t.Error("Expected NewWorkerDBHandler to return a non-nil instance")
-	}
+	exists, err := workerDbHandler.CheckTableExistance()
+	assert.NoError(t, err)
+	assert.True(t, exists)
+
+	err = workerDbHandler.DropTable()
+	assert.NoError(t, err)
 }
 
 func TestWorkerCheckTableExistance(t *testing.T) {
@@ -35,10 +41,10 @@ func TestWorkerCheckTableExistance(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
-	exists, err := workerDBHandler.CheckTableExistance()
+	exists, err := workerDbHandler.CheckTableExistance()
 	assert.NoError(t, err, "Expected CheckTableExistance to not return an error")
 	assert.True(t, exists, "Expected worker table to exist")
 }
@@ -51,10 +57,10 @@ func TestWorkerCreateTable(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
-	err = workerDBHandler.CreateTable()
+	err = workerDbHandler.CreateTable()
 	assert.NoError(t, err, "Expected CreateTable to not return an error")
 }
 
@@ -66,10 +72,10 @@ func TestWorkerDropTable(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
-	err = workerDBHandler.DropTable()
+	err = workerDbHandler.DropTable()
 	assert.NoError(t, err, "Expected DropTable to not return an error")
 }
 
@@ -81,13 +87,13 @@ func TestWorkerInsertWorker(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
 	require.NoError(t, err, "Expected NewWorker to not return an error")
 
-	insertedWorker, err := workerDBHandler.InsertWorker(worker)
+	insertedWorker, err := workerDbHandler.InsertWorker(worker)
 	assert.NoError(t, err, "Expected InsertWorker to not return an error")
 	assert.NotNil(t, insertedWorker, "Expected InsertWorker to return a non-nil worker")
 	assert.NotEqual(t, insertedWorker.RID, worker.RID, "Expected inserted worker RID to match")
@@ -105,13 +111,13 @@ func TestWorkerUpdateWorker(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
 	require.NoError(t, err, "Expected NewWorker to not return an error")
 
-	insertedWorker, err := workerDBHandler.InsertWorker(worker)
+	insertedWorker, err := workerDbHandler.InsertWorker(worker)
 	require.NoError(t, err, "Expected InsertWorker to not return an error")
 
 	// Update the worker's name and options
@@ -125,7 +131,7 @@ func TestWorkerUpdateWorker(t *testing.T) {
 	insertedWorker.AvailableTasks = []string{"task1", "task2"}
 	insertedWorker.AvailableNextIntervalFuncs = []string{"interval1", "interval2"}
 
-	updatedWorker, err := workerDBHandler.UpdateWorker(insertedWorker)
+	updatedWorker, err := workerDbHandler.UpdateWorker(insertedWorker)
 	assert.NoError(t, err, "Expected UpdateWorker to not return an error")
 	assert.Equal(t, updatedWorker.Name, insertedWorker.Name, "Expected updated worker Name to match")
 	assert.Equal(t, updatedWorker.Options, insertedWorker.Options, "Expected updated worker Options to match")
@@ -142,20 +148,20 @@ func TestWorkerDeleteWorker(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
 	require.NoError(t, err, "Expected NewWorker to not return an error")
 
-	insertedWorker, err := workerDBHandler.InsertWorker(worker)
+	insertedWorker, err := workerDbHandler.InsertWorker(worker)
 	require.NoError(t, err, "Expected InsertWorker to not return an error")
 
-	err = workerDBHandler.DeleteWorker(insertedWorker.RID)
+	err = workerDbHandler.DeleteWorker(insertedWorker.RID)
 	assert.NoError(t, err, "Expected DeleteWorker to not return an error")
 
 	// Verify that the worker was deleted
-	deletedWorker, err := workerDBHandler.SelectWorker(insertedWorker.RID)
+	deletedWorker, err := workerDbHandler.SelectWorker(insertedWorker.RID)
 	assert.Error(t, err, "Expected SelectWorker to return an error for deleted worker")
 	assert.Nil(t, deletedWorker, "Expected deleted worker to be nil")
 }
@@ -168,16 +174,16 @@ func TestWorkerSelectWorker(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	worker, err := model.NewWorker("Worker", 1)
 	require.NoError(t, err, "Expected NewWorker to not return an error")
 
-	insertedWorker, err := workerDBHandler.InsertWorker(worker)
+	insertedWorker, err := workerDbHandler.InsertWorker(worker)
 	require.NoError(t, err, "Expected InsertWorker to not return an error")
 
-	selectedWorker, err := workerDBHandler.SelectWorker(insertedWorker.RID)
+	selectedWorker, err := workerDbHandler.SelectWorker(insertedWorker.RID)
 	assert.NoError(t, err, "Expected SelectWorker to not return an error")
 	assert.NotNil(t, selectedWorker, "Expected SelectWorker to return a non-nil worker")
 	assert.Equal(t, selectedWorker.RID, insertedWorker.RID, "Expected selected worker RID to match")
@@ -192,7 +198,7 @@ func TestWorkerSelectAllWorkers(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	// Insert multiple workers
@@ -200,16 +206,16 @@ func TestWorkerSelectAllWorkers(t *testing.T) {
 		worker, err := model.NewWorker(fmt.Sprintf("Worker%v", i), 1)
 		require.NoError(t, err, "Expected NewWorker to not return an error")
 
-		_, err = workerDBHandler.InsertWorker(worker)
+		_, err = workerDbHandler.InsertWorker(worker)
 		require.NoError(t, err, "Expected InsertWorker to not return an error")
 	}
 
-	allWorkers, err := workerDBHandler.SelectAllWorkers(0, 10)
+	allWorkers, err := workerDbHandler.SelectAllWorkers(0, 10)
 	assert.NoError(t, err, "Expected SelectAllWorkers to not return an error")
 	assert.Equal(t, len(allWorkers), 5, "Expected SelectAllWorkers to return all workers")
 
 	pageLength := 3
-	paginatedWorkers, err := workerDBHandler.SelectAllWorkers(0, pageLength)
+	paginatedWorkers, err := workerDbHandler.SelectAllWorkers(0, pageLength)
 	assert.NoError(t, err, "Expected SelectAllWorkers to not return an error")
 	assert.Equal(t, len(paginatedWorkers), pageLength, "Expected SelectAllWorkers to return 3 workers")
 }
@@ -222,7 +228,7 @@ func TestWorkerSelectAllWorkersBySearch(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	workerDBHandler, err := NewWorkerDBHandler(database, true)
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
 	// Insert multiple workers with different names
@@ -230,12 +236,12 @@ func TestWorkerSelectAllWorkersBySearch(t *testing.T) {
 		worker, err := model.NewWorker(fmt.Sprintf("Worker%v", i), 1)
 		require.NoError(t, err, "Expected NewWorker to not return an error")
 
-		_, err = workerDBHandler.InsertWorker(worker)
+		_, err = workerDbHandler.InsertWorker(worker)
 		require.NoError(t, err, "Expected InsertWorker to not return an error")
 	}
 
 	searchTerm := "Worker1"
-	foundWorkers, err := workerDBHandler.SelectAllWorkersBySearch(searchTerm, 0, 10)
+	foundWorkers, err := workerDbHandler.SelectAllWorkersBySearch(searchTerm, 0, 10)
 	assert.NoError(t, err, "Expected SelectAllWorkersBySearch to not return an error")
 	require.Equal(t, len(foundWorkers), 1, "Expected SelectAllWorkersBySearch to return 1 worker matching search term")
 	assert.Equal(t, foundWorkers[0].Name, "Worker1", "Expected found worker Name to match search term")

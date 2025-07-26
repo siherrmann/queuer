@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsValid(t *testing.T) {
+func TestOptionsIsValid(t *testing.T) {
 	tests := []struct {
 		name    string
 		options *Options
@@ -186,7 +186,7 @@ func TestIsValid(t *testing.T) {
 	}
 }
 
-func TestMarshalAndUnmarshalJSON(t *testing.T) {
+func TestOptionsMarshalAndUnmarshalJSON(t *testing.T) {
 	t.Run("Marshal and Unmarshal valid Options", func(t *testing.T) {
 		options := &Options{
 			OnError: &OnError{

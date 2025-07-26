@@ -37,6 +37,7 @@ type Queuer struct {
 	dbConfig *helper.DatabaseConfiguration
 	dbJob    database.JobDBHandlerFunctions
 	dbWorker database.WorkerDBHandlerFunctions
+	dbMaster database.MasterDBHandlerFunctions
 	// Job DB listeners
 	jobDbListener        *database.QueuerListener
 	jobArchiveDbListener *database.QueuerListener
@@ -93,6 +94,10 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 	if err != nil {
 		logger.Panicf("failed to create worker db handler: %v", err)
 	}
+	dbMaster, err := database.NewMasterDBHandler(dbCon, dbConfig.WithTableDrop)
+	if err != nil {
+		logger.Panicf("failed to create master db handler: %v", err)
+	}
 
 	// Inserting worker
 	var newWorker *model.Worker
@@ -123,6 +128,7 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 		dbConfig:          dbConfig,
 		dbJob:             dbJob,
 		dbWorker:          dbWorker,
+		dbMaster:          dbMaster,
 		JobPollInterval:   1 * time.Minute,
 		tasks:             map[string]*model.Task{},
 		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
@@ -139,7 +145,7 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 // 3. Start the job listeners to listen for job events.
 // 4. Start the job poll ticker to periodically check for new jobs.
 // 5. Wait for the queuer to be ready or log a panic error if it fails to start within 5 seconds.
-func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
+func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSettings ...*model.MasterSettings) {
 	q.ctx = ctx
 	q.cancel = cancel
 
@@ -171,7 +177,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 		q.log.Panicf("failed to create job update listener: %v", err)
 	}
 
-	// Start job listeners
+	// Start pollers
 	ready := make(chan struct{})
 	go func() {
 		q.listen(ctx, cancel)
@@ -180,6 +186,14 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc) {
 		if err != nil && ctx.Err() == nil {
 			q.log.Printf("Error starting job poll ticker: %v", err)
 			return
+		}
+
+		if len(masterSettings) > 0 && masterSettings[0] != nil {
+			err = q.pollMasterTicker(ctx, masterSettings[0])
+			if err != nil && ctx.Err() == nil {
+				q.log.Printf("Error starting master poll ticker: %v", err)
+				return
+			}
 		}
 
 		close(ready)
@@ -398,6 +412,65 @@ func (q *Queuer) pollJobTicker(ctx context.Context) error {
 
 	q.log.Println("Starting job poll ticker...")
 	go ticker.Go(ctx)
+
+	return nil
+}
+
+func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.MasterSettings) error {
+	ctxInner, cancel := context.WithCancel(ctx)
+	ticker, err := core.NewTicker(
+		q.JobPollInterval,
+		func() {
+			q.log.Println("Polling master...")
+			master, err := q.dbMaster.UpdateMasterInitial(q.worker, masterSettings)
+			if err != nil {
+				q.log.Printf("Error updating master: %v", err)
+			}
+
+			if master != nil {
+				q.log.Printf("Worker %v is now the current master", q.worker.RID)
+				err := q.masterTicker(ctx, masterSettings)
+				if err != nil {
+					q.log.Printf("Error starting master ticker: %v", err)
+				} else {
+					cancel()
+				}
+			}
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("error creating ticker: %v", err)
+	}
+
+	q.log.Println("Starting master poll ticker...")
+	go ticker.Go(ctxInner)
+
+	return nil
+}
+
+func (q *Queuer) masterTicker(ctx context.Context, masterSettings *model.MasterSettings) error {
+	ctxInner, cancel := context.WithCancel(ctx)
+	ticker, err := core.NewTicker(
+		q.JobPollInterval,
+		func() {
+			q.log.Println("Polling master...")
+			master, err := q.dbMaster.UpdateMasterInitial(q.worker, masterSettings)
+			if err != nil {
+				q.log.Printf("Error updating master: %v", err)
+			}
+
+			if master != nil {
+				q.log.Printf("Worker %v is now the current master", q.worker.RID)
+				cancel()
+			}
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("error creating ticker: %v", err)
+	}
+
+	q.log.Println("Starting master poll ticker...")
+	go ticker.Go(ctxInner)
 
 	return nil
 }
