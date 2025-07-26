@@ -99,17 +99,19 @@ This function performs the following setup:
 The Start method initiates the operational lifecycle of the Queuer. It sets up the main context, initializes database listeners, and begins the job processing and polling loops in a dedicated goroutine.
 
 ```go
-func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc)
+func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSettings ...*model.MasterSettings)
 ```
 
 - `ctx`: The parent context.Context for the queuer's operations. This context will control the overall lifetime of the queuer.
 - `cancel`: The context.CancelFunc associated with the provided ctx. This function should be called to gracefully stop the queuer.
+- `masterSettings`: The central settings set will be set if the current worker becomes the master.
 
 Upon calling Start:
 - It performs a basic check to ensure internal listeners are initialized.
 - Db listeners and broadcasters are created to listen to job events (inserts, updates, deletes).
 - It starts a poller to periodically poll the database for new jobs to process (5 minute interval).
 - It signals its readiness via an internal channel, ensuring the `Start` method returns only when the core loops are active.
+- If `MasterSettings` are given it sets the current worker as master if none is active. If the current worker is the master it starts a ticker that updates the master entry, else it starts a ticker that checks for a missing master. If no `MasterSettings` are given, no ticker gets started.
 
 The method includes a timeout mechanism (5 seconds) to detect if the queuer fails to start its internal processes promptly, panicking if the timeout is exceeded.
 If the queuer is not not properly initialized (created by calling `NewQueuer`), or if there's an error creating the database listeners, the function will panic.
@@ -118,16 +120,16 @@ If the queuer is not not properly initialized (created by calling `NewQueuer`), 
 
 ## StartWithoutWorker
 
-The `StartWithoutWorker` method provides a way to start the `Queuer` instance without an active worker. This is particularly useful for scenarios where you need to interact with the job queue (e.g., add jobs, check job status) but don't intend for this specific instance to actively process them.
+The `StartWithoutWorker` method provides a way to start the `Queuer` instance without an active worker. This is particularly useful for scenarios where you need to interact with the job queue (e.g., add jobs, check job status) but don't intend for this specific instance to actively process them. This is also nice to only have one service that can become the master so updating the `MasterSettings` only requires this serivce to be restarted. This has also the (very small) benefit that all other services don't run a ticker for updating or becoming the master.
 
 ```go
-func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFunc, withoutListeners bool, dbConnection ...*sql.DB)
+func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFunc, withoutListeners bool, masterSettings ...*model.MasterSettings)
 ```
 
 - `ctx`: The parent context.Context for the queuer's operations.
 - `cancel`: The context.CancelFunc associated with the provided ctx.
 - `withoutListeners`: A `bool` flag. If true, the database.NewQueuerDBListener instances for job and job_archive tables will not be created.
-- `dbConnection`: An optional existing `*sql.DB` connection to use. If provided, the queuer will use this connection; otherwise, it will create a new one based on environment variables.
+- `masterSettings`: The central settings set will be set if the current worker becomes the master.
 
 ---
 
@@ -275,3 +277,4 @@ type Schedule struct {
 - Helper function to listen for a specific finished job.
 - Retry mechanism for ended jobs which creates a new job with the same parameters.
 - Custom NextInterval functions to address custom needs for scheduling (eg. scheduling with timezone offset)
+- Automatic master worker setting retention and other central settings. Automatic switch to new master if old worker stops.

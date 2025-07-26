@@ -222,7 +222,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 // This version does not run the job processing, allowing the queuer to be started without a worker.
 // Is is useful if you want to run a queuer instance in a seperate service without a worker,
 // for example to handle listening to job events and providing a central frontend.
-func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFunc, withoutListeners bool) {
+func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFunc, withoutListeners bool, masterSettings ...*model.MasterSettings) {
 	q.ctx = ctx
 	q.cancel = cancel
 
@@ -261,6 +261,14 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 	go func() {
 		if !withoutListeners {
 			q.listenWithoutRunning(ctx, cancel)
+		}
+
+		if len(masterSettings) > 0 && masterSettings[0] != nil {
+			err = q.pollMasterTicker(ctx, masterSettings[0])
+			if err != nil && ctx.Err() == nil {
+				q.log.Printf("Error starting master poll ticker: %v", err)
+				return
+			}
 		}
 
 		close(ready)
@@ -478,12 +486,8 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 	ticker, err := core.NewTicker(
 		masterSettings.MasterPollInterval,
 		func() {
-			master, err := q.dbMaster.UpdateMaster(q.worker, masterSettings)
+			_, err := q.dbMaster.UpdateMaster(q.worker, masterSettings)
 			if err != nil {
-				q.log.Printf("Error updating master: %v", err)
-			}
-			if master == nil {
-				q.log.Printf("Worker %v is no longer the master", q.worker.RID)
 				err := q.pollMasterTicker(ctx, masterSettings)
 				if err != nil {
 					q.log.Printf("Error restarting poll master ticker: %v", err)

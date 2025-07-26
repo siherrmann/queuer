@@ -241,6 +241,93 @@ func TestStart(t *testing.T) {
 		// Check if the master updated_at is within the last 5 seconds,
 		// as the ticker runs every 5 seconds and we waited 6 seconds.
 		assert.GreaterOrEqual(t, master.UpdatedAt.Unix(), time.Now().Add(-5*time.Second).Unix(), "Expected master updated_at to be in the last 5 seconds")
+
+		err = queuer2.Stop()
+		assert.NoError(t, err, "Expected Stop to complete without error")
+	})
+}
+
+func TestStartWithoutWorker(t *testing.T) {
+	envs := map[string]string{
+		"QUEUER_DB_HOST":     "localhost",
+		"QUEUER_DB_PORT":     dbPort,
+		"QUEUER_DB_DATABASE": "database",
+		"QUEUER_DB_USERNAME": "user",
+		"QUEUER_DB_PASSWORD": "password",
+		"QUEUER_DB_SCHEMA":   "public",
+	}
+	for key, value := range envs {
+		t.Setenv(key, value)
+	}
+
+	t.Run("Start Queuer without worker", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		startQueuer := func() {
+			queuer.StartWithoutWorker(ctx, cancel, true)
+		}
+		assert.NotPanics(t, startQueuer, "Expected no panic when starting Queuer without worker")
+
+		err := queuer.Stop()
+		assert.NoError(t, err, "Expected Stop to complete without error")
+	})
+
+	t.Run("Start 2 Queuers with MasterSettings and cancel first", func(t *testing.T) {
+		queuer1 := NewQueuer("test", 10)
+		require.NotNil(t, queuer1, "Expected Queuer 1 to be created successfully")
+		ctx1, cancel1 := context.WithCancel(context.Background())
+		defer cancel1()
+		masterSettings1 := &model.MasterSettings{
+			MasterPollInterval: 5 * time.Second,
+			RetentionArchive:   30 * 24 * time.Hour,
+		}
+		queuer1.StartWithoutWorker(ctx1, cancel1, true, masterSettings1)
+
+		queuer2 := NewQueuer("test", 20)
+		require.NotNil(t, queuer2, "Expected Queuer 2 to be created successfully")
+		ctx2, cancel2 := context.WithCancel(context.Background())
+		defer cancel2()
+		masterSettings2 := &model.MasterSettings{
+			MasterPollInterval: 3 * time.Second,
+			RetentionArchive:   20 * 24 * time.Hour,
+		}
+		queuer2.StartWithoutWorker(ctx2, cancel2, true, masterSettings2)
+
+		time.Sleep(6 * time.Second) // Wait for the ticker to run at least once
+
+		master, err := queuer1.dbMaster.SelectMaster()
+		assert.NoError(t, err, "Expected no error selecting master")
+		require.NotNil(t, master, "Expected master to not be nil")
+		assert.Equal(t, queuer1.worker.RID, master.WorkerRID, "Expected master RID to match worker RID")
+		assert.Equal(t, queuer1.worker.ID, master.WorkerID, "Expected master ID to match worker ID")
+		assert.Equal(t, *masterSettings1, master.Settings, "Expected master settings to match")
+
+		// Check if the master updated_at is within the last 5 seconds,
+		// as the ticker runs every 5 seconds and we waited 6 seconds.
+		assert.GreaterOrEqual(t, master.UpdatedAt.Unix(), time.Now().Add(-5*time.Second).Unix(), "Expected master updated_at to be in the last 5 seconds")
+
+		// Cancel the first queuer
+		cancel1()
+
+		time.Sleep(6 * time.Second) // Wait for the ticker to run at least once
+
+		master, err = queuer2.dbMaster.SelectMaster()
+		assert.NoError(t, err, "Expected no error selecting master")
+		require.NotNil(t, master, "Expected master to not be nil")
+		assert.Equal(t, queuer2.worker.RID, master.WorkerRID, "Expected master RID to match worker 2 RID")
+		assert.Equal(t, queuer2.worker.ID, master.WorkerID, "Expected master ID to match worker 2 ID")
+		assert.Equal(t, *masterSettings2, master.Settings, "Expected master settings to match")
+
+		// Check if the master updated_at is within the last 5 seconds,
+		// as the ticker runs every 5 seconds and we waited 6 seconds.
+		assert.GreaterOrEqual(t, master.UpdatedAt.Unix(), time.Now().Add(-5*time.Second).Unix(), "Expected master updated_at to be in the last 5 seconds")
+
+		err = queuer2.Stop()
+		assert.NoError(t, err, "Expected Stop to complete without error")
 	})
 }
 
@@ -262,4 +349,33 @@ func TestStop(t *testing.T) {
 
 	err := queuer.Stop()
 	assert.NoError(t, err, "Expected Stop to complete without error")
+}
+
+func TestMasterTicker(t *testing.T) {
+	envs := map[string]string{
+		"QUEUER_DB_HOST":     "localhost",
+		"QUEUER_DB_PORT":     dbPort,
+		"QUEUER_DB_DATABASE": "database",
+		"QUEUER_DB_USERNAME": "user",
+		"QUEUER_DB_PASSWORD": "password",
+		"QUEUER_DB_SCHEMA":   "public",
+	}
+	for key, value := range envs {
+		t.Setenv(key, value)
+	}
+
+	queuer := NewQueuer("test", 10)
+	require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	t.Run("Master ticker fails with nil old master", func(t *testing.T) {
+		var oldMaster *model.Master
+		masterSettings := &model.MasterSettings{
+			MasterPollInterval: 5 * time.Second,
+		}
+
+		err := queuer.masterTicker(ctx, oldMaster, masterSettings)
+		assert.Error(t, err, "Expected error starting master ticker with nil old master")
+	})
 }
