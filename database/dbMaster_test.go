@@ -12,25 +12,33 @@ import (
 )
 
 func TestMasterNewMasterDBHandler(t *testing.T) {
-	helper.SetTestDatabaseConfigEnvs(t, dbPort)
-	dbConfig, err := helper.NewDatabaseConfiguration()
-	if err != nil {
-		t.Fatalf("failed to create database configuration: %v", err)
-	}
-	database := helper.NewTestDatabase(dbConfig)
+	t.Run("Valid call NewMasterDBHandler", func(t *testing.T) {
+		helper.SetTestDatabaseConfigEnvs(t, dbPort)
+		dbConfig, err := helper.NewDatabaseConfiguration()
+		if err != nil {
+			t.Fatalf("failed to create database configuration: %v", err)
+		}
+		database := helper.NewTestDatabase(dbConfig)
 
-	workerDbHandler, err := NewMasterDBHandler(database, true)
-	assert.NoError(t, err)
-	require.NotNil(t, workerDbHandler, "MasterDBHandler should not be nil")
-	require.NotNil(t, workerDbHandler.db, "Database connection should not be nil")
-	require.NotNil(t, workerDbHandler.db.Instance, "Database instance should not be nil")
+		workerDbHandler, err := NewMasterDBHandler(database, true)
+		assert.NoError(t, err)
+		require.NotNil(t, workerDbHandler, "MasterDBHandler should not be nil")
+		require.NotNil(t, workerDbHandler.db, "Database connection should not be nil")
+		require.NotNil(t, workerDbHandler.db.Instance, "Database instance should not be nil")
 
-	exists, err := workerDbHandler.CheckTableExistance()
-	assert.NoError(t, err)
-	assert.True(t, exists)
+		exists, err := workerDbHandler.CheckTableExistance()
+		assert.NoError(t, err)
+		assert.True(t, exists)
 
-	err = workerDbHandler.DropTable()
-	assert.NoError(t, err)
+		err = workerDbHandler.DropTable()
+		assert.NoError(t, err)
+	})
+
+	t.Run("Invalid call NewMasterDBHandler with nil database", func(t *testing.T) {
+		_, err := NewMasterDBHandler(nil, true)
+		assert.Error(t, err, "Expected error when creating MasterDBHandler with nil database")
+		assert.Equal(t, "database connection is nil", err.Error(), "Expected specific error message for nil database connection")
+	})
 }
 
 func TestMasterDropTable(t *testing.T) {
