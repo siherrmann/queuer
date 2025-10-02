@@ -157,28 +157,35 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 	var err error
 	q.jobDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job")
 	if err != nil {
-		q.log.Panicf("failed to create job insert listener: %v", err)
+		q.log.Panicf("error creating job insert listener: %v", err)
 	}
 	q.jobArchiveDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job_archive")
 	if err != nil {
-		q.log.Panicf("failed to create job update listener: %v", err)
+		q.log.Panicf("error creating job archive listener: %v", err)
 	}
 
 	// Broadcasters for job updates and deletes
 	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
 	q.jobInsertListener, err = core.NewListener(broadcasterJobInsert)
 	if err != nil {
-		q.log.Panicf("failed to create job insert listener: %v", err)
+		q.log.Panicf("error creating job insert listener: %v", err)
 	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	q.jobUpdateListener, err = core.NewListener(broadcasterJobUpdate)
 	if err != nil {
-		q.log.Panicf("failed to create job update listener: %v", err)
+		q.log.Panicf("error creating job update listener: %v", err)
 	}
 	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
 	q.jobDeleteListener, err = core.NewListener(broadcasterJobDelete)
 	if err != nil {
-		q.log.Panicf("failed to create job update listener: %v", err)
+		q.log.Panicf("error creating job delete listener: %v", err)
+	}
+
+	// Update worker to running
+	q.worker.Status = model.WorkerStatusRunning
+	q.worker, err = q.dbWorker.UpdateWorker(q.worker)
+	if err != nil {
+		q.log.Panicf("error updating worker status to running: %v", err)
 	}
 
 	// Start pollers
@@ -231,11 +238,11 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 	if !withoutListeners {
 		q.jobDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job")
 		if err != nil {
-			q.log.Panicf("failed to create job insert listener: %v", err)
+			q.log.Panicf("error creating job insert listener: %v", err)
 		}
 		q.jobArchiveDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job_archive")
 		if err != nil {
-			q.log.Panicf("failed to create job update listener: %v", err)
+			q.log.Panicf("error creating job archive listener: %v", err)
 		}
 	}
 
@@ -243,17 +250,17 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
 	q.jobInsertListener, err = core.NewListener(broadcasterJobInsert)
 	if err != nil {
-		q.log.Panicf("failed to create job insert listener: %v", err)
+		q.log.Panicf("error creating job insert listener: %v", err)
 	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	q.jobUpdateListener, err = core.NewListener(broadcasterJobUpdate)
 	if err != nil {
-		q.log.Panicf("failed to create job update listener: %v", err)
+		q.log.Panicf("error creating job update listener: %v", err)
 	}
 	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
 	q.jobDeleteListener, err = core.NewListener(broadcasterJobDelete)
 	if err != nil {
-		q.log.Panicf("failed to create job update listener: %v", err)
+		q.log.Panicf("error creating job delete listener: %v", err)
 	}
 
 	// Start job listeners
@@ -303,8 +310,16 @@ func (q *Queuer) Stop() error {
 		}
 	}
 
+	// Update worker status to stopped
+	var err error
+	q.worker.Status = model.WorkerStatusStopped
+	q.worker, err = q.dbWorker.UpdateWorker(q.worker)
+	if err != nil {
+		return fmt.Errorf("error updating worker status to stopped: %v", err)
+	}
+
 	// Cancel all queued and running jobs
-	err := q.CancelAllJobsByWorker(q.worker.RID, 100)
+	err = q.CancelAllJobsByWorker(q.worker.RID, 100)
 	if err != nil {
 		return fmt.Errorf("error cancelling all jobs by worker: %v", err)
 	}
@@ -336,14 +351,22 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 				return
 			}
 
-			if job.Status == model.JobStatusQueued || job.Status == model.JobStatusScheduled {
+			switch job.Status {
+			case model.JobStatusCancelled:
+				runner, ok := q.activeRunners.Load(job.RID)
+				if ok {
+					q.log.Printf("Canceling running job %v", job.RID)
+					runner.(context.CancelFunc)()
+					q.activeRunners.Delete(job.RID)
+				}
+			case model.JobStatusQueued, model.JobStatusScheduled:
 				q.jobInsertListener.Notify(job.ToJob())
 				err = q.runJobInitial()
 				if err != nil {
 					q.log.Printf("Error running job: %v", err)
 					return
 				}
-			} else {
+			default:
 				q.jobUpdateListener.Notify(job.ToJob())
 			}
 		})

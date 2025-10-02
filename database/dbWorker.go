@@ -84,7 +84,7 @@ func (r WorkerDBHandler) CreateTable() error {
 			available_next_interval VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
 			current_concurrency INT DEFAULT 0,
 			max_concurrency INT DEFAULT 1,
-			status VARCHAR(50) DEFAULT 'RUNNING',
+			status VARCHAR(50) DEFAULT 'READY',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -121,7 +121,7 @@ func (r WorkerDBHandler) DropTable() error {
 	return nil
 }
 
-// InsertWorker inserts a new worker record with name, otpions and max concurrency into the database.
+// InsertWorker inserts a new worker record with name, options and max concurrency into the database.
 // It returns the newly created worker with an automatically generated RID.
 // If the insertion fails, it returns an error.
 func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, error) {

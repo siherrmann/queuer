@@ -8,8 +8,10 @@ import (
 )
 
 const (
+	WorkerStatusReady   = "READY"
 	WorkerStatusRunning = "RUNNING"
 	WorkerStatusFailed  = "FAILED"
+	WorkerStatusStopped = "STOPPED"
 )
 
 // Worker represents a worker that can execute tasks.
@@ -53,7 +55,7 @@ func NewWorker(name string, maxConcurrency int) (*Worker, error) {
 	return &Worker{
 		Name:           name,
 		MaxConcurrency: maxConcurrency,
-		Status:         WorkerStatusRunning,
+		Status:         WorkerStatusReady,
 	}, nil
 }
 
@@ -78,6 +80,6 @@ func NewWorkerWithOptions(name string, maxConcurrency int, options *OnError) (*W
 		Name:           name,
 		Options:        options,
 		MaxConcurrency: maxConcurrency,
-		Status:         WorkerStatusRunning,
+		Status:         WorkerStatusReady,
 	}, nil
 }

@@ -51,7 +51,7 @@ func TestNewWorker(t *testing.T) {
 				require.NotNil(t, w, "Worker should not be nil for valid options")
 				assert.Equal(t, test.workerName, w.Name, "Worker name should match the provided name")
 				assert.Equal(t, test.maxConcurrency, w.MaxConcurrency, "Worker max concurrency should match the provided value")
-				assert.Equal(t, WorkerStatusRunning, w.Status, "Worker status should be RUNNING by default")
+				assert.Equal(t, WorkerStatusReady, w.Status, "Worker status should be READY by default")
 			}
 		})
 	}
@@ -114,7 +114,7 @@ func TestNewWorkerWithOptions(t *testing.T) {
 				require.NotNil(t, w, "Worker should not be nil for valid options")
 				assert.Equal(t, test.workerName, w.Name, "Worker name should match the provided name")
 				assert.Equal(t, test.maxConcurrency, w.MaxConcurrency, "Worker max concurrency should match the provided value")
-				assert.Equal(t, WorkerStatusRunning, w.Status, "Worker status should be RUNNING by default")
+				assert.Equal(t, WorkerStatusReady, w.Status, "Worker status should be READY by default")
 				assert.Equal(t, test.options, w.Options, "Worker options should match the provided options")
 			}
 		})
