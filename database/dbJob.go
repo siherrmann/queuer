@@ -11,6 +11,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
+	loadSql "github.com/siherrmann/queuer/sql"
 )
 
 // JobDBHandlerFunctions defines the interface for Job database operations.
@@ -38,19 +39,24 @@ type JobDBHandlerFunctions interface {
 
 // JobDBHandler implements JobDBHandlerFunctions and holds the database connection.
 type JobDBHandler struct {
-	db *helper.Database
+	db            *helper.Database
+	EncryptionKey string
 }
 
 // NewJobDBHandler creates a new instance of JobDBHandler.
 // It initializes the database connection and optionally drops existing tables.
 // If withTableDrop is true, it will drop the existing job tables before creating new ones
-func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBHandler, error) {
+func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encryptionKey ...string) (*JobDBHandler, error) {
 	if dbConnection == nil {
 		return nil, fmt.Errorf("database connection is nil")
 	}
 
 	jobDbHandler := &JobDBHandler{
 		db: dbConnection,
+	}
+
+	if len(encryptionKey) > 0 {
+		jobDbHandler.EncryptionKey = encryptionKey[0]
 	}
 
 	if withTableDrop {
@@ -63,6 +69,11 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBH
 	err := jobDbHandler.CreateTable()
 	if err != nil {
 		return nil, fmt.Errorf("error creating job table: %#v", err)
+	}
+
+	err = loadSql.LoadJobSql(dbConnection.Instance, withTableDrop)
+	if err != nil {
+		return nil, fmt.Errorf("error loading job SQL functions: %w", err)
 	}
 
 	return jobDbHandler, nil
@@ -89,7 +100,12 @@ func (r JobDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := r.db.Instance.ExecContext(
+	_, err := r.db.Instance.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto;`)
+	if err != nil {
+		log.Panicf("error creating pgcrypto extension: %#v", err)
+	}
+
+	_, err = r.db.Instance.ExecContext(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS job (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -105,6 +121,7 @@ func (r JobDBHandler) CreateTable() error {
 			schedule_count INT DEFAULT 0,
 			attempts INT DEFAULT 0,
 			results JSONB DEFAULT '[]',
+			results_encrypted BYTEA DEFAULT '',
 			error TEXT DEFAULT '',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -353,72 +370,22 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 // It returns the updated job records.
 func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
-		`WITH current_concurrency AS (
-			SELECT COUNT(*) AS count
-			FROM job
-			WHERE worker_id = $1
-			AND status = 'RUNNING'
-		),
-		current_worker AS (
-			SELECT
-				id,
-				rid,
-				available_tasks,
-				available_next_interval,
-				max_concurrency,
-				COALESCE(cc.count, 0) AS current_concurrency
-			FROM worker, current_concurrency AS cc
-			WHERE id = $1
-			AND (max_concurrency > COALESCE(cc.count, 0))
-			FOR UPDATE
-		),
-		job_ids AS (
-			SELECT j.id
-			FROM current_worker AS cw, current_concurrency AS cc,
-			LATERAL (
-				SELECT job.id
-				FROM job
-				WHERE
-					job.task_name = ANY(cw.available_tasks::VARCHAR[])
-					AND (
-						options->'schedule'->>'next_interval' IS NULL
-						OR options->'schedule'->>'next_interval' = ''
-						OR options->'schedule'->>'next_interval' = ANY(cw.available_next_interval::VARCHAR[]))
-					AND (
-						job.status = 'QUEUED'
-						OR (job.status = 'SCHEDULED' AND job.scheduled_at <= (CURRENT_TIMESTAMP + '10 minutes'::INTERVAL))
-					)
-				ORDER BY job.created_at ASC
-				LIMIT (cw.max_concurrency - COALESCE(cc.count, 0))
-				FOR UPDATE SKIP LOCKED
-			) AS j
-		)
-		UPDATE job SET
-			worker_id = cw.id,
-			worker_rid = cw.rid,
-			status = 'RUNNING',
-			started_at = CURRENT_TIMESTAMP,
-			schedule_count = schedule_count + 1,
-			attempts = attempts + 1,
-			updated_at = CURRENT_TIMESTAMP
-		FROM current_worker AS cw, job_ids
-		WHERE job.id = ANY(SELECT id FROM job_ids)
-		AND EXISTS (SELECT 1 FROM current_worker)
-		RETURNING
-			job.id,
-			job.rid,
-			job.worker_id,
-			job.worker_rid,
-			job.options,
-			job.task_name,
-			job.parameters,
-			job.status,
-			job.scheduled_at,
-			job.started_at,
-			job.schedule_count,
-			job.attempts,
-			job.created_at,
-			job.updated_at;`,
+		`SELECT
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			scheduled_at,
+			started_at,
+			schedule_count,
+			attempts,
+			created_at,
+			updated_at
+		FROM update_job_initial($1);`,
 		worker.ID,
 	)
 	if err != nil {
@@ -463,82 +430,60 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 //
 // It returns the archived job record.
 func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
-	row := r.db.Instance.QueryRow(
-		`WITH jobs_old AS (
-			DELETE FROM job
-			WHERE id = $1
-			RETURNING
-				id,
-				rid,
-				worker_id,
-				worker_rid,
-				options,
-				task_name,
-				parameters,
-				scheduled_at,
-				started_at,
-				schedule_count,
-				attempts,
-				created_at,
-				updated_at
-		) INSERT INTO job_archive (
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			results,
-			error,
-			created_at,
-			updated_at
+	var row *sql.Row
+
+	if len(r.EncryptionKey) > 0 {
+		row = r.db.Instance.QueryRow(
+			`SELECT
+				output_id,
+				output_rid,
+				output_worker_id,
+				output_worker_rid,
+				output_options,
+				output_task_name,
+				output_parameters,
+				output_status,
+				output_scheduled_at,
+				output_started_at,
+				output_schedule_count,
+				output_attempts,
+				output_results,
+				output_error,
+				output_created_at,
+				output_updated_at
+			FROM update_job_final_encrypted($1, $2, $3, $4, $5);`,
+			job.ID,
+			job.Status,
+			job.Results,
+			job.Error,
+			r.EncryptionKey,
 		)
-		SELECT
-			jobs_old.id,
-			jobs_old.rid,
-			jobs_old.worker_id,
-			jobs_old.worker_rid,
-			jobs_old.options,
-			jobs_old.task_name,
-			jobs_old.parameters,
-			$2,
-			jobs_old.scheduled_at,
-			jobs_old.started_at,
-			jobs_old.schedule_count,
-			jobs_old.attempts,
-			$3,
-			$4,
-			jobs_old.created_at,
-			CURRENT_TIMESTAMP
-		FROM jobs_old
-		RETURNING
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			results,
-			error,
-			created_at,
-			updated_at;`,
-		job.ID,
-		job.Status,
-		job.Results,
-		job.Error,
-	)
+	} else {
+		row = r.db.Instance.QueryRow(
+			`SELECT
+				output_id,
+				output_rid,
+				output_worker_id,
+				output_worker_rid,
+				output_options,
+				output_task_name,
+				output_parameters,
+				output_status,
+				output_scheduled_at,
+				output_started_at,
+				output_schedule_count,
+				output_attempts,
+				output_results,
+				output_error,
+				output_created_at,
+				output_updated_at
+			FROM update_job_final($1, $2, $3, $4);`,
+			job.ID,
+			job.Status,
+			job.Results,
+			job.Error,
+		)
+	}
 
 	archivedJob := &model.Job{}
 	err := row.Scan(
@@ -596,14 +541,18 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job
 		WHERE
-			rid = $1`,
+			rid = $2`,
+		r.EncryptionKey,
 		rid,
 	)
 
@@ -650,23 +599,27 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job
-		WHERE (0 = $1
+		WHERE (0 = $2
 			OR created_at < (
 				SELECT
 					d.created_at
 				FROM
 					job AS d
 				WHERE
-					d.id = $1))
+					d.id = $2))
 		ORDER BY
 			created_at DESC
-		LIMIT $2;`,
+		LIMIT $3;`,
+		r.EncryptionKey,
 		lastID,
 		entries,
 	)
@@ -724,22 +677,26 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM job
-		WHERE worker_rid = $1
-			AND (0 = $2
+		WHERE worker_rid = $2
+			AND (0 = $3
 				OR created_at < (
 					SELECT
 						d.created_at
 					FROM
 						job AS d
 					WHERE
-						d.id = $2))
+						d.id = $3))
 		ORDER BY created_at DESC
-		LIMIT $3;`,
+		LIMIT $4;`,
+		r.EncryptionKey,
 		workerRid,
 		lastID,
 		entries,
@@ -802,26 +759,30 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM job
-		WHERE (rid::text ILIKE '%' || $1 || '%'
-				OR worker_id::text ILIKE '%' || $1 || '%'
-				OR task_name ILIKE '%' || $1 || '%'
-				OR status ILIKE '%' || $1 || '%')
-			AND (0 = $2
+		WHERE (rid::text ILIKE '%' || $2 || '%'
+				OR worker_id::text ILIKE '%' || $2 || '%'
+				OR task_name ILIKE '%' || $2 || '%'
+				OR status ILIKE '%' || $2 || '%')
+			AND (0 = $3
 				OR created_at < (
 					SELECT
 						u.created_at
 					FROM
 						job AS u
 					WHERE
-						u.id = $2))
+						u.id = $3))
 		ORDER BY
 			created_at DESC
-		LIMIT $3`,
+		LIMIT $4`,
+		r.EncryptionKey,
 		search,
 		lastID,
 		entries,
@@ -910,14 +871,18 @@ func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job_archive
 		WHERE
-			rid = $1`,
+			rid = $2`,
+		r.EncryptionKey,
 		rid,
 	)
 
@@ -964,23 +929,27 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job_archive
-		WHERE (0 = $1
+		WHERE (0 = $2
 			OR created_at < (
 				SELECT
 					d.created_at
 				FROM
 					job_archive AS d
 				WHERE
-					d.id = $1))
+					d.id = $2))
 		ORDER BY
 			created_at DESC
-		LIMIT $2;`,
+		LIMIT $3;`,
+		r.EncryptionKey,
 		lastID,
 		entries,
 	)
@@ -1039,26 +1008,30 @@ func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM job_archive
-		WHERE (rid::text ILIKE '%' || $1 || '%'
-				OR worker_id::text ILIKE '%' || $1 || '%'
-				OR task_name ILIKE '%' || $1 || '%'
-				OR status ILIKE '%' || $1 || '%')
-			AND (0 = $2
+		WHERE (rid::text ILIKE '%' || $2 || '%'
+				OR worker_id::text ILIKE '%' || $2 || '%'
+				OR task_name ILIKE '%' || $2 || '%'
+				OR status ILIKE '%' || $2 || '%')
+			AND (0 = $3
 				OR created_at < (
 					SELECT
 						u.created_at
 					FROM
 						job_archive AS u
 					WHERE
-						u.id = $2))
+						u.id = $3))
 		ORDER BY
 			created_at DESC
-		LIMIT $3`,
+		LIMIT $4`,
+		r.EncryptionKey,
 		search,
 		lastID,
 		entries,

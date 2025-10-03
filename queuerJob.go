@@ -422,23 +422,7 @@ func (q *Queuer) runJob(job *model.Job) {
 }
 
 func (q *Queuer) cancelJob(job *model.Job) error {
-	switch job.Status {
-	case model.JobStatusRunning:
-		jobRunner, found := q.activeRunners.Load(job.RID)
-		if !found {
-			return fmt.Errorf("job with rid %v not found or not running", job.RID)
-		}
-
-		runner := jobRunner.(*core.Runner)
-		runner.Cancel(func() {
-			job.Status = model.JobStatusCancelled
-			_, err := q.dbJob.UpdateJobFinal(job)
-			if err != nil {
-				q.log.Printf("Error updating job status to cancelled: %v", err)
-			}
-			q.log.Printf("Job cancelled with RID %v", job.RID)
-		})
-	case model.JobStatusScheduled, model.JobStatusQueued:
+	if job.Status == model.JobStatusRunning || job.Status == model.JobStatusScheduled || job.Status == model.JobStatusQueued {
 		job.Status = model.JobStatusCancelled
 		_, err := q.dbJob.UpdateJobFinal(job)
 		if err != nil {

@@ -887,7 +887,7 @@ func TestReaddJobFromArchive(t *testing.T) {
 		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(cancelledJob.RID)
 		assert.NoError(t, err, "SelectJobFromArchive should not return an error for archived job")
 		assert.NotNil(t, jobArchived, "SelectJobFromArchive should return the archived job")
-		assert.Equal(t, jobArchived.Status, model.JobStatusCancelled, "Archived job should have status Cancelled")
+		assert.Equal(t, model.JobStatusCancelled, jobArchived.Status, "Archived job should have status Cancelled")
 
 		readdedJob, err := testQueuer.ReaddJobFromArchive(job.RID)
 		assert.NoError(t, err, "ReaddJobFromArchive should not return an error on success")
