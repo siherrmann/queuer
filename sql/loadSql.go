@@ -13,7 +13,7 @@ var jobSQL string
 //go:embed worker.sql
 var workerSQL string
 
-var JobFunctions = []string{"update_job_initial", "update_job_final"}
+var JobFunctions = []string{"update_job_initial", "update_job_final", "update_job_final_encrypted"}
 var WorkerFunctions = []string{"insert_worker", "update_worker", "delete_worker"}
 
 func LoadJobSql(db *sql.DB, force bool) error {

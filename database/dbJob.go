@@ -39,19 +39,24 @@ type JobDBHandlerFunctions interface {
 
 // JobDBHandler implements JobDBHandlerFunctions and holds the database connection.
 type JobDBHandler struct {
-	db *helper.Database
+	db            *helper.Database
+	EncryptionKey string
 }
 
 // NewJobDBHandler creates a new instance of JobDBHandler.
 // It initializes the database connection and optionally drops existing tables.
 // If withTableDrop is true, it will drop the existing job tables before creating new ones
-func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBHandler, error) {
+func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encryptionKey ...string) (*JobDBHandler, error) {
 	if dbConnection == nil {
 		return nil, fmt.Errorf("database connection is nil")
 	}
 
 	jobDbHandler := &JobDBHandler{
 		db: dbConnection,
+	}
+
+	if len(encryptionKey) > 0 {
+		jobDbHandler.EncryptionKey = encryptionKey[0]
 	}
 
 	if withTableDrop {
@@ -95,7 +100,12 @@ func (r JobDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := r.db.Instance.ExecContext(
+	_, err := r.db.Instance.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto;`)
+	if err != nil {
+		log.Panicf("error creating pgcrypto extension: %#v", err)
+	}
+
+	_, err = r.db.Instance.ExecContext(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS job (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -111,6 +121,7 @@ func (r JobDBHandler) CreateTable() error {
 			schedule_count INT DEFAULT 0,
 			attempts INT DEFAULT 0,
 			results JSONB DEFAULT '[]',
+			results_encrypted BYTEA DEFAULT '',
 			error TEXT DEFAULT '',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -419,30 +430,60 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 //
 // It returns the archived job record.
 func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
-	row := r.db.Instance.QueryRow(
-		`SELECT
-			output_id,
-			output_rid,
-			output_worker_id,
-			output_worker_rid,
-			output_options,
-			output_task_name,
-			output_parameters,
-			output_status,
-			output_scheduled_at,
-			output_started_at,
-			output_schedule_count,
-			output_attempts,
-			output_results,
-			output_error,
-			output_created_at,
-			output_updated_at
-		FROM update_job_final($1, $2, $3, $4);`,
-		job.ID,
-		job.Status,
-		job.Results,
-		job.Error,
-	)
+	var row *sql.Row
+
+	if len(r.EncryptionKey) > 0 {
+		row = r.db.Instance.QueryRow(
+			`SELECT
+				output_id,
+				output_rid,
+				output_worker_id,
+				output_worker_rid,
+				output_options,
+				output_task_name,
+				output_parameters,
+				output_status,
+				output_scheduled_at,
+				output_started_at,
+				output_schedule_count,
+				output_attempts,
+				output_results,
+				output_error,
+				output_created_at,
+				output_updated_at
+			FROM update_job_final_encrypted($1, $2, $3, $4, $5);`,
+			job.ID,
+			job.Status,
+			job.Results,
+			job.Error,
+			r.EncryptionKey,
+		)
+	} else {
+		row = r.db.Instance.QueryRow(
+			`SELECT
+				output_id,
+				output_rid,
+				output_worker_id,
+				output_worker_rid,
+				output_options,
+				output_task_name,
+				output_parameters,
+				output_status,
+				output_scheduled_at,
+				output_started_at,
+				output_schedule_count,
+				output_attempts,
+				output_results,
+				output_error,
+				output_created_at,
+				output_updated_at
+			FROM update_job_final($1, $2, $3, $4);`,
+			job.ID,
+			job.Status,
+			job.Results,
+			job.Error,
+		)
+	}
 
 	archivedJob := &model.Job{}
 	err := row.Scan(
@@ -500,14 +541,18 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job
 		WHERE
-			rid = $1`,
+			rid = $2`,
+		r.EncryptionKey,
 		rid,
 	)
 
@@ -554,23 +599,27 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job
-		WHERE (0 = $1
+		WHERE (0 = $2
 			OR created_at < (
 				SELECT
 					d.created_at
 				FROM
 					job AS d
 				WHERE
-					d.id = $1))
+					d.id = $2))
 		ORDER BY
 			created_at DESC
-		LIMIT $2;`,
+		LIMIT $3;`,
+		r.EncryptionKey,
 		lastID,
 		entries,
 	)
@@ -628,22 +677,26 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM job
-		WHERE worker_rid = $1
-			AND (0 = $2
+		WHERE worker_rid = $2
+			AND (0 = $3
 				OR created_at < (
 					SELECT
 						d.created_at
 					FROM
 						job AS d
 					WHERE
-						d.id = $2))
+						d.id = $3))
 		ORDER BY created_at DESC
-		LIMIT $3;`,
+		LIMIT $4;`,
+		r.EncryptionKey,
 		workerRid,
 		lastID,
 		entries,
@@ -706,26 +759,30 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM job
-		WHERE (rid::text ILIKE '%' || $1 || '%'
-				OR worker_id::text ILIKE '%' || $1 || '%'
-				OR task_name ILIKE '%' || $1 || '%'
-				OR status ILIKE '%' || $1 || '%')
-			AND (0 = $2
+		WHERE (rid::text ILIKE '%' || $2 || '%'
+				OR worker_id::text ILIKE '%' || $2 || '%'
+				OR task_name ILIKE '%' || $2 || '%'
+				OR status ILIKE '%' || $2 || '%')
+			AND (0 = $3
 				OR created_at < (
 					SELECT
 						u.created_at
 					FROM
 						job AS u
 					WHERE
-						u.id = $2))
+						u.id = $3))
 		ORDER BY
 			created_at DESC
-		LIMIT $3`,
+		LIMIT $4`,
+		r.EncryptionKey,
 		search,
 		lastID,
 		entries,
@@ -814,14 +871,18 @@ func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job_archive
 		WHERE
-			rid = $1`,
+			rid = $2`,
+		r.EncryptionKey,
 		rid,
 	)
 
@@ -868,23 +929,27 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM
 			job_archive
-		WHERE (0 = $1
+		WHERE (0 = $2
 			OR created_at < (
 				SELECT
 					d.created_at
 				FROM
 					job_archive AS d
 				WHERE
-					d.id = $1))
+					d.id = $2))
 		ORDER BY
 			created_at DESC
-		LIMIT $2;`,
+		LIMIT $3;`,
+		r.EncryptionKey,
 		lastID,
 		entries,
 	)
@@ -943,26 +1008,30 @@ func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int
 			started_at,
 			schedule_count,
 			attempts,
-			results,
+			CASE
+				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
+				ELSE results
+			END AS results,
 			error,
 			created_at,
 			updated_at
 		FROM job_archive
-		WHERE (rid::text ILIKE '%' || $1 || '%'
-				OR worker_id::text ILIKE '%' || $1 || '%'
-				OR task_name ILIKE '%' || $1 || '%'
-				OR status ILIKE '%' || $1 || '%')
-			AND (0 = $2
+		WHERE (rid::text ILIKE '%' || $2 || '%'
+				OR worker_id::text ILIKE '%' || $2 || '%'
+				OR task_name ILIKE '%' || $2 || '%'
+				OR status ILIKE '%' || $2 || '%')
+			AND (0 = $3
 				OR created_at < (
 					SELECT
 						u.created_at
 					FROM
 						job_archive AS u
 					WHERE
-						u.id = $2))
+						u.id = $3))
 		ORDER BY
 			created_at DESC
-		LIMIT $3`,
+		LIMIT $4`,
+		r.EncryptionKey,
 		search,
 		lastID,
 		entries,

@@ -186,3 +186,104 @@ BEGIN
         updated_at;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION update_job_final_encrypted(
+    input_id BIGINT,
+    input_status VARCHAR(50),
+    input_results TEXT,
+    input_error TEXT,
+    input_encryption_key TEXT
+)
+RETURNS TABLE (
+    output_id BIGINT,
+    output_rid UUID,
+    output_worker_id BIGINT,
+    output_worker_rid UUID,
+    output_options JSONB,
+    output_task_name VARCHAR(100),
+    output_parameters JSONB,
+    output_status VARCHAR(50),
+    output_scheduled_at TIMESTAMP,
+    output_started_at TIMESTAMP,
+    output_schedule_count INT,
+    output_attempts INT,
+    output_results JSONB,
+    output_error TEXT,
+    output_created_at TIMESTAMP,
+    output_updated_at TIMESTAMP
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH jobs_old AS (
+        DELETE FROM job
+        WHERE id = input_id
+        RETURNING
+            id,
+            rid,
+            worker_id,
+            worker_rid,
+            options,
+            task_name,
+            parameters,
+            scheduled_at,
+            started_at,
+            schedule_count,
+            attempts,
+            created_at,
+            updated_at
+    )
+    INSERT INTO job_archive (
+        id,
+        rid,
+        worker_id,
+        worker_rid,
+        options,
+        task_name,
+        parameters,
+        status,
+        scheduled_at,
+        started_at,
+        schedule_count,
+        attempts,
+        results_encrypted,
+        error,
+        created_at,
+        updated_at
+    )
+    SELECT
+        jobs_old.id,
+        jobs_old.rid,
+        jobs_old.worker_id,
+        jobs_old.worker_rid,
+        jobs_old.options,
+        jobs_old.task_name,
+        jobs_old.parameters,
+        input_status,
+        jobs_old.scheduled_at,
+        jobs_old.started_at,
+        jobs_old.schedule_count,
+        jobs_old.attempts,
+        pgp_sym_encrypt(input_results, input_encryption_key),
+        input_error,
+        jobs_old.created_at,
+        CURRENT_TIMESTAMP
+    FROM jobs_old
+    RETURNING
+        id,
+        rid,
+        worker_id,
+        worker_rid,
+        options,
+        task_name,
+        parameters,
+        status,
+        scheduled_at,
+        started_at,
+        schedule_count,
+        attempts,
+        input_results::JSONB,
+        error,
+        created_at,
+        updated_at;
+END;
+$$ LANGUAGE plpgsql;

@@ -97,9 +97,9 @@ func TestJobInsertJob(t *testing.T) {
 	insertedJob, err := jobDbHandler.InsertJob(job)
 	assert.NoError(t, err, "Expected InsertJob to not return an error")
 	assert.NotNil(t, insertedJob, "Expected InsertJob to return a non-nil job")
-	assert.Equal(t, insertedJob.TaskName, job.TaskName, "Expected task name to match")
-	assert.Equal(t, insertedJob.Status, model.JobStatusQueued, "Expected job status to be QUEUED")
-	assert.Equal(t, insertedJob.Attempts, 0, "Expected job attempts to be 0")
+	assert.Equal(t, job.TaskName, insertedJob.TaskName, "Expected task name to match")
+	assert.Equal(t, model.JobStatusQueued, insertedJob.Status, "Expected job status to be QUEUED")
+	assert.Equal(t, 0, insertedJob.Attempts, "Expected job attempts to be 0")
 	assert.WithinDuration(t, insertedJob.CreatedAt, time.Now(), 1*time.Second, "Expected inserted worker CreatedAt time to match")
 	assert.WithinDuration(t, insertedJob.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
 }
@@ -124,9 +124,9 @@ func TestJobInsertJobTx(t *testing.T) {
 	insertedJob, err := jobDbHandler.InsertJobTx(tx, job)
 	assert.NoError(t, err, "Expected InsertJobTx to not return an error")
 	assert.NotNil(t, insertedJob, "Expected InsertJobTx to return a non-nil job")
-	assert.Equal(t, insertedJob.TaskName, job.TaskName, "Expected task name to match")
-	assert.Equal(t, insertedJob.Status, model.JobStatusQueued, "Expected job status to be QUEUED")
-	assert.Equal(t, insertedJob.Attempts, 0, "Expected job attempts to be 0")
+	assert.Equal(t, job.TaskName, insertedJob.TaskName, "Expected task name to match")
+	assert.Equal(t, model.JobStatusQueued, insertedJob.Status, "Expected job status to be QUEUED")
+	assert.Equal(t, 0, insertedJob.Attempts, "Expected job attempts to be 0")
 	assert.WithinDuration(t, insertedJob.CreatedAt, time.Now(), 1*time.Second, "Expected inserted worker CreatedAt time to match")
 	assert.WithinDuration(t, insertedJob.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
 
@@ -194,10 +194,10 @@ func TestJobUpdateJobsInitial(t *testing.T) {
 	updatedJobs, err := jobDbHandler.UpdateJobsInitial(updatedWorker)
 	assert.NoError(t, err, "Expected UpdateJobsInitial to not return an error")
 	require.Len(t, updatedJobs, 1, "Expected one job to be updated")
-	assert.Equal(t, updatedJobs[0].ID, insertedJob.ID, "Expected updated job ID to match inserted job ID")
-	assert.Equal(t, updatedJobs[0].WorkerID, updatedWorker.ID, "Expected updated job WorkerID to match new worker ID")
+	assert.Equal(t, insertedJob.ID, updatedJobs[0].ID, "Expected updated job ID to match inserted job ID")
+	assert.Equal(t, updatedWorker.ID, updatedJobs[0].WorkerID, "Expected updated job WorkerID to match new worker ID")
 	assert.Equal(t, updatedJobs[0].WorkerRID, updatedWorker.RID, "Expected updated job WorkerRID to match new worker RID")
-	assert.Equal(t, updatedJobs[0].Status, model.JobStatusRunning, "Expected job status to be RUNNING")
+	assert.Equal(t, model.JobStatusRunning, updatedJobs[0].Status, "Expected job status to be RUNNING")
 	assert.WithinDuration(t, updatedJobs[0].UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
 }
 
@@ -222,9 +222,47 @@ func TestJobUpdateJobFinal(t *testing.T) {
 	insertedJob.Status = model.JobStatusSucceeded
 	updatedJob, err := jobDbHandler.UpdateJobFinal(insertedJob)
 	assert.NoError(t, err, "Expected UpdateJobFinal to not return an error")
-	assert.Equal(t, updatedJob.ID, insertedJob.ID, "Expected updated job ID to match inserted job ID")
-	assert.Equal(t, updatedJob.Status, model.JobStatusSucceeded, "Expected job status to be SUCCEEDED")
+	assert.Equal(t, insertedJob.ID, updatedJob.ID, "Expected updated job ID to match inserted job ID")
+	assert.Equal(t, model.JobStatusSucceeded, updatedJob.Status, "Expected job status to be SUCCEEDED")
 	assert.WithinDuration(t, updatedJob.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
+}
+
+func TestJobUpdateJobFinalEncrypted(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	jobDbHandler, err := NewJobDBHandler(database, true, "test-encryption-key")
+	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+
+	job, err := model.NewJob("TestTask", nil)
+	require.NoError(t, err, "Expected NewJob to not return an error")
+
+	insertedJob, err := jobDbHandler.InsertJob(job)
+	require.NoError(t, err, "Expected InsertJob to not return an error")
+
+	// Update the job status to SUCCEEDED
+	insertedJob.Status = model.JobStatusSucceeded
+	updatedJob, err := jobDbHandler.UpdateJobFinal(insertedJob)
+	assert.NoError(t, err, "Expected UpdateJobFinal to not return an error")
+	assert.Equal(t, insertedJob.ID, updatedJob.ID, "Expected updated job ID to match inserted job ID")
+	assert.Equal(t, model.JobStatusSucceeded, updatedJob.Status, "Expected job status to be SUCCEEDED")
+	assert.WithinDuration(t, updatedJob.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
+
+	// Verify that the job was archived (should no longer exist in main job table)
+	_, err = jobDbHandler.SelectJob(insertedJob.RID)
+	assert.Error(t, err, "Expected SelectJob to return an error since job should be archived")
+
+	// Verify that the job exists in archive and can be decrypted correctly
+	archivedJob, err := jobDbHandler.SelectJobFromArchive(updatedJob.RID)
+	assert.NoError(t, err, "Expected SelectJobFromArchive to not return an error")
+	assert.NotNil(t, archivedJob, "Expected SelectJobFromArchive to return a non-nil job")
+	assert.Equal(t, insertedJob.RID, archivedJob.RID, "Expected archived job RID to match inserted job RID")
+	assert.Equal(t, model.JobStatusSucceeded, archivedJob.Status, "Expected archived job status to be SUCCEEDED")
+	assert.Equal(t, insertedJob.Results, archivedJob.Results, "Expected archived job results to match original results after decryption")
 }
 
 func TestJobDeleteJob(t *testing.T) {
@@ -274,7 +312,42 @@ func TestJobSelectJob(t *testing.T) {
 	selectedJob, err := jobDbHandler.SelectJob(insertedJob.RID)
 	assert.NoError(t, err, "Expected SelectJob to not return an error")
 	assert.NotNil(t, selectedJob, "Expected SelectJob to return a non-nil job")
-	assert.Equal(t, selectedJob.RID, insertedJob.RID, "Expected selected job RID to match inserted job RID")
+	assert.Equal(t, insertedJob.RID, selectedJob.RID, "Expected selected job RID to match inserted job RID")
+}
+
+func TestJobSelectJobEncrypted(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	jobDbHandler, err := NewJobDBHandler(database, true, "test-encryption-key")
+	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+
+	job, err := model.NewJob("TestTask", nil)
+	require.NoError(t, err, "Expected NewJob to not return an error")
+
+	insertedJob, err := jobDbHandler.InsertJob(job)
+	require.NoError(t, err, "Expected InsertJob to not return an error")
+
+	// Simulate job completion with results (this is when results get encrypted)
+	testResults := model.Parameters{"data", float64(1)}
+	insertedJob.Status = model.JobStatusSucceeded
+	insertedJob.Results = testResults
+
+	updatedJob, err := jobDbHandler.UpdateJobFinal(insertedJob)
+	require.NoError(t, err, "Expected UpdateJobFinal to not return an error")
+
+	// Job should be archived after UpdateJobFinal, so check archive
+	archivedJob, err := jobDbHandler.SelectJobFromArchive(updatedJob.RID)
+	assert.NoError(t, err, "Expected SelectJobFromArchive to not return an error")
+	assert.NotNil(t, archivedJob, "Expected SelectJobFromArchive to return a non-nil job")
+	assert.Equal(t, insertedJob.RID, archivedJob.RID, "Expected archived job RID to match inserted job RID")
+	assert.Equal(t, insertedJob.TaskName, archivedJob.TaskName, "Expected archived job TaskName to match inserted job TaskName")
+	assert.Equal(t, model.JobStatusSucceeded, archivedJob.Status, "Expected archived job Status to be SUCCEEDED")
+	assert.Equal(t, testResults, archivedJob.Results, "Expected archived job Results to match test results after decryption")
 }
 
 func TestJobSelectAllJobs(t *testing.T) {
@@ -305,6 +378,56 @@ func TestJobSelectAllJobs(t *testing.T) {
 	paginatedJobs, err := jobDbHandler.SelectAllJobs(0, pageLength)
 	assert.NoError(t, err, "Expected SelectAllJobs to not return an error")
 	assert.Len(t, paginatedJobs, pageLength, "Expected SelectAllJobs to return two jobs")
+}
+
+func TestJobSelectAllJobsEncrypted(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	newJobCount := 5
+	jobDbHandler, err := NewJobDBHandler(database, true, "test-encryption-key")
+	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+
+	expectedResultsByTaskName := make(map[string]model.Parameters)
+	for i := 0; i < newJobCount; i++ {
+		taskName := fmt.Sprintf("TestJob%v", i)
+		job, err := model.NewJob(taskName, nil)
+		require.NoError(t, err, "Expected NewJob to not return an error")
+
+		insertedJob, err := jobDbHandler.InsertJob(job)
+		require.NoError(t, err, "Expected InsertJob to not return an error")
+
+		testResults := model.Parameters{"data", float64(i)}
+		expectedResultsByTaskName[taskName] = testResults
+		insertedJob.Status = model.JobStatusSucceeded
+		insertedJob.Results = testResults
+
+		_, err = jobDbHandler.UpdateJobFinal(insertedJob)
+		require.NoError(t, err, "Expected UpdateJobFinal to not return an error")
+	}
+
+	// Jobs are archived after UpdateJobFinal, so test archive retrieval
+	archivedJobs, err := jobDbHandler.SelectAllJobsFromArchive(0, 10)
+	assert.NoError(t, err, "Expected SelectAllJobsFromArchive to not return an error")
+	assert.Len(t, archivedJobs, newJobCount, "Expected SelectAllJobsFromArchive to return all archived jobs")
+
+	pageLength := 3
+	paginatedArchivedJobs, err := jobDbHandler.SelectAllJobsFromArchive(0, pageLength)
+	assert.NoError(t, err, "Expected SelectAllJobsFromArchive to not return an error")
+	assert.Len(t, paginatedArchivedJobs, pageLength, "Expected SelectAllJobsFromArchive to return paginated archived jobs")
+
+	for _, job := range archivedJobs {
+		assert.NotEmpty(t, job.TaskName, "Expected job TaskName to not be empty")
+		assert.Equal(t, model.JobStatusSucceeded, job.Status, "Expected job status to be SUCCEEDED")
+
+		expectedResults, exists := expectedResultsByTaskName[job.TaskName]
+		assert.True(t, exists, "Expected to find results for task name %s", job.TaskName)
+		assert.Equal(t, expectedResults, job.Results, "Expected job Results to match test results after decryption for task %s", job.TaskName)
+	}
 }
 
 func TestJobSelectAllJobsByWorkerRID(t *testing.T) {
@@ -422,8 +545,8 @@ func TestJobSelectJobFromArchive(t *testing.T) {
 	archivedJob, err := jobDbHandler.SelectJobFromArchive(updatedJob.RID)
 	assert.NoError(t, err, "Expected SelectJobFromArchive to not return an error")
 	assert.NotNil(t, archivedJob, "Expected SelectJobFromArchive to return a non-nil job")
-	assert.Equal(t, archivedJob.RID, insertedJob.RID, "Expected archived job RID to match inserted job RID")
-	assert.Equal(t, archivedJob.Status, model.JobStatusSucceeded, "Expected archived job status to be SUCCEEDED")
+	assert.Equal(t, insertedJob.RID, archivedJob.RID, "Expected archived job RID to match inserted job RID")
+	assert.Equal(t, model.JobStatusSucceeded, archivedJob.Status, "Expected archived job status to be SUCCEEDED")
 }
 
 func TestJobSelectAllJobsFromArchive(t *testing.T) {
