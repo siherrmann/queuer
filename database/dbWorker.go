@@ -43,6 +43,11 @@ func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Wor
 		db: dbConnection,
 	}
 
+	err := loadSql.LoadWorkerSql(dbConnection.Instance, withTableDrop)
+	if err != nil {
+		return nil, fmt.Errorf("error loading worker SQL functions: %w", err)
+	}
+
 	if withTableDrop {
 		err := workerDbHandler.DropTable()
 		if err != nil {
@@ -50,14 +55,9 @@ func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Wor
 		}
 	}
 
-	err := workerDbHandler.CreateTable()
+	err = workerDbHandler.CreateTable()
 	if err != nil {
 		return nil, fmt.Errorf("error creating worker table: %#v", err)
-	}
-
-	err = loadSql.LoadWorkerSql(dbConnection.Instance, withTableDrop)
-	if err != nil {
-		return nil, fmt.Errorf("error loading worker SQL functions: %w", err)
 	}
 
 	return workerDbHandler, nil
