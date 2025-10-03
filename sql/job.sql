@@ -1,39 +1,39 @@
-CREATE OR REPLACE FUNCTION update_job_initial(p_worker_id bigint)
+CREATE OR REPLACE FUNCTION update_job_initial(input_worker_id BIGINT)
 RETURNS TABLE (
-    id bigint,
-    rid uuid,
-    worker_id bigint,
-    worker_rid uuid,
-    options jsonb,
-    task_name text,
-    parameters jsonb,
-    status text,
-    scheduled_at timestamptz,
-    started_at timestamptz,
-    schedule_count integer,
-    attempts integer,
-    created_at timestamptz,
-    updated_at timestamptz
+    id BIGINT,
+    rid UUID,
+    worker_id BIGINT,
+    worker_rid UUID,
+    options JSONB,
+    task_name VARCHAR(100),
+    parameters JSONB,
+    status VARCHAR(50),
+    scheduled_at TIMESTAMP,
+    started_at TIMESTAMP,
+    schedule_count INT,
+    attempts INT,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
 ) AS $$
 BEGIN
     RETURN QUERY
     WITH current_concurrency AS (
         SELECT COUNT(*) AS count
         FROM job
-        WHERE worker_id = p_worker_id
-        AND status = 'RUNNING'
+        WHERE job.worker_id = input_worker_id
+        AND job.status = 'RUNNING'
     ),
     current_worker AS (
         SELECT
-            id,
-            rid,
-            available_tasks,
-            available_next_interval,
-            max_concurrency,
+            worker.id,
+            worker.rid,
+            worker.available_tasks,
+            worker.available_next_interval,
+            worker.max_concurrency,
             COALESCE(cc.count, 0) AS current_concurrency
         FROM worker, current_concurrency AS cc
-        WHERE id = p_worker_id
-        AND (max_concurrency > COALESCE(cc.count, 0))
+        WHERE worker.id = input_worker_id
+        AND (worker.max_concurrency > COALESCE(cc.count, 0))
         FOR UPDATE
     ),
     job_ids AS (
@@ -45,9 +45,9 @@ BEGIN
             WHERE
                 job.task_name = ANY(cw.available_tasks::VARCHAR[])
                 AND (
-                    options->'schedule'->>'next_interval' IS NULL
-                    OR options->'schedule'->>'next_interval' = ''
-                    OR options->'schedule'->>'next_interval' = ANY(cw.available_next_interval::VARCHAR[])
+                    job.options->'schedule'->>'next_interval' IS NULL
+                    OR job.options->'schedule'->>'next_interval' = ''
+                    OR job.options->'schedule'->>'next_interval' = ANY(cw.available_next_interval::VARCHAR[])
                 )
                 AND (
                     job.status = 'QUEUED'
@@ -63,11 +63,11 @@ BEGIN
         worker_rid = cw.rid,
         status = 'RUNNING',
         started_at = CURRENT_TIMESTAMP,
-        schedule_count = schedule_count + 1,
-        attempts = attempts + 1,
+        schedule_count = job.schedule_count + 1,
+        attempts = job.attempts + 1,
         updated_at = CURRENT_TIMESTAMP
     FROM current_worker AS cw, job_ids
-    WHERE job.id = ANY(SELECT id FROM job_ids)
+    WHERE job.id = ANY(SELECT job_ids.id FROM job_ids)
     AND EXISTS (SELECT 1 FROM current_worker)
     RETURNING
         job.id,
@@ -88,34 +88,34 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION update_job_final(
-    p_id bigint,
-    p_status text,
-    p_results jsonb,
-    p_error text
+    input_id BIGINT,
+    input_status VARCHAR(50),
+    input_results JSONB,
+    input_error TEXT
 )
 RETURNS TABLE (
-    id bigint,
-    rid uuid,
-    worker_id bigint,
-    worker_rid uuid,
-    options jsonb,
-    task_name text,
-    parameters jsonb,
-    status text,
-    scheduled_at timestamptz,
-    started_at timestamptz,
-    schedule_count integer,
-    attempts integer,
-    results jsonb,
-    error text,
-    created_at timestamptz,
-    updated_at timestamptz
+    output_id BIGINT,
+    output_rid UUID,
+    output_worker_id BIGINT,
+    output_worker_rid UUID,
+    output_options JSONB,
+    output_task_name VARCHAR(100),
+    output_parameters JSONB,
+    output_status VARCHAR(50),
+    output_scheduled_at TIMESTAMP,
+    output_started_at TIMESTAMP,
+    output_schedule_count INT,
+    output_attempts INT,
+    output_results JSONB,
+    output_error TEXT,
+    output_created_at TIMESTAMP,
+    output_updated_at TIMESTAMP
 ) AS $$
 BEGIN
     RETURN QUERY
     WITH jobs_old AS (
         DELETE FROM job
-        WHERE id = p_id
+        WHERE id = input_id
         RETURNING
             id,
             rid,
@@ -157,13 +157,13 @@ BEGIN
         jobs_old.options,
         jobs_old.task_name,
         jobs_old.parameters,
-        p_status,
+        input_status,
         jobs_old.scheduled_at,
         jobs_old.started_at,
         jobs_old.schedule_count,
         jobs_old.attempts,
-        p_results,
-        p_error,
+        input_results,
+        input_error,
         jobs_old.created_at,
         CURRENT_TIMESTAMP
     FROM jobs_old

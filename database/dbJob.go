@@ -11,6 +11,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
+	loadSql "github.com/siherrmann/queuer/sql"
 )
 
 // JobDBHandlerFunctions defines the interface for Job database operations.
@@ -63,6 +64,11 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool) (*JobDBH
 	err := jobDbHandler.CreateTable()
 	if err != nil {
 		return nil, fmt.Errorf("error creating job table: %#v", err)
+	}
+
+	err = loadSql.LoadJobSql(dbConnection.Instance, withTableDrop)
+	if err != nil {
+		return nil, fmt.Errorf("error loading job SQL functions: %w", err)
 	}
 
 	return jobDbHandler, nil
@@ -353,72 +359,22 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 // It returns the updated job records.
 func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
-		`WITH current_concurrency AS (
-			SELECT COUNT(*) AS count
-			FROM job
-			WHERE worker_id = $1
-			AND status = 'RUNNING'
-		),
-		current_worker AS (
-			SELECT
-				id,
-				rid,
-				available_tasks,
-				available_next_interval,
-				max_concurrency,
-				COALESCE(cc.count, 0) AS current_concurrency
-			FROM worker, current_concurrency AS cc
-			WHERE id = $1
-			AND (max_concurrency > COALESCE(cc.count, 0))
-			FOR UPDATE
-		),
-		job_ids AS (
-			SELECT j.id
-			FROM current_worker AS cw, current_concurrency AS cc,
-			LATERAL (
-				SELECT job.id
-				FROM job
-				WHERE
-					job.task_name = ANY(cw.available_tasks::VARCHAR[])
-					AND (
-						options->'schedule'->>'next_interval' IS NULL
-						OR options->'schedule'->>'next_interval' = ''
-						OR options->'schedule'->>'next_interval' = ANY(cw.available_next_interval::VARCHAR[]))
-					AND (
-						job.status = 'QUEUED'
-						OR (job.status = 'SCHEDULED' AND job.scheduled_at <= (CURRENT_TIMESTAMP + '10 minutes'::INTERVAL))
-					)
-				ORDER BY job.created_at ASC
-				LIMIT (cw.max_concurrency - COALESCE(cc.count, 0))
-				FOR UPDATE SKIP LOCKED
-			) AS j
-		)
-		UPDATE job SET
-			worker_id = cw.id,
-			worker_rid = cw.rid,
-			status = 'RUNNING',
-			started_at = CURRENT_TIMESTAMP,
-			schedule_count = schedule_count + 1,
-			attempts = attempts + 1,
-			updated_at = CURRENT_TIMESTAMP
-		FROM current_worker AS cw, job_ids
-		WHERE job.id = ANY(SELECT id FROM job_ids)
-		AND EXISTS (SELECT 1 FROM current_worker)
-		RETURNING
-			job.id,
-			job.rid,
-			job.worker_id,
-			job.worker_rid,
-			job.options,
-			job.task_name,
-			job.parameters,
-			job.status,
-			job.scheduled_at,
-			job.started_at,
-			job.schedule_count,
-			job.attempts,
-			job.created_at,
-			job.updated_at;`,
+		`SELECT
+			id,
+			rid,
+			worker_id,
+			worker_rid,
+			options,
+			task_name,
+			parameters,
+			status,
+			scheduled_at,
+			started_at,
+			schedule_count,
+			attempts,
+			created_at,
+			updated_at
+		FROM update_job_initial($1);`,
 		worker.ID,
 	)
 	if err != nil {
@@ -464,76 +420,24 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 // It returns the archived job record.
 func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
-		`WITH jobs_old AS (
-			DELETE FROM job
-			WHERE id = $1
-			RETURNING
-				id,
-				rid,
-				worker_id,
-				worker_rid,
-				options,
-				task_name,
-				parameters,
-				scheduled_at,
-				started_at,
-				schedule_count,
-				attempts,
-				created_at,
-				updated_at
-		) INSERT INTO job_archive (
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			results,
-			error,
-			created_at,
-			updated_at
-		)
-		SELECT
-			jobs_old.id,
-			jobs_old.rid,
-			jobs_old.worker_id,
-			jobs_old.worker_rid,
-			jobs_old.options,
-			jobs_old.task_name,
-			jobs_old.parameters,
-			$2,
-			jobs_old.scheduled_at,
-			jobs_old.started_at,
-			jobs_old.schedule_count,
-			jobs_old.attempts,
-			$3,
-			$4,
-			jobs_old.created_at,
-			CURRENT_TIMESTAMP
-		FROM jobs_old
-		RETURNING
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			results,
-			error,
-			created_at,
-			updated_at;`,
+		`SELECT
+			output_id,
+			output_rid,
+			output_worker_id,
+			output_worker_rid,
+			output_options,
+			output_task_name,
+			output_parameters,
+			output_status,
+			output_scheduled_at,
+			output_started_at,
+			output_schedule_count,
+			output_attempts,
+			output_results,
+			output_error,
+			output_created_at,
+			output_updated_at
+		FROM update_job_final($1, $2, $3, $4);`,
 		job.ID,
 		job.Status,
 		job.Results,
