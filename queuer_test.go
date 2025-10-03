@@ -185,6 +185,7 @@ func TestStart(t *testing.T) {
 		require.NotNil(t, master, "Expected master to not be nil")
 		assert.Equal(t, queuer.worker.RID, master.WorkerRID, "Expected master RID to match worker RID")
 		assert.Equal(t, queuer.worker.ID, master.WorkerID, "Expected master ID to match worker ID")
+		assert.Equal(t, queuer.worker.Status, model.WorkerStatusRunning, "Expected worker status to be RUNNING")
 		assert.Equal(t, masterSettings.RetentionArchive, master.Settings.RetentionArchive, "Expected master retention archive to match")
 
 		// Check if the master updated_at is within the last 2 seconds,
@@ -236,6 +237,7 @@ func TestStart(t *testing.T) {
 		require.NotNil(t, master, "Expected master to not be nil")
 		assert.Equal(t, queuer2.worker.RID, master.WorkerRID, "Expected master RID to match worker 2 RID")
 		assert.Equal(t, queuer2.worker.ID, master.WorkerID, "Expected master ID to match worker 2 ID")
+		assert.Equal(t, queuer2.worker.Status, model.WorkerStatusRunning, "Expected worker status to be RUNNING")
 		assert.Equal(t, *masterSettings2, master.Settings, "Expected master settings to match")
 
 		// Check if the master updated_at is within the last 5 seconds,

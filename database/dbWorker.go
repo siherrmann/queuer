@@ -10,6 +10,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
+	loadSql "github.com/siherrmann/queuer/sql"
 )
 
 // WorkerDBHandlerFunctions defines the interface for Worker database operations.
@@ -54,6 +55,11 @@ func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Wor
 		return nil, fmt.Errorf("error creating worker table: %#v", err)
 	}
 
+	err = loadSql.LoadWorkerSql(dbConnection.Instance, withTableDrop)
+	if err != nil {
+		return nil, fmt.Errorf("error loading worker SQL functions: %w", err)
+	}
+
 	return workerDbHandler, nil
 }
 
@@ -84,7 +90,7 @@ func (r WorkerDBHandler) CreateTable() error {
 			available_next_interval VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
 			current_concurrency INT DEFAULT 0,
 			max_concurrency INT DEFAULT 1,
-			status VARCHAR(50) DEFAULT 'RUNNING',
+			status VARCHAR(50) DEFAULT 'READY',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -121,15 +127,21 @@ func (r WorkerDBHandler) DropTable() error {
 	return nil
 }
 
-// InsertWorker inserts a new worker record with name, otpions and max concurrency into the database.
+// InsertWorker inserts a new worker record with name, options and max concurrency into the database.
 // It returns the newly created worker with an automatically generated RID.
 // If the insertion fails, it returns an error.
 func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, error) {
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO worker (name, options, max_concurrency)
-		VALUES ($1, $2, $3)
-		RETURNING
-		id, rid, name, options, max_concurrency, status, created_at, updated_at`,
+		`SELECT
+			output_id,
+			output_rid,
+			output_name,
+			output_options,
+			output_max_concurrency,
+			output_status,
+			output_created_at,
+			output_updated_at
+		FROM insert_worker($1, $2, $3);`,
 		worker.Name,
 		worker.Options,
 		worker.MaxConcurrency,
@@ -159,29 +171,18 @@ func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, erro
 // If the update fails, it returns an error.
 func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, error) {
 	row := r.db.Instance.QueryRow(
-		`UPDATE
-			worker
-		SET
-			name = $1,
-			options = $2,
-			available_tasks = $3,
-			available_next_interval = $4,
-			max_concurrency = $5,
-			status = $6,
-			updated_at = CURRENT_TIMESTAMP
-		WHERE
-			rid = $7
-		RETURNING
-			id,
-			rid,
-			name,
-			options,
-			available_tasks,
-			available_next_interval,
-			max_concurrency,
-			status,
-			created_at,
-			updated_at;`,
+		`SELECT
+			output_id,
+			output_rid,
+			output_name,
+			output_options,
+			output_available_tasks,
+			output_available_next_interval,
+			output_max_concurrency,
+			output_status,
+			output_created_at,
+			output_updated_at
+		FROM update_worker($1, $2, $3, $4, $5, $6, $7);`,
 		worker.Name,
 		worker.Options,
 		pq.Array(worker.AvailableTasks),
@@ -215,8 +216,7 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 // It removes the worker from the database and returns an error if the deletion fails.
 func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 	_, err := r.db.Instance.Exec(
-		`DELETE FROM worker
-		WHERE rid = $1`,
+		`SELECT delete_worker($1);`,
 		rid,
 	)
 	if err != nil {
