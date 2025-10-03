@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -284,7 +285,10 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 		close(ready)
 
 		<-ctx.Done()
-		q.log.Info("Queuer stopped")
+		err = q.Stop()
+		if err != nil {
+			q.log.Error("Error stopping queuer", slog.String("error", err.Error()))
+		}
 	}()
 
 	select {
@@ -357,16 +361,10 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 		close(ready)
 
 		<-ctx.Done()
-		// Close database connection
-		if q.DB != nil {
-			q.log.Info("Closing database connection")
-			err = q.DB.Close()
-			if err != nil {
-				q.log.Error("error closing database connection", slog.String("error", err.Error()))
-			}
+		err := q.Stop()
+		if err != nil {
+			q.log.Error("Error stopping queuer", slog.String("error", err.Error()))
 		}
-
-		q.log.Info("Queuer stopped")
 	}()
 
 	select {
@@ -384,14 +382,14 @@ func (q *Queuer) Stop() error {
 	// Close db listeners
 	if q.jobDbListener != nil {
 		err := q.jobDbListener.Listener.Close()
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), "Listener has been closed") {
 			return fmt.Errorf("error closing job insert listener: %v", err)
 		}
 	}
 	if q.jobArchiveDbListener != nil {
 		err := q.jobArchiveDbListener.Listener.Close()
-		if err != nil {
-			return fmt.Errorf("error closing job update listener: %v", err)
+		if err != nil && !strings.Contains(err.Error(), "Listener has been closed") {
+			return fmt.Errorf("error closing job archive listener: %v", err)
 		}
 	}
 
@@ -412,6 +410,18 @@ func (q *Queuer) Stop() error {
 	// Cancel the context to stop the queuer
 	if q.ctx != nil {
 		q.cancel()
+	}
+
+	// Wait a moment for background goroutines to finish gracefully
+	time.Sleep(100 * time.Millisecond)
+
+	// Close database connection
+	if q.DB != nil {
+		q.log.Info("Closing database connection")
+		err = q.DB.Close()
+		if err != nil {
+			q.log.Error("error closing database connection", slog.String("error", err.Error()))
+		}
 	}
 
 	q.log.Info("Queuer stopped")

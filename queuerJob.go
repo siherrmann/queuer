@@ -358,17 +358,16 @@ func (q *Queuer) runJobInitial() error {
 }
 
 // waitForJob executes the job and returns the results or an error.
-func (q *Queuer) waitForJob(job *model.Job) ([]interface{}, error) {
+func (q *Queuer) waitForJob(job *model.Job) (results []interface{}, cancelled bool, err error) {
 	// Run job and update job status to completed with results
 	// TODO At this point the task should be available in the queuer,
 	// but we should probably still check if the task is available?
 	task := q.tasks[job.TaskName]
 	runner, err := core.NewRunnerFromJob(task, job)
 	if err != nil {
-		return []interface{}{}, fmt.Errorf("error creating runner: %v", err)
+		return nil, false, fmt.Errorf("error creating runner: %v", err)
 	}
 
-	var results []interface{}
 	q.activeRunners.Store(job.RID, runner)
 	go runner.Run(q.ctx)
 
@@ -379,17 +378,17 @@ func (q *Queuer) waitForJob(job *model.Job) ([]interface{}, error) {
 		break
 	case <-q.ctx.Done():
 		runner.Cancel()
-		break
+		return nil, true, nil
 	}
 
 	q.activeRunners.Delete(job.RID)
 
-	return results, err
+	return results, false, err
 }
 
 // retryJob retries the job with the given job error.
 func (q *Queuer) retryJob(job *model.Job, jobErr error) {
-	if job.Options == nil || job.Options.OnError.MaxRetries <= 0 {
+	if job.Options == nil || job.Options.OnError == nil || job.Options.OnError.MaxRetries <= 0 {
 		q.failJob(job, jobErr)
 		return
 	}
@@ -399,7 +398,7 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 	retryer, err := core.NewRetryer(
 		func() error {
 			q.log.Debug("Trying/retrying job", slog.String("job_rid", job.RID.String()))
-			results, err = q.waitForJob(job)
+			results, _, err = q.waitForJob(job)
 			if err != nil {
 				return fmt.Errorf("error retrying job: %v", err)
 			}
@@ -423,8 +422,10 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 func (q *Queuer) runJob(job *model.Job) {
 	q.log.Info("Running job", slog.String("job_rid", job.RID.String()))
 
-	results, err := q.waitForJob(job)
-	if err != nil {
+	results, cancelled, err := q.waitForJob(job)
+	if cancelled {
+		return
+	} else if err != nil {
 		q.retryJob(job, err)
 	} else {
 		q.succeedJob(job, results)
@@ -457,7 +458,7 @@ func (q *Queuer) failJob(job *model.Job, jobErr error) {
 }
 
 func (q *Queuer) endJob(job *model.Job) {
-	if job.WorkerID == q.worker.ID {
+	if job.WorkerID != q.worker.ID {
 		return
 	}
 
