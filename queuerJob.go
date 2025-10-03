@@ -3,7 +3,7 @@ package queuer
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,7 +22,7 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
-	q.log.Printf("Job added with RID %v", job.RID)
+	q.log.Info("Job added", slog.String("job_rid", job.RID.String()))
 
 	return job, nil
 }
@@ -38,7 +38,7 @@ func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
-	q.log.Printf("Job added with RID %v", job.RID)
+	q.log.Info("Job added", slog.String("job_rid", job.RID.String()))
 
 	return job, nil
 }
@@ -82,7 +82,7 @@ func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, par
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
-	q.log.Printf("Job with options added with RID %v", job.RID)
+	q.log.Info("Job with options added", slog.String("job_rid", job.RID.String()))
 
 	return job, nil
 }
@@ -98,7 +98,7 @@ func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task in
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
-	q.log.Printf("Job with options added with RID %v", job.RID)
+	q.log.Info("Job with options added", slog.String("job_rid", job.RID.String()))
 
 	return job, nil
 }
@@ -123,7 +123,7 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 		return fmt.Errorf("error inserting jobs: %v", err)
 	}
 
-	q.log.Printf("%v jobs added", len(jobs))
+	q.log.Info("Jobs added", slog.Int("count", len(jobs)))
 
 	return nil
 }
@@ -228,7 +228,7 @@ func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) (*model.Job, error) {
 		return nil, fmt.Errorf("error readding job: %v", err)
 	}
 
-	q.log.Printf("Job readded with RID %v", newJob.RID)
+	q.log.Info("Job readded", slog.String("job_rid", newJob.RID.String()))
 
 	return newJob, nil
 }
@@ -253,12 +253,23 @@ func (q *Queuer) GetJobs(lastId int, entries int) ([]*model.Job, error) {
 	return jobs, nil
 }
 
+// GetJobEnded retrieves a job that has ended (succeeded, cancelled or failed) by its RID.
+func (q *Queuer) GetJobEnded(jobRid uuid.UUID) (*model.Job, error) {
+	job, err := q.dbJob.SelectJobFromArchive(jobRid)
+	if err != nil {
+		return nil, fmt.Errorf("error selecting ended job with rid %v: %v", jobRid, err)
+	}
+
+	return job, nil
+}
+
 // GetJobsEnded retrieves all jobs that have ended (succeeded, cancelled or failed).
 func (q *Queuer) GetJobsEnded(lastId int, entries int) ([]*model.Job, error) {
 	jobs, err := q.dbJob.SelectAllJobsFromArchive(lastId, entries)
 	if err != nil {
 		return nil, fmt.Errorf("error selecting ended jobs: %v", err)
 	}
+
 	return jobs, nil
 }
 
@@ -322,7 +333,7 @@ func (q *Queuer) runJobInitial() error {
 	if err != nil {
 		return fmt.Errorf("error updating job status to running: %v", err)
 	} else if len(jobs) == 0 {
-		log.Println("No jobs to run at the moment")
+		q.log.Info("No jobs to run at the moment")
 		return nil
 	}
 
@@ -337,7 +348,7 @@ func (q *Queuer) runJobInitial() error {
 				return fmt.Errorf("error creating scheduler: %v", err)
 			}
 
-			q.log.Printf("Scheduling job with RID %v to run at %v", job.RID, job.Options.Schedule.Start)
+			q.log.Info("Scheduling job", slog.String("job_rid", job.RID.String()), slog.String("schedule_start", job.Options.Schedule.Start.String()))
 			go scheduler.Go(q.ctx)
 		} else {
 			go q.runJob(job)
@@ -388,7 +399,7 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 	var results []interface{}
 	retryer, err := core.NewRetryer(
 		func() error {
-			q.log.Printf("Trying/retrying job with RID %v", job.RID)
+			q.log.Info("Trying/retrying job", slog.String("job_rid", job.RID.String()))
 			results, err = q.waitForJob(job)
 			if err != nil {
 				return fmt.Errorf("error retrying job: %v", err)
@@ -411,7 +422,7 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 
 // runJob retries the job.
 func (q *Queuer) runJob(job *model.Job) {
-	q.log.Printf("Running scheduled job with RID %v", job.RID)
+	q.log.Info("Running scheduled job", slog.String("job_rid", job.RID.String()))
 
 	results, err := q.waitForJob(job)
 	if err != nil {
@@ -426,9 +437,9 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 		job.Status = model.JobStatusCancelled
 		_, err := q.dbJob.UpdateJobFinal(job)
 		if err != nil {
-			q.log.Printf("Error updating job status to cancelled: %v", err)
+			q.log.Error("Error updating job status to cancelled", slog.String("error", err.Error()))
 		}
-		q.log.Printf("Job cancelled with RID %v", job.RID)
+		q.log.Info("Job cancelled", slog.String("job_rid", job.RID.String()))
 	}
 	return nil
 }
@@ -450,9 +461,9 @@ func (q *Queuer) endJob(job *model.Job) {
 	endedJob, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		// TODO probably add retry for updating job to failed
-		q.log.Printf("Error updating finished job with status %v: %v", job.Status, err)
+		q.log.Error("Error updating finished job with status %v: %v", job.Status, err)
 	} else {
-		q.log.Printf("Job ended with status %v and RID %v", endedJob.Status, endedJob.RID)
+		q.log.Info("Job ended with status %v and RID %v", endedJob.Status, endedJob.RID)
 
 		// Readd scheduled jobs to the queue
 		if endedJob.Options != nil && endedJob.Options.Schedule != nil && endedJob.ScheduleCount < endedJob.Options.Schedule.MaxCount {
@@ -461,7 +472,7 @@ func (q *Queuer) endJob(job *model.Job) {
 				// This worker should only have the current job if the NextIntervalFunc is available.
 				nextIntervalFunc, ok := q.nextIntervalFuncs[endedJob.Options.Schedule.NextInterval]
 				if !ok {
-					q.log.Printf("NextIntervalFunc %v not found for job with RID %v", endedJob.Options.Schedule.NextInterval, endedJob.RID)
+					q.log.Error("NextIntervalFunc %v not found for job with RID %v", endedJob.Options.Schedule.NextInterval, endedJob.RID)
 					return
 				}
 				newScheduledAt = nextIntervalFunc(*endedJob.ScheduledAt, endedJob.ScheduleCount)
@@ -473,15 +484,15 @@ func (q *Queuer) endJob(job *model.Job) {
 			endedJob.Status = model.JobStatusScheduled
 			job, err := q.dbJob.InsertJob(endedJob)
 			if err != nil {
-				q.log.Printf("Error readding scheduled job with RID %v to the queue: %v", endedJob.RID, err)
+				q.log.Error("Error readding scheduled job", slog.String("job_rid", endedJob.RID.String()), slog.String("error", err.Error()))
 			}
-			q.log.Printf("Job with RID %v added for next iteration to the queue", job.RID)
+			q.log.Info("Job added for next iteration to the queue", slog.String("job_rid", job.RID.String()))
 		}
 	}
 
 	// Try to run the next job in the queue
 	err = q.runJobInitial()
 	if err != nil {
-		q.log.Printf("Error running next job: %v", err)
+		q.log.Error("Error running next job", slog.String("error", err.Error()))
 	}
 }

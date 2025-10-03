@@ -171,7 +171,7 @@ func (r JobDBHandler) CreateTable() error {
 		log.Panic(err)
 	}
 
-	r.db.Logger.Println("created table job")
+	r.db.Logger.Info("Created table job")
 	return nil
 }
 
@@ -192,7 +192,7 @@ func (r JobDBHandler) DropTables() error {
 		return fmt.Errorf("error dropping job table: %#v", err)
 	}
 
-	r.db.Logger.Printf("Dropped table job")
+	r.db.Logger.Info("Dropped table job")
 	return nil
 }
 

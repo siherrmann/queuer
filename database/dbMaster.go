@@ -92,7 +92,7 @@ func (r MasterDBHandler) CreateTable() error {
 		log.Panicf("error inserting initial master entry: %#v", err)
 	}
 
-	r.db.Logger.Println("created table master")
+	r.db.Logger.Info("Created table master")
 	return nil
 }
 
@@ -107,7 +107,7 @@ func (r MasterDBHandler) DropTable() error {
 		return fmt.Errorf("error dropping master table: %#v", err)
 	}
 
-	r.db.Logger.Printf("Dropped table master")
+	r.db.Logger.Info("Dropped table master")
 	return nil
 }
 

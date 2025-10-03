@@ -37,7 +37,7 @@ func NewTaskWithName(task interface{}, taskName string) (*Task, error) {
 
 	err := helper.CheckValidTask(task)
 	if err != nil {
-		return nil, fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
+		return nil, err
 	}
 
 	inputParameters := []reflect.Type{}

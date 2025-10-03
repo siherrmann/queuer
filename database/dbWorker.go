@@ -101,10 +101,10 @@ func (r WorkerDBHandler) CreateTable() error {
 
 	err = r.db.CreateIndexes("worker", "rid", "name", "status")
 	if err != nil {
-		r.db.Logger.Fatal(err)
+		panic(fmt.Sprintf("error creating indexes on worker table: %#v", err))
 	}
 
-	r.db.Logger.Println("created table worker")
+	r.db.Logger.Info("Created table worker")
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (r WorkerDBHandler) DropTable() error {
 		return fmt.Errorf("error dropping worker table: %#v", err)
 	}
 
-	r.db.Logger.Printf("Dropped table worker")
+	r.db.Logger.Info("Dropped table worker")
 	return nil
 }
 

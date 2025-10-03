@@ -2,9 +2,11 @@ package queuer
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,6 +125,89 @@ func TestNewQueuer(t *testing.T) {
 				require.NotNil(t, queuer, "Expected Queuer to be created successfully")
 				assert.Equal(t, test.name, queuer.worker.Name, "Expected Queuer name to match")
 				assert.Equal(t, test.maxConcurrency, queuer.worker.MaxConcurrency, "Expected Queuer max concurrency to match")
+			}
+		})
+	}
+}
+
+func TestNewStaticQueuer(t *testing.T) {
+	tests := []struct {
+		name        string
+		logLevel    slog.Leveler
+		dbConfig    *helper.DatabaseConfiguration
+		dbEnvs      map[string]string
+		expectError bool
+	}{
+		{
+			name:     "Valid static queuer with nil dbConfig",
+			logLevel: slog.LevelInfo,
+			dbConfig: nil,
+			dbEnvs: map[string]string{
+				"QUEUER_DB_HOST":     "localhost",
+				"QUEUER_DB_PORT":     dbPort,
+				"QUEUER_DB_DATABASE": "database",
+				"QUEUER_DB_USERNAME": "user",
+				"QUEUER_DB_PASSWORD": "password",
+				"QUEUER_DB_SCHEMA":   "public",
+			},
+			expectError: false,
+		},
+		{
+			name:     "Valid static queuer with provided dbConfig",
+			logLevel: slog.LevelInfo,
+			dbConfig: &helper.DatabaseConfiguration{
+				Host:          "localhost",
+				Port:          dbPort,
+				Database:      "database",
+				Username:      "user",
+				Password:      "password",
+				Schema:        "public",
+				WithTableDrop: true,
+			},
+			dbEnvs:      map[string]string{}, // No env vars needed when dbConfig is provided
+			expectError: false,
+		},
+		{
+			name:     "Missing DB environment variable when dbConfig is nil",
+			logLevel: slog.LevelInfo,
+			dbConfig: nil,
+			dbEnvs: map[string]string{
+				"QUEUER_DB_HOST": "localhost",
+				"QUEUER_DB_PORT": dbPort,
+				// "QUEUER_DB_DATABASE": "database", // Intentionally missing
+				"QUEUER_DB_USERNAME": "user",
+				"QUEUER_DB_PASSWORD": "password",
+				"QUEUER_DB_SCHEMA":   "public",
+			},
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for key, value := range test.dbEnvs {
+				t.Setenv(key, value)
+			}
+
+			if test.expectError {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Errorf("Expected panic for %s, but did not get one", test.name)
+					}
+				}()
+			}
+
+			queuer := NewStaticQueuer(test.logLevel, test.dbConfig)
+			if !test.expectError {
+				require.NotNil(t, queuer, "Expected StaticQueuer to be created successfully")
+				assert.NotNil(t, queuer.log, "Expected logger to be initialized")
+				assert.NotNil(t, queuer.DB, "Expected database connection to be initialized")
+				assert.NotNil(t, queuer.dbJob, "Expected job database handler to be initialized")
+				assert.NotNil(t, queuer.dbWorker, "Expected worker database handler to be initialized")
+				assert.NotNil(t, queuer.dbMaster, "Expected master database handler to be initialized")
+				assert.NotNil(t, queuer.tasks, "Expected tasks map to be initialized")
+				assert.NotNil(t, queuer.nextIntervalFuncs, "Expected nextIntervalFuncs map to be initialized")
+				assert.Nil(t, queuer.worker, "Expected worker to be nil in StaticQueuer")
 			}
 		})
 	}

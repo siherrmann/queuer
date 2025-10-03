@@ -3,6 +3,7 @@ package helper
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"testing"
 	"time"
@@ -60,6 +61,7 @@ func NewTestDatabase(config *DatabaseConfiguration) *Database {
 	return NewDatabase(
 		"test_db",
 		config,
+		slog.Default(),
 	)
 }
 

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -30,7 +30,7 @@ type Queuer struct {
 	// Runners
 	activeRunners sync.Map
 	// Logger
-	log *log.Logger
+	log *slog.Logger
 	// Worker
 	worker *model.Worker
 	// DBs
@@ -63,7 +63,7 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 // It returns a pointer to the newly created Queuer instance.
 func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseConfiguration, options ...*model.OnError) *Queuer {
 	// Logger
-	logger := log.New(os.Stdout, "Queuer: ", log.Ltime)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	// Database
 	var err error
@@ -72,31 +72,33 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 		dbCon = helper.NewDatabase(
 			"queuer",
 			dbConfig,
+			logger,
 		)
 	} else {
 		var err error
 		dbConfig, err = helper.NewDatabaseConfiguration()
 		if err != nil {
-			logger.Panicf("failed to create database configuration: %v", err)
+			panic(fmt.Sprintf("error creating database configuration: %s", err.Error()))
 		}
 		dbCon = helper.NewDatabase(
 			"queuer",
 			dbConfig,
+			logger,
 		)
 	}
 
 	// DBs
 	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		logger.Panicf("failed to create job db handler: %v", err)
+		panic(fmt.Sprintf("error creating job db handler: %s", err.Error()))
 	}
 	dbWorker, err := database.NewWorkerDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		logger.Panicf("failed to create worker db handler: %v", err)
+		panic(fmt.Sprintf("error creating worker db handler: %s", err.Error()))
 	}
 	dbMaster, err := database.NewMasterDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		logger.Panicf("failed to create master db handler: %v", err)
+		panic(fmt.Sprintf("error creating master db handler: %s", err.Error()))
 	}
 
 	// Inserting worker
@@ -104,26 +106,90 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 	if len(options) > 0 {
 		newWorker, err = model.NewWorkerWithOptions(name, maxConcurrency, options[0])
 		if err != nil {
-			logger.Panicf("error creating new worker with options: %v", err)
+			panic(fmt.Sprintf("error creating new worker with options: %s", err.Error()))
 		}
 	} else {
 		newWorker, err = model.NewWorker(name, maxConcurrency)
 		if err != nil {
-			logger.Panicf("error creating new worker: %v", err)
+			panic(fmt.Sprintf("error creating new worker: %s", err.Error()))
 		}
 	}
 
 	// Worker
 	worker, err := dbWorker.InsertWorker(newWorker)
 	if err != nil {
-		logger.Panicf("error inserting worker: %v", err)
+		panic(fmt.Sprintf("error inserting worker: %s", err.Error()))
 	}
 
-	logger.Printf("Queuer %s created with worker RID: %v", newWorker.Name, worker.RID)
+	logger.Info("Queuer with worker created", slog.String("worker_name", newWorker.Name), slog.String("worker_rid", worker.RID.String()))
 
 	return &Queuer{
 		log:               logger,
 		worker:            worker,
+		DB:                dbCon.Instance,
+		dbConfig:          dbConfig,
+		dbJob:             dbJob,
+		dbWorker:          dbWorker,
+		dbMaster:          dbMaster,
+		JobPollInterval:   1 * time.Minute,
+		tasks:             map[string]*model.Task{},
+		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
+	}
+}
+
+// NewStaticQueuer creates a new Queuer instance without a worker.
+// It initializes the database connection and other necessary components.
+// If any error occurs during initialization, it logs a panic error and exits the program.
+// It returns a pointer to the newly created Queuer instance.
+// This queuer instance does not listen to the db nor does it run jobs.
+// It is primarily used for static operations like adding jobs, getting job status etc.
+func NewStaticQueuer(logLevel slog.Leveler, dbConfig *helper.DatabaseConfiguration) *Queuer {
+	// Logger
+	opts := helper.PrettyHandlerOptions{
+		SlogOpts: slog.HandlerOptions{
+			Level: logLevel,
+		},
+	}
+	logger := slog.New(helper.NewPrettyHandler(os.Stdout, opts))
+
+	// Database
+	var err error
+	var dbCon *helper.Database
+	if dbConfig != nil {
+		dbCon = helper.NewDatabase(
+			"queuer",
+			dbConfig,
+			logger,
+		)
+	} else {
+		var err error
+		dbConfig, err = helper.NewDatabaseConfiguration()
+		if err != nil {
+			panic(fmt.Sprintf("error creating database configuration: %s", err.Error()))
+		}
+		dbCon = helper.NewDatabase(
+			"queuer",
+			dbConfig,
+			logger,
+		)
+	}
+
+	// DBs
+	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig.WithTableDrop)
+	if err != nil {
+		panic(fmt.Sprintf("error creating job db handler: %s", err.Error()))
+	}
+	dbWorker, err := database.NewWorkerDBHandler(dbCon, dbConfig.WithTableDrop)
+	if err != nil {
+		panic(fmt.Sprintf("error creating worker db handler: %s", err.Error()))
+	}
+	dbMaster, err := database.NewMasterDBHandler(dbCon, dbConfig.WithTableDrop)
+	if err != nil {
+		panic(fmt.Sprintf("error creating master db handler: %s", err.Error()))
+	}
+
+	return &Queuer{
+		log:               logger,
 		DB:                dbCon.Instance,
 		dbConfig:          dbConfig,
 		dbJob:             dbJob,
@@ -147,7 +213,7 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 // 5. Wait for the queuer to be ready or log a panic error if it fails to start within 5 seconds.
 func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSettings ...*model.MasterSettings) {
 	if ctx == nil || ctx == context.TODO() || cancel == nil {
-		q.log.Panicln("ctx and cancel must be set")
+		panic("ctx and cancel must be set")
 	}
 
 	q.ctx = ctx
@@ -157,35 +223,35 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 	var err error
 	q.jobDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job")
 	if err != nil {
-		q.log.Panicf("error creating job insert listener: %v", err)
+		panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
 	}
 	q.jobArchiveDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job_archive")
 	if err != nil {
-		q.log.Panicf("error creating job archive listener: %v", err)
+		panic(fmt.Sprintf("error creating job archive listener: %s", err.Error()))
 	}
 
 	// Broadcasters for job updates and deletes
 	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
 	q.jobInsertListener, err = core.NewListener(broadcasterJobInsert)
 	if err != nil {
-		q.log.Panicf("error creating job insert listener: %v", err)
+		panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
 	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	q.jobUpdateListener, err = core.NewListener(broadcasterJobUpdate)
 	if err != nil {
-		q.log.Panicf("error creating job update listener: %v", err)
+		panic(fmt.Sprintf("error creating job update listener: %s", err.Error()))
 	}
 	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
 	q.jobDeleteListener, err = core.NewListener(broadcasterJobDelete)
 	if err != nil {
-		q.log.Panicf("error creating job delete listener: %v", err)
+		panic(fmt.Sprintf("error creating job delete listener: %s", err.Error()))
 	}
 
 	// Update worker to running
 	q.worker.Status = model.WorkerStatusRunning
 	q.worker, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		q.log.Panicf("error updating worker status to running: %v", err)
+		panic(fmt.Sprintf("error updating worker status to running: %s", err.Error()))
 	}
 
 	// Start pollers
@@ -195,14 +261,14 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 
 		err := q.pollJobTicker(ctx)
 		if err != nil && ctx.Err() == nil {
-			q.log.Printf("Error starting job poll ticker: %v", err)
+			q.log.Error("Error starting job poll ticker", slog.String("error", err.Error()))
 			return
 		}
 
 		if len(masterSettings) > 0 && masterSettings[0] != nil {
 			err = q.pollMasterTicker(ctx, masterSettings[0])
 			if err != nil && ctx.Err() == nil {
-				q.log.Printf("Error starting master poll ticker: %v", err)
+				q.log.Error("Error starting master poll ticker", slog.String("error", err.Error()))
 				return
 			}
 		}
@@ -210,15 +276,15 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 		close(ready)
 
 		<-ctx.Done()
-		q.log.Println("Queuer stopped")
+		q.log.Info("Queuer stopped")
 	}()
 
 	select {
 	case <-ready:
-		q.log.Println("Queuer started")
+		q.log.Info("Queuer started")
 		return
 	case <-time.After(5 * time.Second):
-		q.log.Panicln("Queuer failed to start within 5 seconds")
+		q.log.Error("Queuer failed to start within 5 seconds")
 	}
 }
 
@@ -238,11 +304,11 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 	if !withoutListeners {
 		q.jobDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job")
 		if err != nil {
-			q.log.Panicf("error creating job insert listener: %v", err)
+			panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
 		}
 		q.jobArchiveDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job_archive")
 		if err != nil {
-			q.log.Panicf("error creating job archive listener: %v", err)
+			panic(fmt.Sprintf("error creating job archive listener: %s", err.Error()))
 		}
 	}
 
@@ -250,17 +316,17 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
 	q.jobInsertListener, err = core.NewListener(broadcasterJobInsert)
 	if err != nil {
-		q.log.Panicf("error creating job insert listener: %v", err)
+		panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
 	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	q.jobUpdateListener, err = core.NewListener(broadcasterJobUpdate)
 	if err != nil {
-		q.log.Panicf("error creating job update listener: %v", err)
+		panic(fmt.Sprintf("error creating job update listener: %s", err.Error()))
 	}
 	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
 	q.jobDeleteListener, err = core.NewListener(broadcasterJobDelete)
 	if err != nil {
-		q.log.Panicf("error creating job delete listener: %v", err)
+		panic(fmt.Sprintf("error creating job delete listener: %s", err.Error()))
 	}
 
 	// Start job listeners
@@ -273,7 +339,7 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 		if len(masterSettings) > 0 && masterSettings[0] != nil {
 			err = q.pollMasterTicker(ctx, masterSettings[0])
 			if err != nil && ctx.Err() == nil {
-				q.log.Printf("Error starting master poll ticker: %v", err)
+				q.log.Error("Error starting master poll ticker", slog.String("error", err.Error()))
 				return
 			}
 		}
@@ -281,15 +347,15 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 		close(ready)
 
 		<-ctx.Done()
-		q.log.Println("Queuer stopped")
+		q.log.Info("Queuer stopped")
 	}()
 
 	select {
 	case <-ready:
-		q.log.Println("Queuer without worker started")
+		q.log.Info("Queuer without worker started")
 		return
 	case <-time.After(5 * time.Second):
-		q.log.Panicln("Queuer failed to start within 5 seconds")
+		q.log.Error("Queuer failed to start within 5 seconds")
 	}
 }
 
@@ -329,7 +395,7 @@ func (q *Queuer) Stop() error {
 		q.cancel()
 	}
 
-	q.log.Println("Queuer stopped")
+	q.log.Info("Queuer stopped")
 
 	return nil
 }
@@ -347,7 +413,7 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 			job := &model.JobFromNotification{}
 			err := json.Unmarshal([]byte(data), job)
 			if err != nil {
-				q.log.Printf("Error unmarshalling job data: %v", err)
+				q.log.Error("Error unmarshalling job data", slog.String("error", err.Error()))
 				return
 			}
 
@@ -355,7 +421,7 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 			case model.JobStatusCancelled:
 				runner, ok := q.activeRunners.Load(job.RID)
 				if ok {
-					q.log.Printf("Canceling running job %v", job.RID)
+					q.log.Info("Canceling running job", slog.String("job_id", job.RID.String()))
 					runner.(context.CancelFunc)()
 					q.activeRunners.Delete(job.RID)
 				}
@@ -363,7 +429,7 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 				q.jobInsertListener.Notify(job.ToJob())
 				err = q.runJobInitial()
 				if err != nil {
-					q.log.Printf("Error running job: %v", err)
+					q.log.Error("Error running job", slog.String("error", err.Error()))
 					return
 				}
 			default:
@@ -379,7 +445,7 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 			job := &model.JobFromNotification{}
 			err := json.Unmarshal([]byte(data), job)
 			if err != nil {
-				q.log.Printf("Error unmarshalling job data: %v", err)
+				q.log.Error("Error unmarshalling job data", slog.String("error", err.Error()))
 				return
 			}
 
@@ -400,7 +466,7 @@ func (q *Queuer) listenWithoutRunning(ctx context.Context, cancel context.Cancel
 			job := &model.JobFromNotification{}
 			err := json.Unmarshal([]byte(data), job)
 			if err != nil {
-				q.log.Printf("Error unmarshalling job data: %v", err)
+				q.log.Error("Error unmarshalling job data", slog.String("error", err.Error()))
 				return
 			}
 
@@ -419,7 +485,7 @@ func (q *Queuer) listenWithoutRunning(ctx context.Context, cancel context.Cancel
 			job := &model.JobFromNotification{}
 			err := json.Unmarshal([]byte(data), job)
 			if err != nil {
-				q.log.Printf("Error unmarshalling job data: %v", err)
+				q.log.Error("Error unmarshalling job data", slog.String("error", err.Error()))
 				return
 			}
 
@@ -434,10 +500,10 @@ func (q *Queuer) pollJobTicker(ctx context.Context) error {
 	ticker, err := core.NewTicker(
 		q.JobPollInterval,
 		func() {
-			q.log.Println("Polling jobs...")
+			q.log.Info("Polling jobs...")
 			err := q.runJobInitial()
 			if err != nil {
-				q.log.Printf("Error running job: %v", err)
+				q.log.Error("Error running job", slog.String("error", err.Error()))
 			}
 		},
 	)
@@ -445,7 +511,7 @@ func (q *Queuer) pollJobTicker(ctx context.Context) error {
 		return fmt.Errorf("error creating ticker: %v", err)
 	}
 
-	q.log.Println("Starting job poll ticker...")
+	q.log.Info("Starting job poll ticker...")
 	go ticker.Go(ctx)
 
 	return nil
@@ -456,17 +522,17 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 	ticker, err := core.NewTicker(
 		masterSettings.MasterPollInterval,
 		func() {
-			q.log.Println("Polling master...")
+			q.log.Info("Polling master...")
 			master, err := q.dbMaster.UpdateMaster(q.worker, masterSettings)
 			if err != nil {
-				q.log.Printf("Error updating master: %v", err)
+				q.log.Error("Error updating master", slog.String("error", err.Error()))
 			}
 
 			if master != nil {
-				q.log.Printf("Worker %v is now the current master", q.worker.RID)
+				q.log.Info("New master", slog.String("worker_id", q.worker.RID.String()))
 				err := q.masterTicker(ctx, master, masterSettings)
 				if err != nil {
-					q.log.Printf("Error starting master ticker: %v", err)
+					q.log.Error("Error starting master ticker", slog.String("error", err.Error()))
 				} else {
 					cancel()
 				}
@@ -477,7 +543,7 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 		return fmt.Errorf("error creating ticker: %v", err)
 	}
 
-	q.log.Println("Starting master poll ticker...")
+	q.log.Info("Starting master poll ticker...")
 	go ticker.Go(ctxInner)
 
 	return nil
@@ -513,7 +579,7 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 			if err != nil {
 				err := q.pollMasterTicker(ctx, masterSettings)
 				if err != nil {
-					q.log.Printf("Error restarting poll master ticker: %v", err)
+					q.log.Error("Error restarting poll master ticker", slog.String("error", err.Error()))
 				}
 				cancel()
 			}
@@ -526,7 +592,7 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 		return fmt.Errorf("error creating ticker: %v", err)
 	}
 
-	q.log.Println("Starting master poll ticker...")
+	q.log.Info("Starting master poll ticker...")
 	go ticker.Go(ctxInner)
 
 	return nil

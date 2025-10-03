@@ -1,6 +1,8 @@
 package queuer
 
 import (
+	"fmt"
+	"log/slog"
 	"slices"
 
 	"github.com/siherrmann/queuer/helper"
@@ -17,15 +19,15 @@ import (
 // It returns the updated worker after adding the function.
 func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {
 	if nif == nil {
-		q.log.Panicf("error adding next interval: NextIntervalFunc cannot be nil")
+		panic("NextIntervalFunc cannot be nil")
 	}
 
 	nifName, err := helper.GetTaskNameFromInterface(nif)
 	if err != nil {
-		q.log.Panicf("error getting function name: %v", err)
+		panic(fmt.Sprintf("error getting function name: %s", err.Error()))
 	}
 	if slices.Contains(q.worker.AvailableNextIntervalFuncs, nifName) {
-		q.log.Panicf("NextIntervalFunc with name %v already exists", nifName)
+		panic(fmt.Sprintf("NextIntervalFunc already exists: %s", nifName))
 	}
 
 	q.nextIntervalFuncs[nifName] = nif
@@ -33,10 +35,10 @@ func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {
 
 	worker, err := q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		q.log.Panicf("error updating worker: %v", err)
+		panic(fmt.Sprintf("error updating worker: %s", err.Error()))
 	}
 
-	q.log.Printf("NextInterval function added with name %v", nifName)
+	q.log.Info("NextInterval function added", slog.String("name", nifName))
 
 	return worker
 }
@@ -56,10 +58,10 @@ func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {
 // It returns the updated worker after adding the function with the specified name.
 func (q *Queuer) AddNextIntervalFuncWithName(nif model.NextIntervalFunc, name string) *model.Worker {
 	if nif == nil {
-		q.log.Panicf("NextIntervalFunc cannot be nil")
+		panic("NextIntervalFunc cannot be nil")
 	}
 	if slices.Contains(q.worker.AvailableNextIntervalFuncs, name) {
-		q.log.Panicf("NextIntervalFunc with name %v already exists", name)
+		panic(fmt.Sprintf("NextIntervalFunc with name already exists: %s", name))
 	}
 
 	q.nextIntervalFuncs[name] = nif
@@ -67,10 +69,10 @@ func (q *Queuer) AddNextIntervalFuncWithName(nif model.NextIntervalFunc, name st
 
 	worker, err := q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		q.log.Panicf("error updating worker: %v", err)
+		panic(fmt.Sprintf("error updating worker: %s", err.Error()))
 	}
 
-	q.log.Printf("NextInterval function added with name %v", name)
+	q.log.Info("NextInterval function added", slog.String("name", name))
 
 	return worker
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -18,23 +19,21 @@ import (
 // Database represents a service that interacts with a database.
 type Database struct {
 	Name     string
-	Logger   *log.Logger
+	Logger   *slog.Logger
 	Instance *sql.DB
 }
 
-func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
-	logger := log.New(os.Stdout, "Database "+name+": ", log.Ltime)
-
+func NewDatabase(name string, dbConfig *DatabaseConfiguration, logger *slog.Logger) *Database {
 	if dbConfig != nil {
 		db := &Database{Name: name, Logger: logger}
 		db.ConnectToDatabase(dbConfig, logger)
 		if db.Instance == nil {
-			logger.Fatal("failed to connect to database")
+			panic("error connecting to database")
 		}
 
 		err := db.AddNotifyFunction()
 		if err != nil {
-			logger.Panicf("failed to add notify function: %v", err)
+			panic(fmt.Sprintf("error adding notify function: %s", err.Error()))
 		}
 
 		return db
@@ -47,8 +46,7 @@ func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
 	}
 }
 
-func NewDatabaseWithDB(name string, dbConnnection *sql.DB) *Database {
-	logger := log.New(os.Stdout, "Database "+name+": ", log.Ltime)
+func NewDatabaseWithDB(name string, dbConnnection *sql.DB, logger *slog.Logger) *Database {
 	return &Database{
 		Name:     name,
 		Logger:   logger,
@@ -92,9 +90,9 @@ func (d *DatabaseConfiguration) DatabaseConnectionString() string {
 // Internal function for the service creation to connect to a database.
 // DatabaseConfiguration must contain uri, username and password.
 // It initializes the database connection and sets the Instance field of the Database struct.
-func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *log.Logger) {
+func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *slog.Logger) {
 	if len(strings.TrimSpace(dbConfig.Host)) == 0 || len(strings.TrimSpace(dbConfig.Port)) == 0 || len(strings.TrimSpace(dbConfig.Database)) == 0 || len(strings.TrimSpace(dbConfig.Username)) == 0 || len(strings.TrimSpace(dbConfig.Password)) == 0 || len(strings.TrimSpace(dbConfig.Schema)) == 0 {
-		logger.Fatalln("database configuration must contain uri, username and password.")
+		panic("database configuration must contain uri, username and password")
 	}
 
 	var connectOnce sync.Once
@@ -103,7 +101,7 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 	connectOnce.Do(func() {
 		dsn, err := pq.ParseURL(dbConfig.DatabaseConnectionString())
 		if err != nil {
-			logger.Fatalf("error parsing database connection string: %v", err)
+			panic(fmt.Sprintf("error parsing database connection string: %s", err.Error()))
 		}
 
 		base, err := pq.NewConnector(dsn)
@@ -123,14 +121,14 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 			"CREATE EXTENSION IF NOT EXISTS pg_trgm;",
 		)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Error(err.Error())
 		}
 
 		pingErr := db.Ping()
 		if pingErr != nil {
-			logger.Fatal(pingErr)
+			panic(fmt.Sprintf("error connecting to database: %s", pingErr.Error()))
 		}
-		logger.Println("Connected to db")
+		logger.Info("Connected to db")
 	})
 
 	d.Instance = db
