@@ -101,10 +101,10 @@ func (r WorkerDBHandler) CreateTable() error {
 
 	err = r.db.CreateIndexes("worker", "rid", "name", "status")
 	if err != nil {
-		panic(fmt.Sprintf("error creating indexes on worker table: %#v", err))
+		log.Panicf("error creating indexes on worker table: %#v", err)
 	}
 
-	r.db.Logger.Info("Created table worker")
+	r.db.Logger.Info("Checked/created table worker")
 	return nil
 }
 

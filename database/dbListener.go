@@ -32,8 +32,6 @@ func NewQueuerDBListener(dbConfig *helper.DatabaseConfiguration, channel string)
 		return nil, fmt.Errorf("error listening to channel %v: %v", channel, err)
 	}
 
-	log.Println("Added listener to channel: ", channel)
-
 	return &QueuerListener{
 		Listener: listener,
 		Channel:  channel,

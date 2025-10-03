@@ -1,7 +1,7 @@
 package queuer
 
 import (
-	"fmt"
+	"log"
 	"log/slog"
 	"slices"
 
@@ -24,10 +24,10 @@ func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {
 
 	nifName, err := helper.GetTaskNameFromInterface(nif)
 	if err != nil {
-		panic(fmt.Sprintf("error getting function name: %s", err.Error()))
+		log.Panicf("error getting function name: %s", err.Error())
 	}
 	if slices.Contains(q.worker.AvailableNextIntervalFuncs, nifName) {
-		panic(fmt.Sprintf("NextIntervalFunc already exists: %s", nifName))
+		log.Panicf("NextIntervalFunc already exists: %s", nifName)
 	}
 
 	q.nextIntervalFuncs[nifName] = nif
@@ -35,7 +35,7 @@ func (q *Queuer) AddNextIntervalFunc(nif model.NextIntervalFunc) *model.Worker {
 
 	worker, err := q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		panic(fmt.Sprintf("error updating worker: %s", err.Error()))
+		log.Panicf("error updating worker: %s", err.Error())
 	}
 
 	q.log.Info("NextInterval function added", slog.String("name", nifName))
@@ -61,7 +61,7 @@ func (q *Queuer) AddNextIntervalFuncWithName(nif model.NextIntervalFunc, name st
 		panic("NextIntervalFunc cannot be nil")
 	}
 	if slices.Contains(q.worker.AvailableNextIntervalFuncs, name) {
-		panic(fmt.Sprintf("NextIntervalFunc with name already exists: %s", name))
+		log.Panicf("NextIntervalFunc with name already exists: %s", name)
 	}
 
 	q.nextIntervalFuncs[name] = nif
@@ -69,7 +69,7 @@ func (q *Queuer) AddNextIntervalFuncWithName(nif model.NextIntervalFunc, name st
 
 	worker, err := q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		panic(fmt.Sprintf("error updating worker: %s", err.Error()))
+		log.Panicf("error updating worker: %s", err.Error())
 	}
 
 	q.log.Info("NextInterval function added", slog.String("name", name))

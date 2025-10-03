@@ -1,7 +1,5 @@
 package core
 
-import "log"
-
 type Broadcaster[T any] struct {
 	name      string
 	listeners map[chan T]bool
@@ -42,7 +40,6 @@ func (b *Broadcaster[T]) Unsubscribe(ch chan T) {
 // If a listener's channel is full, it skips sending the message to avoid blocking.
 // This is a non-blocking send operation.
 func (b *Broadcaster[T]) Broadcast(msg T) {
-	log.Printf("Broadcasting message to %d listeners for %v", len(b.listeners), b.name)
 	for ch := range b.listeners {
 		select {
 		case ch <- msg:

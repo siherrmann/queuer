@@ -92,7 +92,7 @@ func (r MasterDBHandler) CreateTable() error {
 		log.Panicf("error inserting initial master entry: %#v", err)
 	}
 
-	r.db.Logger.Info("Created table master")
+	r.db.Logger.Info("Checked/created table master")
 	return nil
 }
 

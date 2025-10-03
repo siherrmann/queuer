@@ -12,7 +12,7 @@ import (
 func ExampleFull() {
 	// Example usage of the Queuer package
 	q := queuer.NewQueuer(
-		"exampleWorker",
+		"exampleFullWorker",
 		3,
 		&model.OnError{
 			Timeout:      5,

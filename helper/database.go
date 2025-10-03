@@ -31,11 +31,6 @@ func NewDatabase(name string, dbConfig *DatabaseConfiguration, logger *slog.Logg
 			panic("error connecting to database")
 		}
 
-		err := db.AddNotifyFunction()
-		if err != nil {
-			panic(fmt.Sprintf("error adding notify function: %s", err.Error()))
-		}
-
 		return db
 	} else {
 		return &Database{
@@ -101,7 +96,7 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *sl
 	connectOnce.Do(func() {
 		dsn, err := pq.ParseURL(dbConfig.DatabaseConnectionString())
 		if err != nil {
-			panic(fmt.Sprintf("error parsing database connection string: %s", err.Error()))
+			log.Panicf("error parsing database connection string: %s", err.Error())
 		}
 
 		base, err := pq.NewConnector(dsn)
@@ -126,52 +121,12 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *sl
 
 		pingErr := db.Ping()
 		if pingErr != nil {
-			panic(fmt.Sprintf("error connecting to database: %s", pingErr.Error()))
+			log.Panicf("error connecting to database: %s", pingErr.Error())
 		}
 		logger.Info("Connected to db")
 	})
 
 	d.Instance = db
-}
-
-// AddNotifyFunction adds a PostgreSQL function to the database that will be called on certain table operations.
-// It creates a function that raises a notification on the specified channel when a row is inserted,
-// updated, or deleted in the job or worker table.
-// The function uses the row_to_json function to convert the row data to JSON format.
-// It returns an error if the function creation fails.
-func (d *Database) AddNotifyFunction() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// RAISE NOTICE 'Trigger called on table: %, operation: %', TG_TABLE_NAME, TG_OP;
-	_, err := d.Instance.ExecContext(
-		ctx,
-		`CREATE OR REPLACE FUNCTION notify_event() RETURNS TRIGGER AS $$
-			DECLARE
-				data JSON;
-				channel TEXT;
-			BEGIN
-				IF (TG_TABLE_NAME = 'job') OR (TG_TABLE_NAME = 'worker') THEN
-					channel := TG_TABLE_NAME;
-				ELSE
-					channel := 'job_archive';
-				END IF;
-
-				IF (TG_OP = 'DELETE') THEN
-					data = row_to_json(OLD);
-				ELSE
-					data = row_to_json(NEW);
-				END IF;
-				PERFORM pg_notify(channel, data::text);
-				RETURN NEW;
-			END;
-		$$ LANGUAGE plpgsql;`,
-	)
-
-	if err != nil {
-		return fmt.Errorf("error creating notify function: %#v", err)
-	}
-	return nil
 }
 
 // CheckTableExistance checks if a table with the specified name exists in the database.

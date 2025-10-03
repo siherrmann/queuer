@@ -1,7 +1,7 @@
 package queuer
 
 import (
-	"fmt"
+	"log"
 	"log/slog"
 	"slices"
 
@@ -18,10 +18,10 @@ import (
 func (q *Queuer) AddTask(task interface{}) *model.Task {
 	newTask, err := model.NewTask(task)
 	if err != nil {
-		panic(fmt.Sprintf("error creating new task: %s", err.Error()))
+		log.Panicf("error creating new task: %s", err.Error())
 	}
 	if slices.Contains(q.worker.AvailableTasks, newTask.Name) {
-		panic(fmt.Sprintf("task already exists: %s", newTask.Name))
+		log.Panicf("task already exists: %s", newTask.Name)
 	}
 
 	q.tasks[newTask.Name] = newTask
@@ -30,7 +30,7 @@ func (q *Queuer) AddTask(task interface{}) *model.Task {
 	// Update worker in DB
 	_, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		panic(fmt.Sprintf("error updating worker: %s", err.Error()))
+		log.Panicf("error updating worker: %s", err.Error())
 	}
 
 	q.log.Info("Task added", slog.String("task_name", newTask.Name))
@@ -47,10 +47,10 @@ func (q *Queuer) AddTask(task interface{}) *model.Task {
 func (q *Queuer) AddTaskWithName(task interface{}, name string) *model.Task {
 	newTask, err := model.NewTaskWithName(task, name)
 	if err != nil {
-		panic(fmt.Sprintf("error creating new task: %s", err.Error()))
+		log.Panicf("error creating new task: %s", err.Error())
 	}
 	if slices.Contains(q.worker.AvailableTasks, name) {
-		panic(fmt.Sprintf("task already exists: %s", newTask.Name))
+		log.Panicf("task already exists: %s", newTask.Name)
 	}
 
 	q.tasks[newTask.Name] = newTask
@@ -59,7 +59,7 @@ func (q *Queuer) AddTaskWithName(task interface{}, name string) *model.Task {
 	// Update worker in DB
 	_, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		panic(fmt.Sprintf("error updating worker: %s", err.Error()))
+		log.Panicf("error updating worker: %s", err.Error())
 	}
 
 	q.log.Info("Task added", slog.String("name", newTask.Name))

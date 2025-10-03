@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"sync"
@@ -63,7 +64,12 @@ func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queu
 // It returns a pointer to the newly created Queuer instance.
 func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseConfiguration, options ...*model.OnError) *Queuer {
 	// Logger
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	opts := helper.PrettyHandlerOptions{
+		SlogOpts: slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		},
+	}
+	logger := slog.New(helper.NewPrettyHandler(os.Stdout, opts))
 
 	// Database
 	var err error
@@ -78,7 +84,7 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 		var err error
 		dbConfig, err = helper.NewDatabaseConfiguration()
 		if err != nil {
-			panic(fmt.Sprintf("error creating database configuration: %s", err.Error()))
+			log.Panicf("error creating database configuration: %s", err.Error())
 		}
 		dbCon = helper.NewDatabase(
 			"queuer",
@@ -90,15 +96,15 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 	// DBs
 	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job db handler: %s", err.Error()))
+		log.Panicf("error creating job db handler: %s", err.Error())
 	}
 	dbWorker, err := database.NewWorkerDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		panic(fmt.Sprintf("error creating worker db handler: %s", err.Error()))
+		log.Panicf("error creating worker db handler: %s", err.Error())
 	}
 	dbMaster, err := database.NewMasterDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		panic(fmt.Sprintf("error creating master db handler: %s", err.Error()))
+		log.Panicf("error creating master db handler: %s", err.Error())
 	}
 
 	// Inserting worker
@@ -106,19 +112,19 @@ func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseC
 	if len(options) > 0 {
 		newWorker, err = model.NewWorkerWithOptions(name, maxConcurrency, options[0])
 		if err != nil {
-			panic(fmt.Sprintf("error creating new worker with options: %s", err.Error()))
+			log.Panicf("error creating new worker with options: %s", err.Error())
 		}
 	} else {
 		newWorker, err = model.NewWorker(name, maxConcurrency)
 		if err != nil {
-			panic(fmt.Sprintf("error creating new worker: %s", err.Error()))
+			log.Panicf("error creating new worker: %s", err.Error())
 		}
 	}
 
 	// Worker
 	worker, err := dbWorker.InsertWorker(newWorker)
 	if err != nil {
-		panic(fmt.Sprintf("error inserting worker: %s", err.Error()))
+		log.Panicf("error inserting worker: %s", err.Error())
 	}
 
 	logger.Info("Queuer with worker created", slog.String("worker_name", newWorker.Name), slog.String("worker_rid", worker.RID.String()))
@@ -165,7 +171,7 @@ func NewStaticQueuer(logLevel slog.Leveler, dbConfig *helper.DatabaseConfigurati
 		var err error
 		dbConfig, err = helper.NewDatabaseConfiguration()
 		if err != nil {
-			panic(fmt.Sprintf("error creating database configuration: %s", err.Error()))
+			log.Panicf("error creating database configuration: %s", err.Error())
 		}
 		dbCon = helper.NewDatabase(
 			"queuer",
@@ -177,15 +183,15 @@ func NewStaticQueuer(logLevel slog.Leveler, dbConfig *helper.DatabaseConfigurati
 	// DBs
 	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job db handler: %s", err.Error()))
+		log.Panicf("error creating job db handler: %s", err.Error())
 	}
 	dbWorker, err := database.NewWorkerDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		panic(fmt.Sprintf("error creating worker db handler: %s", err.Error()))
+		log.Panicf("error creating worker db handler: %s", err.Error())
 	}
 	dbMaster, err := database.NewMasterDBHandler(dbCon, dbConfig.WithTableDrop)
 	if err != nil {
-		panic(fmt.Sprintf("error creating master db handler: %s", err.Error()))
+		log.Panicf("error creating master db handler: %s", err.Error())
 	}
 
 	return &Queuer{
@@ -223,35 +229,37 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 	var err error
 	q.jobDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job")
 	if err != nil {
-		panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
+		log.Panicf("error creating job insert listener: %s", err.Error())
 	}
+	q.log.Info("Added listener", slog.String("channel", "job"))
 	q.jobArchiveDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job_archive")
 	if err != nil {
-		panic(fmt.Sprintf("error creating job archive listener: %s", err.Error()))
+		log.Panicf("error creating job archive listener: %s", err.Error())
 	}
+	q.log.Info("Added listener", slog.String("channel", "job_archive"))
 
 	// Broadcasters for job updates and deletes
 	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
 	q.jobInsertListener, err = core.NewListener(broadcasterJobInsert)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
+		log.Panicf("error creating job insert listener: %s", err.Error())
 	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	q.jobUpdateListener, err = core.NewListener(broadcasterJobUpdate)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job update listener: %s", err.Error()))
+		log.Panicf("error creating job update listener: %s", err.Error())
 	}
 	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
 	q.jobDeleteListener, err = core.NewListener(broadcasterJobDelete)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job delete listener: %s", err.Error()))
+		log.Panicf("error creating job delete listener: %s", err.Error())
 	}
 
 	// Update worker to running
 	q.worker.Status = model.WorkerStatusRunning
 	q.worker, err = q.dbWorker.UpdateWorker(q.worker)
 	if err != nil {
-		panic(fmt.Sprintf("error updating worker status to running: %s", err.Error()))
+		log.Panicf("error updating worker status to running: %s", err.Error())
 	}
 
 	// Start pollers
@@ -304,29 +312,31 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 	if !withoutListeners {
 		q.jobDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job")
 		if err != nil {
-			panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
+			log.Panicf("error creating job insert listener: %s", err.Error())
 		}
+		q.log.Info("Added listener", slog.String("channel", "job"))
 		q.jobArchiveDbListener, err = database.NewQueuerDBListener(q.dbConfig, "job_archive")
 		if err != nil {
-			panic(fmt.Sprintf("error creating job archive listener: %s", err.Error()))
+			log.Panicf("error creating job archive listener: %s", err.Error())
 		}
+		q.log.Info("Added listener", slog.String("channel", "job_archive"))
 	}
 
 	// Broadcasters for job updates and deletes
 	broadcasterJobInsert := core.NewBroadcaster[*model.Job]("job.INSERT")
 	q.jobInsertListener, err = core.NewListener(broadcasterJobInsert)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job insert listener: %s", err.Error()))
+		log.Panicf("error creating job insert listener: %s", err.Error())
 	}
 	broadcasterJobUpdate := core.NewBroadcaster[*model.Job]("job.UPDATE")
 	q.jobUpdateListener, err = core.NewListener(broadcasterJobUpdate)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job update listener: %s", err.Error()))
+		log.Panicf("error creating job update listener: %s", err.Error())
 	}
 	broadcasterJobDelete := core.NewBroadcaster[*model.Job]("job.DELETE")
 	q.jobDeleteListener, err = core.NewListener(broadcasterJobDelete)
 	if err != nil {
-		panic(fmt.Sprintf("error creating job delete listener: %s", err.Error()))
+		log.Panicf("error creating job delete listener: %s", err.Error())
 	}
 
 	// Start job listeners
@@ -347,6 +357,15 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 		close(ready)
 
 		<-ctx.Done()
+		// Close database connection
+		if q.DB != nil {
+			q.log.Info("Closing database connection")
+			err = q.DB.Close()
+			if err != nil {
+				q.log.Error("error closing database connection", slog.String("error", err.Error()))
+			}
+		}
+
 		q.log.Info("Queuer stopped")
 	}()
 

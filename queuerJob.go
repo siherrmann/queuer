@@ -333,7 +333,6 @@ func (q *Queuer) runJobInitial() error {
 	if err != nil {
 		return fmt.Errorf("error updating job status to running: %v", err)
 	} else if len(jobs) == 0 {
-		q.log.Info("No jobs to run at the moment")
 		return nil
 	}
 
@@ -399,7 +398,7 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 	var results []interface{}
 	retryer, err := core.NewRetryer(
 		func() error {
-			q.log.Info("Trying/retrying job", slog.String("job_rid", job.RID.String()))
+			q.log.Debug("Trying/retrying job", slog.String("job_rid", job.RID.String()))
 			results, err = q.waitForJob(job)
 			if err != nil {
 				return fmt.Errorf("error retrying job: %v", err)
@@ -422,7 +421,7 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 
 // runJob retries the job.
 func (q *Queuer) runJob(job *model.Job) {
-	q.log.Info("Running scheduled job", slog.String("job_rid", job.RID.String()))
+	q.log.Info("Running job", slog.String("job_rid", job.RID.String()))
 
 	results, err := q.waitForJob(job)
 	if err != nil {
@@ -458,12 +457,16 @@ func (q *Queuer) failJob(job *model.Job, jobErr error) {
 }
 
 func (q *Queuer) endJob(job *model.Job) {
+	if job.WorkerID == q.worker.ID {
+		return
+	}
+
 	endedJob, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
 		// TODO probably add retry for updating job to failed
-		q.log.Error("Error updating finished job with status %v: %v", job.Status, err)
+		q.log.Error("Error updating finished job", slog.String("status", job.Status), slog.String("error", err.Error()))
 	} else {
-		q.log.Info("Job ended with status %v and RID %v", endedJob.Status, endedJob.RID)
+		q.log.Debug("Job ended", slog.String("status", endedJob.Status), slog.String("rid", endedJob.RID.String()))
 
 		// Readd scheduled jobs to the queue
 		if endedJob.Options != nil && endedJob.Options.Schedule != nil && endedJob.ScheduleCount < endedJob.Options.Schedule.MaxCount {
@@ -472,7 +475,7 @@ func (q *Queuer) endJob(job *model.Job) {
 				// This worker should only have the current job if the NextIntervalFunc is available.
 				nextIntervalFunc, ok := q.nextIntervalFuncs[endedJob.Options.Schedule.NextInterval]
 				if !ok {
-					q.log.Error("NextIntervalFunc %v not found for job with RID %v", endedJob.Options.Schedule.NextInterval, endedJob.RID)
+					q.log.Error("NextIntervalFunc not found", slog.String("name", endedJob.Options.Schedule.NextInterval), slog.String("job_rid", endedJob.RID.String()))
 					return
 				}
 				newScheduledAt = nextIntervalFunc(*endedJob.ScheduledAt, endedJob.ScheduleCount)

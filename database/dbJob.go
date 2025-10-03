@@ -76,6 +76,11 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encrypti
 		return nil, fmt.Errorf("error loading job SQL functions: %w", err)
 	}
 
+	err = loadSql.LoadNotifySql(dbConnection.Instance, withTableDrop)
+	if err != nil {
+		return nil, fmt.Errorf("error loading notify SQL functions: %w", err)
+	}
+
 	return jobDbHandler, nil
 }
 
@@ -171,7 +176,7 @@ func (r JobDBHandler) CreateTable() error {
 		log.Panic(err)
 	}
 
-	r.db.Logger.Info("Created table job")
+	r.db.Logger.Info("Checked/created table job")
 	return nil
 }
 
@@ -414,7 +419,7 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 			&job.UpdatedAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("error updating initial job for worker id %v: %w", job.WorkerRID, err)
+			return nil, fmt.Errorf("error updating initial job with rid %v: %w", job.RID, err)
 		}
 
 		jobs = append(jobs, job)
@@ -505,7 +510,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 		&archivedJob.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error updating final job for worker id %v: %w", job.WorkerRID, err)
+		return nil, fmt.Errorf("error updating final job with rid %v: %w", job.RID, err)
 	}
 
 	return archivedJob, nil
