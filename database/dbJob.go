@@ -48,7 +48,7 @@ type JobDBHandler struct {
 // If withTableDrop is true, it will drop the existing job tables before creating new ones
 func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encryptionKey ...string) (*JobDBHandler, error) {
 	if dbConnection == nil {
-		return nil, fmt.Errorf("database connection is nil")
+		return nil, helper.NewError("database connection validation", fmt.Errorf("database connection is nil"))
 	}
 
 	jobDbHandler := &JobDBHandler{
@@ -59,26 +59,26 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encrypti
 		jobDbHandler.EncryptionKey = encryptionKey[0]
 	}
 
-	err := loadSql.LoadJobSql(dbConnection.Instance, withTableDrop)
+	err := loadSql.LoadJobSql(jobDbHandler.db.Instance, false)
 	if err != nil {
-		return nil, fmt.Errorf("error loading job SQL functions: %w", err)
+		return nil, helper.NewError("load job sql", err)
 	}
 
-	err = loadSql.LoadNotifySql(dbConnection.Instance, withTableDrop)
+	err = loadSql.LoadNotifySql(jobDbHandler.db.Instance, false)
 	if err != nil {
-		return nil, fmt.Errorf("error loading notify SQL functions: %w", err)
+		return nil, helper.NewError("load notify sql", err)
 	}
 
 	if withTableDrop {
 		err := jobDbHandler.DropTables()
 		if err != nil {
-			return nil, fmt.Errorf("error dropping job table: %#v", err)
+			return nil, helper.NewError("drop tables", err)
 		}
 	}
 
 	err = jobDbHandler.CreateTable()
 	if err != nil {
-		return nil, fmt.Errorf("error creating job table: %#v", err)
+		return nil, helper.NewError("create table", err)
 	}
 
 	return jobDbHandler, nil
@@ -89,11 +89,11 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encrypti
 func (r JobDBHandler) CheckTablesExistance() (bool, error) {
 	jobExists, err := r.db.CheckTableExistance("job")
 	if err != nil {
-		return false, fmt.Errorf("error checking job table existence: %w", err)
+		return false, helper.NewError("job table", err)
 	}
 	jobArchiveExists, err := r.db.CheckTableExistance("job_archive")
 	if err != nil {
-		return false, fmt.Errorf("error checking job archive table existence: %w", err)
+		return false, helper.NewError("job_archive table", err)
 	}
 	return jobExists && jobArchiveExists, err
 }
@@ -177,6 +177,7 @@ func (r JobDBHandler) CreateTable() error {
 	}
 
 	r.db.Logger.Info("Checked/created table job")
+
 	return nil
 }
 
@@ -188,16 +189,17 @@ func (r JobDBHandler) DropTables() error {
 	query := `DROP TABLE IF EXISTS job`
 	_, err := r.db.Instance.ExecContext(ctx, query)
 	if err != nil {
-		return fmt.Errorf("error dropping job table: %#v", err)
+		return helper.NewError("job table", err)
 	}
 
 	query = `DROP TABLE IF EXISTS job_archive`
 	_, err = r.db.Instance.ExecContext(ctx, query)
 	if err != nil {
-		return fmt.Errorf("error dropping job table: %#v", err)
+		return helper.NewError("job_archive table", err)
 	}
 
 	r.db.Logger.Info("Dropped table job")
+
 	return nil
 }
 
@@ -245,7 +247,7 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 		&newJob.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning new job: %w", err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return newJob, nil
@@ -294,7 +296,7 @@ func (r JobDBHandler) InsertJobTx(tx *sql.Tx, job *model.Job) (*model.Job, error
 		&newJob.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning new job: %w", err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return newJob, nil
@@ -308,12 +310,12 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 
 	tx, err := r.db.Instance.Begin()
 	if err != nil {
-		return fmt.Errorf("error starting transaction: %w", err)
+		return helper.NewError("transaction start", err)
 	}
 
 	stmt, err := tx.Prepare(pq.CopyIn("job", "options", "task_name", "parameters", "scheduled_at"))
 	if err != nil {
-		return fmt.Errorf("error preparing statement for batch insert: %w", err)
+		return helper.NewError("statement preparation", err)
 	}
 
 	for _, job := range jobs {
@@ -324,14 +326,14 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 		if job.Options != nil {
 			optionsJSON, err = job.Options.Marshal()
 			if err != nil {
-				return fmt.Errorf("error marshaling job options for batch insert: %w", err)
+				return helper.NewError("marshaling job options", err)
 			}
 		}
 
 		if job.Parameters != nil {
 			parametersJSON, err = job.Parameters.Marshal()
 			if err != nil {
-				return fmt.Errorf("error marshaling job parameters for batch insert: %v", err)
+				return helper.NewError("marshaling job parameters", err)
 			}
 		}
 
@@ -342,23 +344,23 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 			job.ScheduledAt,
 		)
 		if err != nil {
-			return fmt.Errorf("error executing batch insert for job %s: %w", job.RID, err)
+			return helper.NewError("batch insert execution", err)
 		}
 	}
 
 	_, err = stmt.Exec()
 	if err != nil {
-		return fmt.Errorf("error executing final batch insert: %w", err)
+		return helper.NewError("final batch insert execution", err)
 	}
 
 	err = stmt.Close()
 	if err != nil {
-		return fmt.Errorf("error closing prepared statement: %w", err)
+		return helper.NewError("prepared statement close", err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return fmt.Errorf("error committing transaction: %w", err)
+		return helper.NewError("transaction commit", err)
 	}
 
 	return nil
@@ -394,7 +396,7 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 		worker.ID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error querying job for worker id %v: %w", worker.ID, err)
+		return nil, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -419,10 +421,15 @@ func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, err
 			&job.UpdatedAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("error updating initial job with rid %v: %w", job.RID, err)
+			return nil, helper.NewError("scan", err)
 		}
 
 		jobs = append(jobs, job)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return []*model.Job{}, helper.NewError("rows error", err)
 	}
 
 	return jobs, nil
@@ -510,7 +517,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 		&archivedJob.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error updating final job with rid %v: %w", job.RID, err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return archivedJob, nil
@@ -524,7 +531,7 @@ func (r JobDBHandler) DeleteJob(rid uuid.UUID) error {
 		rid,
 	)
 	if err != nil {
-		return fmt.Errorf("error deleting job with RID %s: %w", rid, err)
+		return helper.NewError("exec", err)
 	}
 
 	return nil
@@ -581,7 +588,7 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 		&job.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning job with RID %s: %w", rid, err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return job, nil
@@ -629,7 +636,7 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 		entries,
 	)
 	if err != nil {
-		return []*model.Job{}, fmt.Errorf("error querying all jobs: %w", err)
+		return []*model.Job{}, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -656,10 +663,15 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 			&job.UpdatedAt,
 		)
 		if err != nil {
-			return []*model.Job{}, fmt.Errorf("error scanning job row: %w", err)
+			return []*model.Job{}, helper.NewError("scan", err)
 		}
 
 		jobs = append(jobs, job)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return []*model.Job{}, helper.NewError("rows error", err)
 	}
 
 	return jobs, nil
@@ -707,7 +719,7 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 		entries,
 	)
 	if err != nil {
-		return []*model.Job{}, fmt.Errorf("error querying jobs by worker RID: %w", err)
+		return []*model.Job{}, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -734,10 +746,15 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 			&job.UpdatedAt,
 		)
 		if err != nil {
-			return []*model.Job{}, fmt.Errorf("error scanning job row for worker: %w", err)
+			return []*model.Job{}, helper.NewError("scan", err)
 		}
 
 		jobs = append(jobs, job)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return []*model.Job{}, helper.NewError("rows error", err)
 	}
 
 	return jobs, nil
@@ -793,7 +810,7 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 		entries,
 	)
 	if err != nil {
-		return []*model.Job{}, fmt.Errorf("error querying jobs by search: %w", err)
+		return []*model.Job{}, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -820,14 +837,15 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 			&job.UpdatedAt,
 		)
 		if err != nil {
-			return []*model.Job{}, fmt.Errorf("error scanning job row during search: %w", err)
+			return []*model.Job{}, helper.NewError("scan", err)
 		}
 
 		jobs = append(jobs, job)
 	}
 
-	if err = rows.Err(); err != nil {
-		return []*model.Job{}, fmt.Errorf("error after iterating rows during search: %w", err)
+	err = rows.Err()
+	if err != nil {
+		return []*model.Job{}, helper.NewError("rows error", err)
 	}
 
 	return jobs, nil
@@ -842,7 +860,7 @@ func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
 		int(retention.Hours()/24),
 	)
 	if err != nil {
-		return fmt.Errorf("error updating retention archive: %w", err)
+		return helper.NewError("exec", err)
 	}
 
 	return nil
@@ -854,7 +872,7 @@ func (r JobDBHandler) RemoveRetentionArchive() error {
 		`SELECT remove_retention_policy('job_archive');`,
 	)
 	if err != nil {
-		return fmt.Errorf("error removing retention archive: %w", err)
+		return helper.NewError("exec", err)
 	}
 
 	return nil
@@ -911,7 +929,7 @@ func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 		&job.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning archived job with RID %s: %w", rid, err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return job, nil
@@ -959,7 +977,7 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 		entries,
 	)
 	if err != nil {
-		return []*model.Job{}, fmt.Errorf("error querying all archived jobs: %w", err)
+		return []*model.Job{}, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -986,10 +1004,15 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 			&job.UpdatedAt,
 		)
 		if err != nil {
-			return []*model.Job{}, fmt.Errorf("error scanning archived job row: %w", err)
+			return []*model.Job{}, helper.NewError("scan", err)
 		}
 
 		jobs = append(jobs, job)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return []*model.Job{}, helper.NewError("rows error", err)
 	}
 
 	return jobs, nil
@@ -1042,7 +1065,7 @@ func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int
 		entries,
 	)
 	if err != nil {
-		return []*model.Job{}, fmt.Errorf("error querying archived jobs by search: %w", err)
+		return []*model.Job{}, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -1069,14 +1092,15 @@ func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int
 			&job.UpdatedAt,
 		)
 		if err != nil {
-			return []*model.Job{}, fmt.Errorf("error scanning archived job row during search: %w", err)
+			return []*model.Job{}, helper.NewError("scan", err)
 		}
 
 		jobs = append(jobs, job)
 	}
 
-	if err = rows.Err(); err != nil {
-		return []*model.Job{}, fmt.Errorf("error after iterating rows during search: %w", err)
+	err = rows.Err()
+	if err != nil {
+		return []*model.Job{}, helper.NewError("rows error", err)
 	}
 
 	return jobs, nil

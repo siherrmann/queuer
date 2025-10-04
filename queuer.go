@@ -467,13 +467,6 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 			}
 
 			switch job.Status {
-			case model.JobStatusCancelled:
-				runner, ok := q.activeRunners.Load(job.RID)
-				if ok {
-					q.log.Info("Canceling running job", slog.String("job_id", job.RID.String()))
-					runner.(context.CancelFunc)()
-					q.activeRunners.Delete(job.RID)
-				}
 			case model.JobStatusQueued, model.JobStatusScheduled:
 				q.jobInsertListener.Notify(job.ToJob())
 				err = q.runJobInitial()
@@ -498,7 +491,17 @@ func (q *Queuer) listen(ctx context.Context, cancel context.CancelFunc) {
 				return
 			}
 
-			q.jobDeleteListener.Notify(job.ToJob())
+			switch job.Status {
+			case model.JobStatusCancelled:
+				runner, ok := q.activeRunners.Load(job.RID)
+				if ok {
+					q.log.Info("Canceling running job", slog.String("job_id", job.RID.String()))
+					runner.(*core.Runner).Cancel()
+					q.activeRunners.Delete(job.RID)
+				}
+			default:
+				q.jobDeleteListener.Notify(job.ToJob())
+			}
 		})
 	}()
 

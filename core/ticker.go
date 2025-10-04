@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"reflect"
 	"time"
 
 	"github.com/siherrmann/queuer/helper"
@@ -27,12 +26,12 @@ func NewTicker(interval time.Duration, task interface{}, parameters ...interface
 
 	err := helper.CheckValidTaskWithParameters(task, parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error checking task: %s", reflect.TypeOf(task).Kind())
+		return nil, helper.NewError("checking task with parameters", err)
 	}
 
 	runner, err := NewRunner(nil, task, parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error creating runner: %v", err)
+		return nil, helper.NewError("creating runner", err)
 	}
 
 	return &Ticker{

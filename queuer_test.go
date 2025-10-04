@@ -31,6 +31,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: false,
 		},
@@ -52,6 +53,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: false,
 		},
@@ -66,6 +68,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: true,
 		},
@@ -87,6 +90,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: true,
 		},
@@ -149,6 +153,7 @@ func TestNewStaticQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: false,
 		},
@@ -162,6 +167,7 @@ func TestNewStaticQueuer(t *testing.T) {
 				Username:      "user",
 				Password:      "password",
 				Schema:        "public",
+				SSLMode:       "disable",
 				WithTableDrop: true,
 			},
 			dbEnvs:      map[string]string{}, // No env vars needed when dbConfig is provided
@@ -178,6 +184,7 @@ func TestNewStaticQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: true,
 		},
@@ -221,6 +228,7 @@ func TestStart(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)
@@ -342,6 +350,7 @@ func TestStartWithoutWorker(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)
@@ -426,6 +435,7 @@ func TestStop(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)
@@ -446,6 +456,7 @@ func TestMasterTicker(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)

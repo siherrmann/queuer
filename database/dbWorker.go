@@ -38,7 +38,7 @@ type WorkerDBHandler struct {
 // If withTableDrop is true, it will drop the existing worker table before creating a new one.
 func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*WorkerDBHandler, error) {
 	if dbConnection == nil {
-		return nil, fmt.Errorf("database connection is nil")
+		return nil, helper.NewError("check", fmt.Errorf("database connection is nil"))
 	}
 
 	workerDbHandler := &WorkerDBHandler{
@@ -47,19 +47,19 @@ func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Wor
 
 	err := loadSql.LoadWorkerSql(dbConnection.Instance, withTableDrop)
 	if err != nil {
-		return nil, fmt.Errorf("error loading worker SQL functions: %w", err)
+		return nil, helper.NewError("load worker sql", err)
 	}
 
 	if withTableDrop {
 		err := workerDbHandler.DropTable()
 		if err != nil {
-			return nil, fmt.Errorf("error dropping worker table: %#v", err)
+			return nil, helper.NewError("drop worker table", err)
 		}
 	}
 
 	err = workerDbHandler.CreateTable()
 	if err != nil {
-		return nil, fmt.Errorf("error creating worker table: %#v", err)
+		return nil, helper.NewError("create worker table", err)
 	}
 
 	return workerDbHandler, nil
@@ -68,9 +68,11 @@ func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Wor
 // CheckTableExistance checks if the 'worker' table exists in the database.
 // It returns true if the table exists, otherwise false.
 func (r WorkerDBHandler) CheckTableExistance() (bool, error) {
-	exists := false
-	exists, err := r.db.CheckTableExistance("worker")
-	return exists, err
+	workerTableExists, err := r.db.CheckTableExistance("worker")
+	if err != nil {
+		return false, helper.NewError("worker table", err)
+	}
+	return workerTableExists, nil
 }
 
 // CreateTable creates the 'worker' table in the database if it doesn't already exist.
@@ -107,6 +109,7 @@ func (r WorkerDBHandler) CreateTable() error {
 	}
 
 	r.db.Logger.Info("Checked/created table worker")
+
 	return nil
 }
 
@@ -122,10 +125,11 @@ func (r WorkerDBHandler) DropTable() error {
 	query := `DROP TABLE IF EXISTS worker`
 	_, err := r.db.Instance.ExecContext(ctx, query)
 	if err != nil {
-		return fmt.Errorf("error dropping worker table: %#v", err)
+		return helper.NewError("worker table", err)
 	}
 
 	r.db.Logger.Info("Dropped table worker")
+
 	return nil
 }
 
@@ -161,7 +165,7 @@ func (r WorkerDBHandler) InsertWorker(worker *model.Worker) (*model.Worker, erro
 		&newWorker.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning new worker: %w", err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return newWorker, nil
@@ -208,7 +212,7 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 		&updatedWorker.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning updated worker: %w", err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return updatedWorker, err
@@ -222,7 +226,7 @@ func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 		rid,
 	)
 	if err != nil {
-		return fmt.Errorf("error deleting worker with RID %s: %w", rid.String(), err)
+		return helper.NewError("delete", err)
 	}
 
 	return nil
@@ -264,7 +268,7 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 		&worker.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning worker with RID %s: %w", rid.String(), err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return worker, nil
@@ -303,7 +307,7 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 		entries,
 	)
 	if err != nil {
-		return []*model.Worker{}, fmt.Errorf("error querying all workers: %w", err)
+		return []*model.Worker{}, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -324,13 +328,15 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 			&worker.UpdatedAt,
 		)
 		if err != nil {
-			return []*model.Worker{}, fmt.Errorf("error scanning worker row: %w", err)
+			return []*model.Worker{}, helper.NewError("scan", err)
 		}
 
 		workers = append(workers, worker)
 	}
-	if err = rows.Err(); err != nil {
-		return []*model.Worker{}, fmt.Errorf("error iterating rows: %w", err)
+
+	err = rows.Err()
+	if err != nil {
+		return []*model.Worker{}, helper.NewError("rows error", err)
 	}
 
 	return workers, nil
@@ -374,7 +380,7 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 		entries,
 	)
 	if err != nil {
-		return []*model.Worker{}, fmt.Errorf("error querying workers by search: %w", err)
+		return []*model.Worker{}, helper.NewError("query", err)
 	}
 
 	defer rows.Close()
@@ -395,13 +401,15 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 			&worker.UpdatedAt,
 		)
 		if err != nil {
-			return []*model.Worker{}, fmt.Errorf("error scanning worker row during search: %w", err)
+			return []*model.Worker{}, helper.NewError("scan", err)
 		}
 
 		workers = append(workers, worker)
 	}
-	if err = rows.Err(); err != nil {
-		return []*model.Worker{}, fmt.Errorf("error iterating rows: %w", err)
+
+	err = rows.Err()
+	if err != nil {
+		return []*model.Worker{}, helper.NewError("rows error", err)
 	}
 
 	return workers, nil
@@ -434,12 +442,12 @@ func (r WorkerDBHandler) SelectAllConnections() ([]*model.Connection, error) {
 			&conn.State,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("error scanning connection row: %w", err)
+			return nil, helper.NewError("scan", err)
 		}
 		connections = append(connections, conn)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
+		return nil, helper.NewError("rows error", err)
 	}
 
 	return connections, nil

@@ -18,20 +18,29 @@ func TestJobNewJobDBHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create database configuration: %v", err)
 	}
-	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
-	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
-	require.NotNil(t, jobDbHandler, "Expected NewJobDBHandler to return a non-nil instance")
-	require.NotNil(t, jobDbHandler.db, "Expected NewJobDBHandler to have a non-nil database instance")
-	require.NotNil(t, jobDbHandler.db.Instance, "Expected NewJobDBHandler to have a non-nil database connection instance")
+	t.Run("Valid call NewJobDBHandler", func(t *testing.T) {
+		database := helper.NewTestDatabase(dbConfig)
 
-	exists, err := jobDbHandler.CheckTablesExistance()
-	assert.NoError(t, err)
-	assert.True(t, exists)
+		jobDbHandler, err := NewJobDBHandler(database, true)
+		assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+		require.NotNil(t, jobDbHandler, "Expected NewJobDBHandler to return a non-nil instance")
+		require.NotNil(t, jobDbHandler.db, "Expected NewJobDBHandler to have a non-nil database instance")
+		require.NotNil(t, jobDbHandler.db.Instance, "Expected NewJobDBHandler to have a non-nil database connection instance")
 
-	err = jobDbHandler.DropTables()
-	assert.NoError(t, err)
+		exists, err := jobDbHandler.CheckTablesExistance()
+		assert.NoError(t, err)
+		assert.True(t, exists)
+
+		err = jobDbHandler.DropTables()
+		assert.NoError(t, err)
+	})
+
+	t.Run("Invalid call NewJobDBHandler with nil database", func(t *testing.T) {
+		_, err := NewJobDBHandler(nil, true)
+		assert.Error(t, err, "Expected error when creating JobDBHandler with nil database")
+		assert.Contains(t, err.Error(), "database connection is nil", "Expected specific error message for nil database connection")
+	})
 }
 
 func TestJobCheckTableExistance(t *testing.T) {
@@ -145,17 +154,75 @@ func TestJobBatchInsertJobs(t *testing.T) {
 	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-	jobCount := 5
-	jobs := []*model.Job{}
-	for i := 0; i < jobCount; i++ {
-		job, err := model.NewJob("TestTask", nil)
-		require.NoError(t, err, "Expected NewJob to not return an error")
-		require.NotNil(t, job, "Expected NewJob to return a non-nil job")
-		jobs = append(jobs, job)
-	}
+	t.Run("Successful batch insert jobs", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", nil)
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
 
-	err = jobDbHandler.BatchInsertJobs(jobs)
-	assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
+
+	t.Run("Successful batch insert jobs with error options", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", &model.Options{
+				OnError: &model.OnError{
+					Timeout:      0.1,
+					RetryDelay:   1,
+					RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+					MaxRetries:   3,
+				},
+			})
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
+
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
+
+	t.Run("Successful batch insert jobs with schedule options", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", &model.Options{
+				Schedule: &model.Schedule{
+					Start:    time.Now().Add(time.Second * 10),
+					Interval: time.Second * 5,
+					MaxCount: 10,
+				},
+			})
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
+
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
+
+	t.Run("Successful batch insert jobs with parameters", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", nil)
+			job.Parameters = []interface{}{i, fmt.Sprintf("param-%d", i)}
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
+
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
 }
 
 func TestJobUpdateJobsInitial(t *testing.T) {

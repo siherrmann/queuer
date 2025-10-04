@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -23,13 +22,13 @@ type QueuerListener struct {
 func NewQueuerDBListener(dbConfig *helper.DatabaseConfiguration, channel string) (*QueuerListener, error) {
 	listener := pq.NewListener(dbConfig.DatabaseConnectionString(), 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			fmt.Printf("error creating postgres listener: %v", err)
+			log.Printf("error creating postgres listener: %v", err)
 		}
 	})
 
 	err := listener.Listen(channel)
 	if err != nil {
-		return nil, fmt.Errorf("error listening to channel %v: %v", channel, err)
+		return nil, helper.NewError("listen", err)
 	}
 
 	return &QueuerListener{
@@ -46,6 +45,12 @@ func NewQueuerDBListener(dbConfig *helper.DatabaseConfiguration, channel string)
 // If the context is done, the listener will stop listening and returns.
 // It will log any errors encountered during the ping operation.
 func (l *QueuerListener) Listen(ctx context.Context, cancel context.CancelFunc, notifyFunction func(data string)) {
+	l.ListenWithTimeout(ctx, cancel, notifyFunction, 90*time.Second)
+}
+
+// ListenWithTimeout is similar to Listen but allows configuring the ping timeout interval.
+// This is primarily used for testing to avoid waiting the full 90 seconds.
+func (l *QueuerListener) ListenWithTimeout(ctx context.Context, cancel context.CancelFunc, notifyFunction func(data string), pingTimeout time.Duration) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -54,8 +59,8 @@ func (l *QueuerListener) Listen(ctx context.Context, cancel context.CancelFunc, 
 			if n != nil {
 				go notifyFunction(n.Extra)
 			}
-		case <-time.After(90 * time.Second):
-			// Checking connection all 90 seconds
+		case <-time.After(pingTimeout):
+			// Checking connection at the specified interval
 			err := l.Listener.Ping()
 			if err != nil {
 				log.Printf("Error pinging listener: %v", err)

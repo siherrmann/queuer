@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/siherrmann/queuer/core"
+	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
 )
 
@@ -444,10 +446,11 @@ func (q *Queuer) cancelJob(job *model.Job) error {
 	if job.Status == model.JobStatusRunning || job.Status == model.JobStatusScheduled || job.Status == model.JobStatusQueued {
 		job.Status = model.JobStatusCancelled
 		_, err := q.dbJob.UpdateJobFinal(job)
-		if err != nil {
+		if err != nil && err.(helper.Error).Original != sql.ErrNoRows {
 			q.log.Error("Error updating job status to cancelled", slog.String("error", err.Error()))
+		} else if err == nil {
+			q.log.Info("Job cancelled", slog.String("job_rid", job.RID.String()))
 		}
-		q.log.Info("Job cancelled", slog.String("job_rid", job.RID.String()))
 	}
 	return nil
 }
@@ -476,7 +479,9 @@ func (q *Queuer) endJob(job *model.Job) {
 
 	endedJob, err := q.dbJob.UpdateJobFinal(job)
 	if err != nil {
-		// TODO probably add retry for updating job to failed
+		if strings.Contains(err.Error(), sql.ErrNoRows.Error()) {
+			return
+		}
 		q.log.Error("Error updating finished job", slog.String("status", job.Status), slog.String("error", err.Error()))
 	} else {
 		q.log.Debug("Job ended", slog.String("status", endedJob.Status), slog.String("rid", endedJob.RID.String()))

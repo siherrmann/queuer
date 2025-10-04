@@ -29,7 +29,7 @@ type Runner struct {
 func NewRunner(options *model.Options, task interface{}, parameters ...interface{}) (*Runner, error) {
 	taskInputParameters, err := helper.GetInputParametersFromTask(task)
 	if err != nil {
-		return nil, fmt.Errorf("error getting input parameters of task: %v", err)
+		return nil, helper.NewError("getting task input parameters", err)
 	} else if len(taskInputParameters) != len(parameters) {
 		return nil, fmt.Errorf("task expects %d parameters, got %d", len(taskInputParameters), len(parameters))
 	}
@@ -119,7 +119,7 @@ func (r *Runner) Run(ctx context.Context) {
 
 		outputParameters, err := helper.GetOutputParametersFromTask(r.Task)
 		if err != nil {
-			errorChannel <- fmt.Errorf("error getting output parameters of task: %v", err)
+			errorChannel <- helper.NewError("getting task output parameters", err)
 			return
 		}
 
@@ -131,7 +131,7 @@ func (r *Runner) Run(ctx context.Context) {
 		}
 
 		if err != nil {
-			errorChannel <- fmt.Errorf("runner failed with error: %v", err)
+			errorChannel <- err
 		} else {
 			resultsChannel <- resultValues
 		}
