@@ -66,3 +66,17 @@ func TestGetWorkers(t *testing.T) {
 		require.Nil(t, workers, "expected no workers to be retrieved for non-existent lastId")
 	})
 }
+
+func TestGetConnections(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
+
+	t.Run("Successfully get connections", func(t *testing.T) {
+		connections, err := testQueuer.GetConnections()
+		assert.NoError(t, err, "expected no error when getting connections")
+		require.NotNil(t, connections, "expected connections to be retrieved")
+	})
+}

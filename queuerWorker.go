@@ -35,3 +35,14 @@ func (q *Queuer) GetWorkers(lastId int, entries int) ([]*model.Worker, error) {
 
 	return workers, nil
 }
+
+// GetAllConnections retrieves all connections from the database.
+// It returns a slice of connections and an error if any occurs.
+func (q *Queuer) GetConnections() ([]*model.Connection, error) {
+	connections, err := q.dbWorker.SelectAllConnections()
+	if err != nil {
+		return nil, err
+	}
+
+	return connections, nil
+}

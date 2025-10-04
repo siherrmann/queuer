@@ -96,9 +96,9 @@ func TestWorkerInsertWorker(t *testing.T) {
 	insertedWorker, err := workerDbHandler.InsertWorker(worker)
 	assert.NoError(t, err, "Expected InsertWorker to not return an error")
 	assert.NotNil(t, insertedWorker, "Expected InsertWorker to return a non-nil worker")
-	assert.NotEqual(t, insertedWorker.RID, worker.RID, "Expected inserted worker RID to match")
-	assert.Equal(t, insertedWorker.Name, worker.Name, "Expected inserted worker Name to match")
-	assert.Equal(t, insertedWorker.Status, worker.Status, "Expected inserted worker Status to match")
+	assert.NotEqual(t, worker.RID, insertedWorker.RID, "Expected inserted worker RID to match")
+	assert.Equal(t, worker.Name, insertedWorker.Name, "Expected inserted worker Name to match")
+	assert.Equal(t, worker.Status, insertedWorker.Status, "Expected inserted worker Status to match")
 	assert.WithinDuration(t, insertedWorker.CreatedAt, time.Now(), 1*time.Second, "Expected inserted worker CreatedAt time to match")
 	assert.WithinDuration(t, insertedWorker.UpdatedAt, time.Now(), 1*time.Second, "Expected inserted worker UpdatedAt time to match")
 }
@@ -133,11 +133,11 @@ func TestWorkerUpdateWorker(t *testing.T) {
 
 	updatedWorker, err := workerDbHandler.UpdateWorker(insertedWorker)
 	assert.NoError(t, err, "Expected UpdateWorker to not return an error")
-	assert.Equal(t, updatedWorker.Name, insertedWorker.Name, "Expected updated worker Name to match")
-	assert.Equal(t, updatedWorker.Options, insertedWorker.Options, "Expected updated worker Options to match")
-	assert.Equal(t, updatedWorker.AvailableTasks, insertedWorker.AvailableTasks, "Expected updated worker AvailableTasks to match")
-	assert.Equal(t, updatedWorker.AvailableNextIntervalFuncs, insertedWorker.AvailableNextIntervalFuncs, "Expected updated worker AvailableNextInterval to match")
-	assert.Equal(t, updatedWorker.MaxConcurrency, insertedWorker.MaxConcurrency, "Expected updated worker MaxConcurrency to match")
+	assert.Equal(t, insertedWorker.Name, updatedWorker.Name, "Expected updated worker Name to match")
+	assert.Equal(t, insertedWorker.Options, updatedWorker.Options, "Expected updated worker Options to match")
+	assert.Equal(t, insertedWorker.AvailableTasks, updatedWorker.AvailableTasks, "Expected updated worker AvailableTasks to match")
+	assert.Equal(t, insertedWorker.AvailableNextIntervalFuncs, updatedWorker.AvailableNextIntervalFuncs, "Expected updated worker AvailableNextInterval to match")
+	assert.Equal(t, insertedWorker.MaxConcurrency, updatedWorker.MaxConcurrency, "Expected updated worker MaxConcurrency to match")
 }
 
 func TestWorkerDeleteWorker(t *testing.T) {
@@ -186,8 +186,8 @@ func TestWorkerSelectWorker(t *testing.T) {
 	selectedWorker, err := workerDbHandler.SelectWorker(insertedWorker.RID)
 	assert.NoError(t, err, "Expected SelectWorker to not return an error")
 	assert.NotNil(t, selectedWorker, "Expected SelectWorker to return a non-nil worker")
-	assert.Equal(t, selectedWorker.RID, insertedWorker.RID, "Expected selected worker RID to match")
-	assert.Equal(t, selectedWorker.Name, insertedWorker.Name, "Expected selected worker Name to match")
+	assert.Equal(t, insertedWorker.RID, selectedWorker.RID, "Expected selected worker RID to match")
+	assert.Equal(t, insertedWorker.Name, selectedWorker.Name, "Expected selected worker Name to match")
 }
 
 func TestWorkerSelectAllWorkers(t *testing.T) {
@@ -212,12 +212,12 @@ func TestWorkerSelectAllWorkers(t *testing.T) {
 
 	allWorkers, err := workerDbHandler.SelectAllWorkers(0, 10)
 	assert.NoError(t, err, "Expected SelectAllWorkers to not return an error")
-	assert.Equal(t, len(allWorkers), 5, "Expected SelectAllWorkers to return all workers")
+	assert.Equal(t, 5, len(allWorkers), "Expected SelectAllWorkers to return all workers")
 
 	pageLength := 3
 	paginatedWorkers, err := workerDbHandler.SelectAllWorkers(0, pageLength)
 	assert.NoError(t, err, "Expected SelectAllWorkers to not return an error")
-	assert.Equal(t, len(paginatedWorkers), pageLength, "Expected SelectAllWorkers to return 3 workers")
+	assert.Equal(t, pageLength, len(paginatedWorkers), "Expected SelectAllWorkers to return 3 workers")
 }
 
 func TestWorkerSelectAllWorkersBySearch(t *testing.T) {
@@ -243,6 +243,27 @@ func TestWorkerSelectAllWorkersBySearch(t *testing.T) {
 	searchTerm := "Worker1"
 	foundWorkers, err := workerDbHandler.SelectAllWorkersBySearch(searchTerm, 0, 10)
 	assert.NoError(t, err, "Expected SelectAllWorkersBySearch to not return an error")
-	require.Equal(t, len(foundWorkers), 1, "Expected SelectAllWorkersBySearch to return 1 worker matching search term")
-	assert.Equal(t, foundWorkers[0].Name, "Worker1", "Expected found worker Name to match search term")
+	require.Equal(t, 1, len(foundWorkers), "Expected SelectAllWorkersBySearch to return 1 worker matching search term")
+	assert.Equal(t, "Worker1", foundWorkers[0].Name, "Expected found worker Name to match search term")
+}
+
+func TestWorkerSelectAllConnections(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
+	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
+
+	// There should already be an active connection created by NewTestDatabase
+	allConnections, err := workerDbHandler.SelectAllConnections()
+	assert.NoError(t, err, "Expected SelectAllConnections to not return an error")
+	assert.GreaterOrEqual(t, len(allConnections), 1, "Expected at least one connection to exist")
+
+	paginatedConnections, err := workerDbHandler.SelectAllConnections()
+	assert.NoError(t, err, "Expected SelectAllConnections to not return an error")
+	assert.GreaterOrEqual(t, len(paginatedConnections), 1, "Expected SelectAllConnections to return 1 connection as we connect one in NewTestDatabase")
 }

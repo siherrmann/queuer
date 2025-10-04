@@ -79,7 +79,7 @@ func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 }
 
 func (d *DatabaseConfiguration) DatabaseConnectionString() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, d.Schema)
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?application_name=queuer&sslmode=disable&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, d.Schema)
 }
 
 // Internal function for the service creation to connect to a database.

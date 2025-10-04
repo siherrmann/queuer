@@ -34,7 +34,8 @@ type Queuer struct {
 	// Logger
 	log *slog.Logger
 	// Worker
-	worker *model.Worker
+	worker   *model.Worker
+	workerMu sync.RWMutex
 	// DBs
 	dbConfig *helper.DatabaseConfiguration
 	dbJob    database.JobDBHandlerFunctions
@@ -257,8 +258,10 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 	}
 
 	// Update worker to running
+	q.workerMu.Lock()
 	q.worker.Status = model.WorkerStatusRunning
 	q.worker, err = q.dbWorker.UpdateWorker(q.worker)
+	q.workerMu.Unlock()
 	if err != nil {
 		log.Panicf("error updating worker status to running: %s", err.Error())
 	}
@@ -395,14 +398,17 @@ func (q *Queuer) Stop() error {
 
 	// Update worker status to stopped
 	var err error
+	q.workerMu.Lock()
 	q.worker.Status = model.WorkerStatusStopped
 	q.worker, err = q.dbWorker.UpdateWorker(q.worker)
+	workerRID := q.worker.RID
+	q.workerMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("error updating worker status to stopped: %v", err)
 	}
 
 	// Cancel all queued and running jobs
-	err = q.CancelAllJobsByWorker(q.worker.RID, 100)
+	err = q.CancelAllJobsByWorker(workerRID, 100)
 	if err != nil {
 		return fmt.Errorf("error cancelling all jobs by worker: %v", err)
 	}
@@ -552,13 +558,18 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 		masterSettings.MasterPollInterval,
 		func() {
 			q.log.Info("Polling master...")
-			master, err := q.dbMaster.UpdateMaster(q.worker, masterSettings)
+			q.workerMu.RLock()
+			worker := q.worker
+			workerRID := q.worker.RID
+			q.workerMu.RUnlock()
+
+			master, err := q.dbMaster.UpdateMaster(worker, masterSettings)
 			if err != nil {
 				q.log.Error("Error updating master", slog.String("error", err.Error()))
 			}
 
 			if master != nil {
-				q.log.Info("New master", slog.String("worker_id", q.worker.RID.String()))
+				q.log.Info("New master", slog.String("worker_id", workerRID.String()))
 				err := q.masterTicker(ctx, master, masterSettings)
 				if err != nil {
 					q.log.Error("Error starting master ticker", slog.String("error", err.Error()))
@@ -604,7 +615,11 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 	ticker, err := core.NewTicker(
 		masterSettings.MasterPollInterval,
 		func() {
-			_, err := q.dbMaster.UpdateMaster(q.worker, masterSettings)
+			q.workerMu.RLock()
+			worker := q.worker
+			q.workerMu.RUnlock()
+
+			_, err := q.dbMaster.UpdateMaster(worker, masterSettings)
 			if err != nil {
 				err := q.pollMasterTicker(ctx, masterSettings)
 				if err != nil {

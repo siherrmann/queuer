@@ -24,6 +24,8 @@ type WorkerDBHandlerFunctions interface {
 	SelectWorker(rid uuid.UUID) (*model.Worker, error)
 	SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error)
 	SelectAllWorkersBySearch(search string, lastID int, entries int) ([]*model.Worker, error)
+	// Connections
+	SelectAllConnections() ([]*model.Connection, error)
 }
 
 // WorkerDBHandler implements WorkerDBHandlerFunctions and holds the database connection.
@@ -231,7 +233,6 @@ func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 // If the worker is not found or an error occurs during the query, it returns an error.
 func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 	worker := &model.Worker{}
-
 	row := r.db.Instance.QueryRow(
 		`SELECT
 			id,
@@ -273,8 +274,6 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 // It returns a slice of worker records, ordered by creation date in descending order.
 // It returns workers that were created before the specified lastID, or the newest workers if lastID is 0.
 func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error) {
-	var workers []*model.Worker
-
 	rows, err := r.db.Instance.Query(
 		`SELECT
 			id,
@@ -309,6 +308,7 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 
 	defer rows.Close()
 
+	var workers []*model.Worker
 	for rows.Next() {
 		worker := &model.Worker{}
 		err := rows.Scan(
@@ -342,8 +342,6 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 // It returns a slice of worker records, ordered by creation date in descending order.
 // It returns workers that were created before the specified lastID, or the newest workers if last
 func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, entries int) ([]*model.Worker, error) {
-	var workers []*model.Worker
-
 	rows, err := r.db.Instance.Query(`
 		SELECT
 			id,
@@ -381,6 +379,7 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 
 	defer rows.Close()
 
+	var workers []*model.Worker
 	for rows.Next() {
 		worker := &model.Worker{}
 		err := rows.Scan(
@@ -406,4 +405,42 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 	}
 
 	return workers, nil
+}
+
+// SelectAllConnections retrieves all active connections from the database.
+// It returns a slice of Connection records.
+// If the query fails, it returns an error.
+func (r WorkerDBHandler) SelectAllConnections() ([]*model.Connection, error) {
+	rows, err := r.db.Instance.Query(
+		`SELECT pid, datname, usename, application_name, query, state
+        FROM pg_stat_activity
+        WHERE application_name='queuer'`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error querying active connections: %w", err)
+	}
+
+	defer rows.Close()
+
+	var connections []*model.Connection
+	for rows.Next() {
+		conn := &model.Connection{}
+		err := rows.Scan(
+			&conn.PID,
+			&conn.Database,
+			&conn.Username,
+			&conn.ApplicationName,
+			&conn.Query,
+			&conn.State,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning connection row: %w", err)
+		}
+		connections = append(connections, conn)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return connections, nil
 }

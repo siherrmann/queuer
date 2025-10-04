@@ -287,10 +287,14 @@ func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int
 
 // mergeOptions merges the worker options with optional job options.
 func (q *Queuer) mergeOptions(options *model.Options) *model.Options {
+	q.workerMu.RLock()
+	workerOptions := q.worker.Options
+	q.workerMu.RUnlock()
+
 	if options != nil && options.OnError == nil {
-		options.OnError = q.worker.Options
-	} else if options == nil && q.worker.Options != nil {
-		options = &model.Options{OnError: q.worker.Options}
+		options.OnError = workerOptions
+	} else if options == nil && workerOptions != nil {
+		options = &model.Options{OnError: workerOptions}
 	}
 
 	return options
@@ -329,7 +333,11 @@ func (q *Queuer) addJobTx(tx *sql.Tx, task interface{}, options *model.Options, 
 // runJobInitial is called to run the next job in the queue.
 func (q *Queuer) runJobInitial() error {
 	// Update job status to running with worker.
-	jobs, err := q.dbJob.UpdateJobsInitial(q.worker)
+	q.workerMu.RLock()
+	worker := q.worker
+	q.workerMu.RUnlock()
+
+	jobs, err := q.dbJob.UpdateJobsInitial(worker)
 	if err != nil {
 		return fmt.Errorf("error updating job status to running: %v", err)
 	} else if len(jobs) == 0 {
@@ -458,7 +466,11 @@ func (q *Queuer) failJob(job *model.Job, jobErr error) {
 }
 
 func (q *Queuer) endJob(job *model.Job) {
-	if job.WorkerID != q.worker.ID {
+	q.workerMu.RLock()
+	workerID := q.worker.ID
+	q.workerMu.RUnlock()
+
+	if job.WorkerID != workerID {
 		return
 	}
 

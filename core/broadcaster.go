@@ -1,8 +1,11 @@
 package core
 
+import "sync"
+
 type Broadcaster[T any] struct {
 	name      string
 	listeners map[chan T]bool
+	mutex     sync.RWMutex
 }
 
 // NewBroadcaster creates a new Broadcaster instance for the specified type T.
@@ -21,7 +24,9 @@ func NewBroadcaster[T any](name string) *Broadcaster[T] {
 // The channel is buffered (100) to allow for non-blocking sends.
 func (b *Broadcaster[T]) Subscribe() chan T {
 	ch := make(chan T, 100)
+	b.mutex.Lock()
 	b.listeners[ch] = true
+	b.mutex.Unlock()
 	return ch
 }
 
@@ -29,10 +34,12 @@ func (b *Broadcaster[T]) Subscribe() chan T {
 // It closes the channel to signal that no more messages will be sent.
 // If the channel does not exist in the listeners map, it does nothing.
 func (b *Broadcaster[T]) Unsubscribe(ch chan T) {
+	b.mutex.Lock()
 	if _, ok := b.listeners[ch]; ok {
 		delete(b.listeners, ch)
 		close(ch)
 	}
+	b.mutex.Unlock()
 }
 
 // Broadcast sends a message of type T to all subscribed listeners.
@@ -40,7 +47,16 @@ func (b *Broadcaster[T]) Unsubscribe(ch chan T) {
 // If a listener's channel is full, it skips sending the message to avoid blocking.
 // This is a non-blocking send operation.
 func (b *Broadcaster[T]) Broadcast(msg T) {
+	// Create a snapshot of listeners to avoid holding lock during send
+	b.mutex.RLock()
+	listeners := make([]chan T, 0, len(b.listeners))
 	for ch := range b.listeners {
+		listeners = append(listeners, ch)
+	}
+	b.mutex.RUnlock()
+
+	// Send to all listeners without holding the lock
+	for _, ch := range listeners {
 		select {
 		case ch <- msg:
 		default:
