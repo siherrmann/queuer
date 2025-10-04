@@ -54,17 +54,31 @@ type Queuer struct {
 }
 
 // NewQueuer creates a new Queuer instance with the given name and max concurrency.
-// It wraps NewQueuerWithDB to initialize the queuer without an external db config.
+// It wraps NewQueuerWithDB to initialize the queuer without an external db config and encryption key.
+// The encryption key for the database is taken from an environment variable (QUEUER_ENCRYPTION_KEY),
+// if not provided, it defaults to unencrypted results.
 func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queuer {
-	return NewQueuerWithDB(name, maxConcurrency, nil, options...)
+	return NewQueuerWithDB(name, maxConcurrency, os.Getenv("QUEUER_ENCRYPTION_KEY"), nil, options...)
 }
 
-// NewQueuer creates a new Queuer instance with the given name and max concurrency.
+// NewQueuerWithDB creates a new Queuer instance with the given name and max concurrency.
 // It initializes the database connection and worker.
 // If options are provided, it creates a worker with those options.
+//
+// It takes the db configuration from environment variables if dbConfig is nil.
+// - QUEUER_DB_HOST (required)
+// - QUEUER_DB_PORT (required)
+// - QUEUER_DB_DATABASE (required)
+// - QUEUER_DB_USERNAME (required)
+// - QUEUER_DB_PASSWORD (required)
+// - QUEUER_DB_SCHEMA (required)
+// - QUEUER_DB_SSLMODE (optional, defaults to "require")
+//
+// If the encryption key is empty, it defaults to unencrypted results.
+//
 // If any error occurs during initialization, it logs a panic error and exits the program.
 // It returns a pointer to the newly created Queuer instance.
-func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseConfiguration, options ...*model.OnError) *Queuer {
+func NewQueuerWithDB(name string, maxConcurrency int, encryptionKey string, dbConfig *helper.DatabaseConfiguration, options ...*model.OnError) *Queuer {
 	// Logger
 	opts := helper.PrettyHandlerOptions{
 		SlogOpts: slog.HandlerOptions{

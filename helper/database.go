@@ -56,6 +56,7 @@ type DatabaseConfiguration struct {
 	Username      string
 	Password      string
 	Schema        string
+	SSLMode       string
 	WithTableDrop bool
 }
 
@@ -70,6 +71,7 @@ func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 		Username:      os.Getenv("QUEUER_DB_USERNAME"),
 		Password:      os.Getenv("QUEUER_DB_PASSWORD"),
 		Schema:        os.Getenv("QUEUER_DB_SCHEMA"),
+		SSLMode:       os.Getenv("QUEUER_DB_SSLMODE"),
 		WithTableDrop: os.Getenv("QUEUER_DB_WITH_TABLE_DROP") == "true",
 	}
 	if len(strings.TrimSpace(config.Host)) == 0 || len(strings.TrimSpace(config.Port)) == 0 || len(strings.TrimSpace(config.Database)) == 0 || len(strings.TrimSpace(config.Username)) == 0 || len(strings.TrimSpace(config.Password)) == 0 || len(strings.TrimSpace(config.Schema)) == 0 {
@@ -79,7 +81,11 @@ func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 }
 
 func (d *DatabaseConfiguration) DatabaseConnectionString() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?application_name=queuer&sslmode=disable&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, d.Schema)
+	sslMode := "require"
+	if len(strings.TrimSpace(d.SSLMode)) > 0 {
+		sslMode = d.SSLMode
+	}
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?application_name=queuer&sslmode=%s&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, sslMode, d.Schema)
 }
 
 // Internal function for the service creation to connect to a database.
