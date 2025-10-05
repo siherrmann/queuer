@@ -22,7 +22,7 @@ func TestNotifyAndListen(t *testing.T) {
 	require.NotNil(t, listener, "expected non-nil listener")
 
 	data := "test data"
-	notifyChannel := make(chan string, 1) // Buffer the channel to prevent blocking
+	notifyChannel := make(chan string, 1)
 	ready := make(chan struct{})
 
 	for i := 0; i < 100; i++ {
