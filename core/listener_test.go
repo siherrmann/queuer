@@ -22,13 +22,13 @@ func TestNotifyAndListen(t *testing.T) {
 	require.NotNil(t, listener, "expected non-nil listener")
 
 	data := "test data"
-	notifyChannel := make(chan string)
+	notifyChannel := make(chan string, 1) // Buffer the channel to prevent blocking
 	ready := make(chan struct{})
 
 	for i := 0; i < 100; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			ready <- struct{}{}
-			listener.Listen(context.Background(), make(chan struct{}), func(data string) {
+			listener.Listen(ctx, ready, func(data string) {
 				notifyChannel <- data
 			})
 		}()
@@ -40,6 +40,9 @@ func TestNotifyAndListen(t *testing.T) {
 		// Check if the data was received
 		receivedData := <-notifyChannel
 		assert.Equal(t, data, receivedData, "expected to receive the same data")
+
+		cancel()
+		ready = make(chan struct{})
 	}
 }
 
