@@ -400,13 +400,13 @@ func (q *Queuer) Stop() error {
 	if q.jobDbListener != nil {
 		err := q.jobDbListener.Listener.Close()
 		if err != nil && !strings.Contains(err.Error(), "Listener has been closed") {
-			return fmt.Errorf("error closing job insert listener: %v", err)
+			return helper.NewError("closing job insert listener", err)
 		}
 	}
 	if q.jobArchiveDbListener != nil {
 		err := q.jobArchiveDbListener.Listener.Close()
 		if err != nil && !strings.Contains(err.Error(), "Listener has been closed") {
-			return fmt.Errorf("error closing job archive listener: %v", err)
+			return helper.NewError("closing job archive listener", err)
 		}
 	}
 
@@ -418,13 +418,13 @@ func (q *Queuer) Stop() error {
 	workerRID := q.worker.RID
 	q.workerMu.Unlock()
 	if err != nil {
-		return fmt.Errorf("error updating worker status to stopped: %v", err)
+		return helper.NewError("updating worker status to stopped", err)
 	}
 
 	// Cancel all queued and running jobs
 	err = q.CancelAllJobsByWorker(workerRID, 100)
 	if err != nil {
-		return fmt.Errorf("error cancelling all jobs by worker: %v", err)
+		return helper.NewError("cancelling all jobs by worker", err)
 	}
 
 	// Cancel the context to stop the queuer
@@ -560,7 +560,7 @@ func (q *Queuer) pollJobTicker(ctx context.Context) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("error creating ticker: %v", err)
+		return helper.NewError("creating ticker", err)
 	}
 
 	q.log.Info("Starting job poll ticker...")
@@ -597,7 +597,7 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("error creating ticker: %v", err)
+		return helper.NewError("creating ticker", err)
 	}
 
 	q.log.Info("Starting master poll ticker...")
@@ -608,23 +608,23 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 
 func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, masterSettings *model.MasterSettings) error {
 	if oldMaster == nil {
-		return fmt.Errorf("old master is nil")
+		return helper.NewError("old master check", fmt.Errorf("old master is nil"))
 	}
 
 	if oldMaster.Settings.RetentionArchive == 0 {
 		err := q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
 		if err != nil {
-			return fmt.Errorf("error adding retention archive: %v", err)
+			return helper.NewError("adding retention archive", err)
 		}
 	} else if oldMaster.Settings.RetentionArchive != masterSettings.RetentionArchive {
 		err := q.dbJob.RemoveRetentionArchive()
 		if err != nil {
-			return fmt.Errorf("error removing retention archive: %v", err)
+			return helper.NewError("removing retention archive", err)
 		}
 
 		err = q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
 		if err != nil {
-			return fmt.Errorf("error adding retention archive: %v", err)
+			return helper.NewError("adding retention archive", err)
 		}
 	}
 
@@ -650,7 +650,7 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("error creating ticker: %v", err)
+		return helper.NewError("creating ticker", err)
 	}
 
 	q.log.Info("Starting master poll ticker...")

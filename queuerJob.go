@@ -22,7 +22,7 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error adding job: %v", err)
+		return nil, helper.NewError("adding job", err)
 	}
 
 	q.log.Info("Job added", slog.String("job_rid", job.RID.String()))
@@ -39,7 +39,7 @@ func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{
 	job, err := q.addJobTx(tx, task, options, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job with transaction", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error adding job: %v", err)
+		return nil, helper.NewError("adding job", err)
 	}
 
 	q.log.Info("Job added", slog.String("job_rid", job.RID.String()))
@@ -84,7 +84,7 @@ func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, par
 	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job with options", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error adding job: %v", err)
+		return nil, helper.NewError("adding job", err)
 	}
 
 	q.log.Info("Job with options added", slog.String("job_rid", job.RID.String()))
@@ -101,7 +101,7 @@ func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task in
 	job, err := q.addJobTx(tx, task, options, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job with transaction and options", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error adding job: %v", err)
+		return nil, helper.NewError("adding job", err)
 	}
 
 	q.log.Info("Job with options added", slog.String("job_rid", job.RID.String()))
@@ -127,7 +127,7 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	err := q.dbJob.BatchInsertJobs(jobs)
 	if err != nil {
 		q.log.Error("Error inserting jobs", slog.String("error", err.Error()))
-		return fmt.Errorf("error inserting jobs: %v", err)
+		return helper.NewError("batch insert", err)
 	}
 
 	q.log.Info("Jobs added", slog.Int("count", len(jobs)))
@@ -193,12 +193,12 @@ func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
 func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJob(jobRid)
 	if err != nil {
-		return nil, fmt.Errorf("error selecting job with rid %v, but already cancelled: %v", jobRid, err)
+		return nil, helper.NewError("selecting job", err)
 	}
 
 	err = q.cancelJob(job)
 	if err != nil {
-		return nil, fmt.Errorf("error cancelling job with rid %v: %v", jobRid, err)
+		return nil, helper.NewError("cancelling job", err)
 	}
 
 	return job, nil
@@ -210,13 +210,13 @@ func (q *Queuer) CancelJob(jobRid uuid.UUID) (*model.Job, error) {
 func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID, entries int) error {
 	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, 0, entries)
 	if err != nil {
-		return fmt.Errorf("error selecting jobs by worker RID %v: %v", workerRid, err)
+		return helper.NewError("selecting jobs", err)
 	}
 
 	for _, job := range jobs {
 		err := q.cancelJob(job)
 		if err != nil {
-			return fmt.Errorf("error cancelling job with rid %v: %v", job.RID, err)
+			return helper.NewError("cancelling job", err)
 		}
 	}
 	return nil
@@ -226,13 +226,13 @@ func (q *Queuer) CancelAllJobsByWorker(workerRid uuid.UUID, entries int) error {
 func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJobFromArchive(jobRid)
 	if err != nil {
-		return nil, fmt.Errorf("error selecting job from archive with rid %v: %v", jobRid, err)
+		return nil, helper.NewError("selecting job from archive", err)
 	}
 
 	// Readd the job to the queue
 	newJob, err := q.AddJobWithOptions(job.Options, job.TaskName, job.Parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error readding job: %v", err)
+		return nil, helper.NewError("readding job", err)
 	}
 
 	q.log.Info("Job readded", slog.String("job_rid", newJob.RID.String()))
@@ -244,7 +244,7 @@ func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) (*model.Job, error) {
 func (q *Queuer) GetJob(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJob(jobRid)
 	if err != nil {
-		return nil, fmt.Errorf("error selecting job with rid %v: %v", jobRid, err)
+		return nil, helper.NewError("selecting job", err)
 	}
 
 	return job, nil
@@ -254,7 +254,7 @@ func (q *Queuer) GetJob(jobRid uuid.UUID) (*model.Job, error) {
 func (q *Queuer) GetJobs(lastId int, entries int) ([]*model.Job, error) {
 	jobs, err := q.dbJob.SelectAllJobs(lastId, entries)
 	if err != nil {
-		return nil, fmt.Errorf("error selecting all jobs: %v", err)
+		return nil, helper.NewError("selecting all jobs", err)
 	}
 
 	return jobs, nil
@@ -264,7 +264,7 @@ func (q *Queuer) GetJobs(lastId int, entries int) ([]*model.Job, error) {
 func (q *Queuer) GetJobEnded(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJobFromArchive(jobRid)
 	if err != nil {
-		return nil, fmt.Errorf("error selecting ended job with rid %v: %v", jobRid, err)
+		return nil, helper.NewError("selecting ended job", err)
 	}
 
 	return job, nil
@@ -274,7 +274,7 @@ func (q *Queuer) GetJobEnded(jobRid uuid.UUID) (*model.Job, error) {
 func (q *Queuer) GetJobsEnded(lastId int, entries int) ([]*model.Job, error) {
 	jobs, err := q.dbJob.SelectAllJobsFromArchive(lastId, entries)
 	if err != nil {
-		return nil, fmt.Errorf("error selecting ended jobs: %v", err)
+		return nil, helper.NewError("selecting ended jobs", err)
 	}
 
 	return jobs, nil
@@ -284,7 +284,7 @@ func (q *Queuer) GetJobsEnded(lastId int, entries int) ([]*model.Job, error) {
 func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int) ([]*model.Job, error) {
 	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, lastId, entries)
 	if err != nil {
-		return nil, fmt.Errorf("error selecting jobs by worker RID %v: %v", workerRid, err)
+		return nil, helper.NewError("selecting jobs by worker RID", err)
 	}
 
 	return jobs, nil
@@ -346,7 +346,7 @@ func (q *Queuer) runJobInitial() error {
 
 	jobs, err := q.dbJob.UpdateJobsInitial(worker)
 	if err != nil {
-		return fmt.Errorf("error updating job status to running: %v", err)
+		return helper.NewError("updating jobs initial", err)
 	} else if len(jobs) == 0 {
 		return nil
 	}
@@ -359,7 +359,7 @@ func (q *Queuer) runJobInitial() error {
 				job,
 			)
 			if err != nil {
-				return fmt.Errorf("error creating scheduler: %v", err)
+				return helper.NewError("creating scheduler", err)
 			}
 
 			q.log.Info("Scheduling job", slog.String("job_rid", job.RID.String()), slog.String("schedule_start", job.Options.Schedule.Start.String()))
@@ -380,7 +380,7 @@ func (q *Queuer) waitForJob(job *model.Job) (results []interface{}, cancelled bo
 	task := q.tasks[job.TaskName]
 	runner, err := core.NewRunnerFromJob(task, job)
 	if err != nil {
-		return nil, false, fmt.Errorf("error creating runner: %v", err)
+		return nil, false, helper.NewError("creating runner", err)
 	}
 
 	q.activeRunners.Store(job.RID, runner)
@@ -415,19 +415,19 @@ func (q *Queuer) retryJob(job *model.Job, jobErr error) {
 			q.log.Debug("Trying/retrying job", slog.String("job_rid", job.RID.String()))
 			results, _, err = q.waitForJob(job)
 			if err != nil {
-				return fmt.Errorf("error retrying job: %v", err)
+				return helper.NewError("retrying job", err)
 			}
 			return nil
 		},
 		job.Options.OnError,
 	)
 	if err != nil {
-		jobErr = fmt.Errorf("error creating retryer: %v, original error: %v", err, jobErr)
+		jobErr = helper.NewError("creating retryer", fmt.Errorf("%v, job error: %v", err, jobErr))
 	}
 
 	err = retryer.Retry()
 	if err != nil {
-		q.failJob(job, fmt.Errorf("error retrying job: %v, original error: %v", err, jobErr))
+		q.failJob(job, helper.NewError("retrying job", fmt.Errorf("%v, job error: %v", err, jobErr)))
 	} else {
 		q.succeedJob(job, results)
 	}
