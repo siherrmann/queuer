@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"runtime"
+	"strings"
 )
 
 type Error struct {
@@ -12,7 +13,7 @@ type Error struct {
 }
 
 func (e Error) Error() string {
-	return e.Original.Error() + " | Trace: " + fmt.Sprint(e.Trace)
+	return e.Original.Error() + " | Trace: " + fmt.Sprint(strings.Join(e.Trace, ", "))
 }
 
 func NewError(trace string, original error) Error {
@@ -20,7 +21,7 @@ func NewError(trace string, original error) Error {
 	details := runtime.FuncForPC(pc)
 	if ok && details != nil {
 		functionName := path.Base(details.Name())
-		trace = functionName + " -> " + trace
+		trace = functionName + " - " + trace
 	}
 
 	if v, ok := original.(Error); ok {

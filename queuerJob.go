@@ -21,6 +21,7 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 	options := q.mergeOptions(nil)
 	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
+		q.log.Error("Error adding job", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
@@ -37,6 +38,7 @@ func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{
 	options := q.mergeOptions(nil)
 	job, err := q.addJobTx(tx, task, options, parameters...)
 	if err != nil {
+		q.log.Error("Error adding job with transaction", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
@@ -81,6 +83,7 @@ func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, par
 	q.mergeOptions(options)
 	job, err := q.addJob(task, options, parameters...)
 	if err != nil {
+		q.log.Error("Error adding job with options", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
@@ -97,6 +100,7 @@ func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task in
 	q.mergeOptions(options)
 	job, err := q.addJobTx(tx, task, options, parameters...)
 	if err != nil {
+		q.log.Error("Error adding job with transaction and options", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error adding job: %v", err)
 	}
 
@@ -122,6 +126,7 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 
 	err := q.dbJob.BatchInsertJobs(jobs)
 	if err != nil {
+		q.log.Error("Error inserting jobs", slog.String("error", err.Error()))
 		return fmt.Errorf("error inserting jobs: %v", err)
 	}
 
@@ -306,12 +311,12 @@ func (q *Queuer) mergeOptions(options *model.Options) *model.Options {
 func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
 	newJob, err := model.NewJob(task, options, parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error creating job: %v", err)
+		return nil, helper.NewError("creating job", err)
 	}
 
 	job, err := q.dbJob.InsertJob(newJob)
 	if err != nil {
-		return nil, fmt.Errorf("error inserting job: %v", err)
+		return nil, helper.NewError("inserting job", err)
 	}
 
 	return job, nil
@@ -321,12 +326,12 @@ func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...
 func (q *Queuer) addJobTx(tx *sql.Tx, task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
 	newJob, err := model.NewJob(task, options, parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error creating job: %v", err)
+		return nil, helper.NewError("creating job", err)
 	}
 
 	job, err := q.dbJob.InsertJobTx(tx, newJob)
 	if err != nil {
-		return nil, fmt.Errorf("error inserting job: %v", err)
+		return nil, helper.NewError("inserting job", err)
 	}
 
 	return job, nil
