@@ -70,24 +70,26 @@ You can find a full example (the same as above plus a more detailed example) in 
 
 ## NewQueuer
 
-`NewQueuer` is a convenience constructor that creates a new Queuer instance using default database configuration derived from environment variables. It acts as a wrapper around `NewQueuerWithDB`.
-`NewQueuerWithDB` is the primary constructor for creating a new Queuer instance. It allows for explicit database configuration and initializes all necessary components, including database handlers, internal event listeners, and the worker.
+`NewQueuer` is a convenience constructor that creates a new Queuer instance using default database configuration derived from environment variables. It acts as a wrapper around `NewQueuerWithDB`. The encryption key for the database is taken from the `QUEUER_ENCRYPTION_KEY` environment variable; if not provided, it defaults to unencrypted results.
+
+`NewQueuerWithDB` is the primary constructor for creating a new Queuer instance. It allows for explicit database configuration and encryption key specification, and initializes all necessary components, including database handlers, internal event listeners, and the worker.
 
 ```go
 func NewQueuer(name string, maxConcurrency int, options ...*model.OnError) *Queuer
 
-func NewQueuerWithDB(name string, maxConcurrency int, dbConfig *helper.DatabaseConfiguration, options ...*model.OnError) *Queuer
+func NewQueuerWithDB(name string, maxConcurrency int, encryptionKey string, dbConfig *helper.DatabaseConfiguration, options ...*model.OnError) *Queuer
 ```
 
 - `name`: A `string` identifier for this queuer instance.
 - `maxConcurrency`: An `int` specifying the maximum number of jobs this queuer can process concurrently.
+- `encryptionKey`: A `string` used for encrypting sensitive job data in the database. If empty, results will be stored unencrypted.
 - `dbConfig`: An optional `*helper.DatabaseConfiguration`. If nil, the configuration will be loaded from environment variables.
 - `options`: Optional `OnError` configurations to apply to the worker.
 
 This function performs the following setup:
 - Initializes a logger.
 - Sets up the database connection using the provided `dbConfig` or environment variables.
-- Creates `JobDBHandler` and `WorkerDBHandler` instances for database interactions.
+- Creates `JobDBHandler`, `WorkerDBHandler`, and `MasterDBHandler` instances for database interactions.
 - Initializes internal `core.Listener` instances for `jobInsert`, `jobUpdate`, and `jobDelete` events.
 - Creates and inserts a new `model.Worker` into the database based on the provided `name`, `maxConcurrency`, and `options`.
 - If any critical error occurs during this initialization (e.g., database connection failure, worker creation error), the function will log a panic error and exit the program. It returns a pointer to the newly configured `Queuer` instance.
@@ -264,6 +266,36 @@ type Schedule struct {
 
 ---
 
+# 🖥️ CLI Tool
+
+The queuer package includes a small command-line interface (CLI) tool for monitoring your job queues. The CLI provides easy access to view jobs, workers, connections, and archived data.
+
+## Installation
+
+The CLI tool can be built from the `cli` directory:
+
+```bash
+cd cli
+go build -o queuer .
+```
+
+## Available Commands
+
+The CLI tool supports the following commands:
+
+- **`connection`** - List all active database connections
+- **`job`** - List all jobs or get a specific job by RID
+- **`jobArchive`** - List all archived jobs or get an archived job by RID  
+- **`worker`** - List all workers or get a specific worker by RID
+
+## Usage
+
+You can use the `help` command to get details about the usage.
+All commands support the `-v, --verbose` flag for detailed output.
+The CLI tool uses the same database configuration environment variables as the main queuer package.
+
+---
+
 # ⭐ Features
 
 - Insert job batches using the `COPY FROM` postgres feature.
@@ -278,3 +310,5 @@ type Schedule struct {
 - Retry mechanism for ended jobs which creates a new job with the same parameters.
 - Custom NextInterval functions to address custom needs for scheduling (eg. scheduling with timezone offset)
 - Automatic master worker setting retention and other central settings. Automatic switch to new master if old worker stops.
+- Encryption support for sensitive job data stored in the database.
+- Command-line interface (CLI) tool for monitoring job queues.
