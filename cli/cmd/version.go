@@ -7,13 +7,19 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.Cmd.AddCommand(versionCmd)
 }
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print the version number of the Queuer",
-	Long:  `All software has versions. This is the Queuer's`,
+	Short: "Display the version information of the Queuer CLI",
+	Long: `Display detailed version information for the Queuer CLI tool.
+
+Use this command to verify your CLI installation and for troubleshooting
+or compatibility checks with the Queuer job queue system.
+
+Example:
+  queuer version`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Queuer v0.1.0 -- HEAD")
 	},

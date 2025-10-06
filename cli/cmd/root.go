@@ -6,30 +6,53 @@ import (
 	"os"
 
 	"github.com/siherrmann/queuer"
+	"github.com/siherrmann/queuer/cli/cmd/get"
+	"github.com/siherrmann/queuer/cli/cmd/list"
+	"github.com/siherrmann/queuer/cli/model"
 	"github.com/spf13/cobra"
 )
 
-var verbose bool
-var queuerInstance *queuer.Queuer
+type RootCommand struct {
+	Cmd  *cobra.Command
+	Opts *model.RootFlags
+}
 
-var rootCmd = &cobra.Command{
-	Use:   "queuer",
-	Short: "Queuer is a simple job queue system written in Go",
-	Long: `Queuer is a simple job queue system written in Go.
-	It provides a way to manage and process jobs asynchronously using a PostgreSQL database as the backend.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		logLevel := slog.LevelError
-		if verbose {
-			logLevel = slog.LevelInfo
-		}
-		queuerInstance = queuer.NewStaticQueuer(logLevel, nil)
+var rootFlags = &model.RootFlags{}
+var rootCmd = &RootCommand{
+	Cmd: &cobra.Command{
+		Use:   "queuer",
+		Short: "A PostgreSQL-based job queue system written in Go",
+		Long: `Queuer is a robust job queue system built on PostgreSQL with TimescaleDB support.
+It provides efficient job scheduling, processing, and monitoring capabilities for distributed systems.
+
+Features:
+- Job batching with PostgreSQL COPY FROM
+- Scheduled and periodic jobs with custom intervals
+- Panic recovery and comprehensive error handling
+- Multi-service deployment support
+- Real-time job monitoring and statistics
+- Encryption support for sensitive job data
+- Master worker coordination for centralized settings
+
+Use 'queuer list' to view resources or 'queuer get' to retrieve specific items by RID.`,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			logLevel := slog.LevelError
+			if rootFlags.Verbose {
+				logLevel = slog.LevelInfo
+			}
+			rootFlags.QueuerInstance = queuer.NewStaticQueuer(logLevel, nil)
+		},
 	},
 }
 
 func Execute() {
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	rootCmd.Opts = rootFlags
+	rootCmd.Cmd.PersistentFlags().BoolVarP(&rootFlags.Verbose, "verbose", "v", false, "Enable verbose output")
 
-	if err := rootCmd.Execute(); err != nil {
+	list.AddListCommand(rootCmd.Cmd, rootFlags)
+	get.AddGetCommand(rootCmd.Cmd, rootFlags)
+
+	if err := rootCmd.Cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
