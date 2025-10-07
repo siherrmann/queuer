@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/siherrmann/queuer"
+	"github.com/siherrmann/queuer/cli/cmd/cancel"
 	"github.com/siherrmann/queuer/cli/cmd/get"
 	"github.com/siherrmann/queuer/cli/cmd/list"
 	"github.com/siherrmann/queuer/cli/model"
@@ -30,11 +31,9 @@ Features:
 - Scheduled and periodic jobs with custom intervals
 - Panic recovery and comprehensive error handling
 - Multi-service deployment support
-- Real-time job monitoring and statistics
+- Real-time job monitoring through custom listen/notify channels
 - Encryption support for sensitive job data
-- Master worker coordination for centralized settings
-
-Use 'queuer list' to view resources or 'queuer get' to retrieve specific items by RID.`,
+- Master worker coordination for centralized settings`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			logLevel := slog.LevelError
 			if rootFlags.Verbose {
@@ -51,6 +50,7 @@ func Execute() {
 
 	list.AddListCommand(rootCmd.Cmd, rootFlags)
 	get.AddGetCommand(rootCmd.Cmd, rootFlags)
+	cancel.AddCancelCommand(rootCmd.Cmd, rootFlags)
 
 	if err := rootCmd.Cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
