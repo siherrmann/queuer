@@ -310,5 +310,6 @@ The CLI tool uses the same database configuration environment variables as the m
 - Retry mechanism for ended jobs which creates a new job with the same parameters.
 - Custom NextInterval functions to address custom needs for scheduling (eg. scheduling with timezone offset)
 - Automatic master worker setting retention and other central settings. Automatic switch to new master if old worker stops.
+- Heartbeat for all workers and automatic stale worker detection and cancelation by the master.
 - Encryption support for sensitive job data stored in the database.
 - Command-line interface (CLI) tool for monitoring job queues.
