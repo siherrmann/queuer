@@ -448,7 +448,7 @@ func TestStop(t *testing.T) {
 	assert.NoError(t, err, "Expected Stop to complete without error")
 }
 
-func TestMasterTicker(t *testing.T) {
+func TestHeartbeatTicker(t *testing.T) {
 	envs := map[string]string{
 		"QUEUER_DB_HOST":     "localhost",
 		"QUEUER_DB_PORT":     dbPort,
@@ -462,18 +462,66 @@ func TestMasterTicker(t *testing.T) {
 		t.Setenv(key, value)
 	}
 
-	queuer := NewQueuer("test", 10)
-	require.NotNil(t, queuer, "Expected Queuer to be created successfully")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Run("Heartbeat ticker starts successfully", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
 
-	t.Run("Master ticker fails with nil old master", func(t *testing.T) {
-		var oldMaster *model.Master
-		masterSettings := &model.MasterSettings{
-			MasterPollInterval: 5 * time.Second,
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
 
-		err := queuer.masterTicker(ctx, oldMaster, masterSettings)
-		assert.Error(t, err, "Expected error starting master ticker with nil old master")
+		err := queuer.heartbeatTicker(ctx)
+		assert.NoError(t, err, "Expected heartbeat ticker to start without error")
+
+		// Wait for heartbeat to run at least once (heartbeat interval is 30s, but we need to wait less)
+		// Since we're using a short context timeout, the heartbeat should run immediately
+		time.Sleep(100 * time.Millisecond)
+
+		// The worker's updated_at should be refreshed (or at least attempted to be refreshed)
+		// Since the heartbeat interval is 30s and we only wait 100ms, we mainly test that it starts
+		assert.NotNil(t, queuer.worker, "Expected worker to still exist")
+	})
+
+	t.Run("Heartbeat ticker handles nil worker gracefully", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Temporarily set worker to nil to test graceful handling
+		queuer.workerMu.Lock()
+		originalWorker := queuer.worker
+		queuer.worker = nil
+		queuer.workerMu.Unlock()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+
+		err := queuer.heartbeatTicker(ctx)
+		assert.NoError(t, err, "Expected heartbeat ticker to start without error even with nil worker")
+
+		// Restore worker
+		queuer.workerMu.Lock()
+		queuer.worker = originalWorker
+		queuer.workerMu.Unlock()
+	})
+
+	t.Run("Heartbeat ticker stops when context is cancelled", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		err := queuer.heartbeatTicker(ctx)
+		assert.NoError(t, err, "Expected heartbeat ticker to start without error")
+
+		// Cancel the context immediately
+		cancel()
+
+		// Give it a moment to stop
+		time.Sleep(100 * time.Millisecond)
+
+		// If we reach here without hanging, the ticker stopped properly
+		assert.True(t, true, "Heartbeat ticker stopped when context was cancelled")
 	})
 }

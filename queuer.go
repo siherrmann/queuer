@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -285,6 +284,12 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 	go func() {
 		q.listen(ctx, cancel)
 
+		err = q.heartbeatTicker(ctx)
+		if err != nil && ctx.Err() == nil {
+			q.log.Error("Error starting heartbeat ticker", slog.String("error", err.Error()))
+			return
+		}
+
 		err := q.pollJobTicker(ctx)
 		if err != nil && ctx.Err() == nil {
 			q.log.Error("Error starting job poll ticker", slog.String("error", err.Error()))
@@ -548,6 +553,44 @@ func (q *Queuer) listenWithoutRunning(ctx context.Context, cancel context.Cancel
 	<-readyJobArchive
 }
 
+func (q *Queuer) heartbeatTicker(ctx context.Context) error {
+	// Default heartbeat interval of 30 seconds
+	heartbeatInterval := 30 * time.Second
+
+	ticker, err := core.NewTicker(
+		heartbeatInterval,
+		func() {
+			q.log.Debug("Sending worker heartbeat...")
+			q.workerMu.RLock()
+			worker := q.worker
+			q.workerMu.RUnlock()
+
+			if worker == nil {
+				return
+			}
+
+			// Update worker to refresh the updated_at timestamp
+			updatedWorker, err := q.dbWorker.UpdateWorker(worker)
+			if err != nil {
+				q.log.Error("Error updating worker heartbeat", slog.String("error", err.Error()))
+				return
+			}
+
+			q.workerMu.Lock()
+			q.worker = updatedWorker
+			q.workerMu.Unlock()
+		},
+	)
+	if err != nil {
+		return helper.NewError("creating heartbeat ticker", err)
+	}
+
+	q.log.Info("Starting worker heartbeat ticker...")
+	go ticker.Go(ctx)
+
+	return nil
+}
+
 func (q *Queuer) pollJobTicker(ctx context.Context) error {
 	ticker, err := core.NewTicker(
 		q.JobPollInterval,
@@ -586,7 +629,7 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 			}
 
 			if master != nil {
-				q.log.Info("New master", slog.String("worker_id", workerRID.String()))
+				q.log.Debug("New master", slog.String("worker_id", workerRID.String()))
 				err := q.masterTicker(ctx, master, masterSettings)
 				if err != nil {
 					q.log.Error("Error starting master ticker", slog.String("error", err.Error()))
@@ -594,59 +637,6 @@ func (q *Queuer) pollMasterTicker(ctx context.Context, masterSettings *model.Mas
 					cancel()
 				}
 			}
-		},
-	)
-	if err != nil {
-		return helper.NewError("creating ticker", err)
-	}
-
-	q.log.Info("Starting master poll ticker...")
-	go ticker.Go(ctxInner)
-
-	return nil
-}
-
-func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, masterSettings *model.MasterSettings) error {
-	if oldMaster == nil {
-		return helper.NewError("old master check", fmt.Errorf("old master is nil"))
-	}
-
-	if oldMaster.Settings.RetentionArchive == 0 {
-		err := q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
-		if err != nil {
-			return helper.NewError("adding retention archive", err)
-		}
-	} else if oldMaster.Settings.RetentionArchive != masterSettings.RetentionArchive {
-		err := q.dbJob.RemoveRetentionArchive()
-		if err != nil {
-			return helper.NewError("removing retention archive", err)
-		}
-
-		err = q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
-		if err != nil {
-			return helper.NewError("adding retention archive", err)
-		}
-	}
-
-	ctxInner, cancel := context.WithCancel(ctx)
-	ticker, err := core.NewTicker(
-		masterSettings.MasterPollInterval,
-		func() {
-			q.workerMu.RLock()
-			worker := q.worker
-			q.workerMu.RUnlock()
-
-			_, err := q.dbMaster.UpdateMaster(worker, masterSettings)
-			if err != nil {
-				err := q.pollMasterTicker(ctx, masterSettings)
-				if err != nil {
-					q.log.Error("Error restarting poll master ticker", slog.String("error", err.Error()))
-				}
-				cancel()
-			}
-
-			// Here we can add any additional logic that needs to run periodically while the worker is master.
-			// This could include stale jobs, cleaning up the job database etc.
 		},
 	)
 	if err != nil {

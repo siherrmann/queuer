@@ -267,3 +267,49 @@ func TestWorkerSelectAllConnections(t *testing.T) {
 	assert.NoError(t, err, "Expected SelectAllConnections to not return an error")
 	assert.GreaterOrEqual(t, len(paginatedConnections), 1, "Expected SelectAllConnections to return 1 connection as we connect one in NewTestDatabase")
 }
+
+func TestUpdateStaleWorker(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
+	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
+
+	t.Run("Update running worker to stopped", func(t *testing.T) {
+		testWorker, err := model.NewWorker("stale-worker", 5)
+		require.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := workerDbHandler.InsertWorker(testWorker)
+		require.NoError(t, err, "Expected to insert worker")
+		assert.Equal(t, model.WorkerStatusReady, insertedWorker.Status, "Expected initial status to be READY")
+
+		err = workerDbHandler.UpdateStaleWorker(insertedWorker.RID)
+		assert.NoError(t, err, "Expected UpdateStaleWorker to complete successfully")
+
+		staleWorker, err := workerDbHandler.SelectWorker(insertedWorker.RID)
+		assert.NoError(t, err, "Expected to select worker after stale update")
+		assert.Equal(t, model.WorkerStatusStopped, staleWorker.Status, "Expected worker status to be STOPPED after stale update")
+
+		// Verify the updated_at timestamp was NOT changed (important for stale detection)
+		assert.Equal(t, insertedWorker.UpdatedAt.Format(time.RFC3339), staleWorker.UpdatedAt.Format(time.RFC3339),
+			"Expected updated_at timestamp to remain unchanged when marking worker as stale")
+	})
+
+	t.Run("Update non-existent worker", func(t *testing.T) {
+		testWorker, err := model.NewWorker("temp-worker", 3)
+		assert.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := workerDbHandler.InsertWorker(testWorker)
+		assert.NoError(t, err, "Expected to insert worker")
+
+		err = workerDbHandler.DeleteWorker(insertedWorker.RID)
+		assert.NoError(t, err, "Expected to delete worker")
+
+		err = workerDbHandler.UpdateStaleWorker(insertedWorker.RID)
+		assert.NoError(t, err, "Expected UpdateStaleWorker to handle non-existent worker gracefully")
+	})
+}

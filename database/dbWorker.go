@@ -20,6 +20,7 @@ type WorkerDBHandlerFunctions interface {
 	DropTable() error
 	InsertWorker(worker *model.Worker) (*model.Worker, error)
 	UpdateWorker(worker *model.Worker) (*model.Worker, error)
+	UpdateStaleWorker(rid uuid.UUID) error
 	DeleteWorker(rid uuid.UUID) error
 	SelectWorker(rid uuid.UUID) (*model.Worker, error)
 	SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error)
@@ -216,6 +217,21 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 	}
 
 	return updatedWorker, err
+}
+
+func (r WorkerDBHandler) UpdateStaleWorker(rid uuid.UUID) error {
+	_, err := r.db.Instance.Exec(
+		`UPDATE worker
+		 SET status = $1
+		 WHERE rid = $2`,
+		model.WorkerStatusStopped,
+		rid,
+	)
+	if err != nil {
+		return helper.NewError("update stale worker", err)
+	}
+
+	return nil
 }
 
 // DeleteWorker deletes a worker record from the database based on its RID.
