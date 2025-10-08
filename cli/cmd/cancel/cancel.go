@@ -39,7 +39,7 @@ Examples:
 		CancelFlags: cancelFlags,
 	}
 
-	cancelCmd.Cmd.Flags().StringVarP(&cancelCmd.CancelFlags.RID, "rid", "r", "", "Resource ID (RID) to cancel")
+	cancelCmd.Cmd.PersistentFlags().StringVarP(&cancelCmd.CancelFlags.RID, "rid", "r", "", "Resource ID (RID) to cancel")
 
 	AddJobCommand(cancelCmd.Cmd, cancelCmd.CancelFlags, cancelCmd.RootFlags)
 	AddWorkerCommand(cancelCmd.Cmd, cancelCmd.CancelFlags, cancelCmd.RootFlags)

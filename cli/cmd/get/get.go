@@ -38,7 +38,7 @@ Examples:
 		GetFlags:  getFlags,
 	}
 
-	getCmd.Cmd.Flags().StringVarP(&getCmd.GetFlags.RID, "rid", "r", "", "Resource ID (RID) to retrieve")
+	getCmd.Cmd.PersistentFlags().StringVarP(&getCmd.GetFlags.RID, "rid", "r", "", "Resource ID (RID) to retrieve")
 
 	AddWorkerCommand(getCmd.Cmd, getCmd.GetFlags, getCmd.RootFlags)
 	AddJobCommand(getCmd.Cmd, getCmd.GetFlags, getCmd.RootFlags)

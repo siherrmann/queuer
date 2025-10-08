@@ -39,8 +39,8 @@ Examples:
 	}
 
 	listCmd.RootFlags = rootFlags
-	listCmd.Cmd.Flags().IntVarP(&listCmd.ListFlags.LastId, "lastId", "i", 0, "Last job ID from previous call")
-	listCmd.Cmd.Flags().IntVarP(&listCmd.ListFlags.Limit, "limit", "l", 10, "Maximum number of jobs to return")
+	listCmd.Cmd.PersistentFlags().IntVarP(&listCmd.ListFlags.LastId, "lastId", "i", 0, "Last job ID from previous call")
+	listCmd.Cmd.PersistentFlags().IntVarP(&listCmd.ListFlags.Limit, "limit", "l", 10, "Maximum number of jobs to return")
 
 	AddWorkerCommand(listCmd.Cmd, listCmd.ListFlags, listCmd.RootFlags)
 	AddJobCommand(listCmd.Cmd, listCmd.ListFlags, listCmd.RootFlags)
