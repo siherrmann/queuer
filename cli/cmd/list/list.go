@@ -17,7 +17,6 @@ type ListFlags struct {
 }
 
 func AddListCommand(cmd *cobra.Command, rootFlags *model.RootFlags) {
-	listFlags := &ListFlags{}
 	listCmd := &ListCommand{
 		Cmd: &cobra.Command{
 			Use:   "list",
@@ -35,7 +34,7 @@ Examples:
   queuer list worker --limit 5
   queuer list job --lastId 100 --limit 20`,
 		},
-		ListFlags: listFlags,
+		ListFlags: &ListFlags{},
 	}
 
 	listCmd.RootFlags = rootFlags

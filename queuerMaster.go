@@ -56,6 +56,11 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 				q.log.Error("Error checking for stale workers", slog.String("error", err.Error()))
 			}
 
+			err = q.checkStaleJobs()
+			if err != nil {
+				q.log.Error("Error checking for stale jobs", slog.String("error", err.Error()))
+			}
+
 			// Here we can add any additional logic that needs to run periodically while the worker is master.
 			// This could include stale jobs, cleaning up the job database etc.
 		},
@@ -72,31 +77,26 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 
 func (q *Queuer) checkStaleWorkers() error {
 	staleThreshold := 2 * time.Minute
-	cutoffTime := time.Now().UTC().Add(-staleThreshold)
-
-	workers, err := q.dbWorker.SelectAllWorkers(0, 100)
+	staleCount, err := q.dbWorker.UpdateStaleWorkers(staleThreshold)
 	if err != nil {
-		return helper.NewError("fetching workers for stale check", err)
-	}
-
-	staleCount := 0
-	for _, worker := range workers {
-		if (worker.Status == model.WorkerStatusReady || worker.Status == model.WorkerStatusRunning) && worker.UpdatedAt.Before(cutoffTime) {
-			q.log.Warn("Found stale worker, marking as stopped", slog.String("worker_rid", worker.RID.String()), slog.String("last_update", worker.UpdatedAt.Format(time.RFC3339)))
-
-			// Update worker status to stopped
-			worker.Status = model.WorkerStatusStopped
-			err := q.dbWorker.UpdateStaleWorker(worker.RID)
-			if err != nil {
-				q.log.Error("Error updating stale worker status", slog.String("worker_rid", worker.RID.String()), slog.String("error", err.Error()))
-			} else {
-				staleCount++
-			}
-		}
+		return helper.NewError("updating stale workers", err)
 	}
 
 	if staleCount > 0 {
 		q.log.Info("Updated stale workers", slog.Int("count", staleCount))
+	}
+
+	return nil
+}
+
+func (q *Queuer) checkStaleJobs() error {
+	staleCount, err := q.dbJob.UpdateStaleJobs()
+	if err != nil {
+		return helper.NewError("updating stale jobs", err)
+	}
+
+	if staleCount > 0 {
+		q.log.Info("Updated stale jobs", slog.Int("count", staleCount))
 	}
 
 	return nil

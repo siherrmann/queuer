@@ -16,7 +16,6 @@ type CancelFlags struct {
 }
 
 func AddCancelCommand(cmd *cobra.Command, rootFlags *model.RootFlags) {
-	cancelFlags := &CancelFlags{}
 	cancelCmd := &CancelCommand{
 		Cmd: &cobra.Command{
 			Use:   "cancel",
@@ -36,7 +35,7 @@ Examples:
   queuer cancel worker --rid "123e4567-e89b-12d3-a456-426614174000"`,
 		},
 		RootFlags:   rootFlags,
-		CancelFlags: cancelFlags,
+		CancelFlags: &CancelFlags{},
 	}
 
 	cancelCmd.Cmd.PersistentFlags().StringVarP(&cancelCmd.CancelFlags.RID, "rid", "r", "", "Resource ID (RID) to cancel")

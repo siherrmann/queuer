@@ -134,3 +134,148 @@ func TestCheckStaleWorkers(t *testing.T) {
 		assert.Equal(t, model.WorkerStatusStopped, offlineWorker.Status, "Expected offline worker to remain STOPPED")
 	})
 }
+
+func TestCheckStaleJobs(t *testing.T) {
+	envs := map[string]string{
+		"QUEUER_DB_HOST":     "localhost",
+		"QUEUER_DB_PORT":     dbPort,
+		"QUEUER_DB_DATABASE": "database",
+		"QUEUER_DB_USERNAME": "user",
+		"QUEUER_DB_PASSWORD": "password",
+		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
+	}
+	for key, value := range envs {
+		t.Setenv(key, value)
+	}
+
+	t.Run("Check stale jobs with no jobs", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+
+		err := queuer.checkStaleJobs()
+		assert.NoError(t, err, "Expected checkStaleJobs to complete without error when no jobs exist")
+
+		err = queuer.Stop()
+		assert.NoError(t, err, "Expected Queuer to stop successfully")
+	})
+
+	t.Run("Check stale jobs cancels jobs with stopped workers", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Create a worker and set it to STOPPED
+		testWorker, err := model.NewWorker("stopped-worker", 3)
+		require.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := queuer.dbWorker.InsertWorker(testWorker)
+		require.NoError(t, err, "Expected to insert test worker")
+
+		insertedWorker.Status = model.WorkerStatusStopped
+		_, err = queuer.dbWorker.UpdateWorker(insertedWorker)
+		require.NoError(t, err, "Expected to update worker to STOPPED")
+
+		// Create a job assigned to the stopped worker
+		testJob, err := model.NewJob("test-task", nil)
+		require.NoError(t, err, "Expected to create test job")
+		testJob.WorkerRID = insertedWorker.RID
+
+		insertedJob, err := queuer.dbJob.InsertJob(testJob)
+		require.NoError(t, err, "Expected to insert test job")
+
+		// Update job to have worker assignment
+		_, err = queuer.DB.Exec(
+			"UPDATE job SET worker_rid = $1, status = $2 WHERE rid = $3",
+			insertedWorker.RID, model.JobStatusRunning, insertedJob.RID,
+		)
+		require.NoError(t, err, "Expected to update job worker assignment")
+
+		// Run the stale job check
+		err = queuer.checkStaleJobs()
+		assert.NoError(t, err, "Expected checkStaleJobs to complete without error")
+
+		// Verify job was cancelled
+		updatedJob, err := queuer.dbJob.SelectJob(insertedJob.RID)
+		require.NoError(t, err, "Expected to select job successfully")
+		assert.Equal(t, model.JobStatusCancelled, updatedJob.Status, "Expected job assigned to stopped worker to be cancelled")
+	})
+
+	t.Run("Check stale jobs ignores jobs with final statuses", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Create a worker and set it to STOPPED
+		testWorker, err := model.NewWorker("stopped-worker", 3)
+		require.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := queuer.dbWorker.InsertWorker(testWorker)
+		require.NoError(t, err, "Expected to insert test worker")
+
+		insertedWorker.Status = model.WorkerStatusStopped
+		_, err = queuer.dbWorker.UpdateWorker(insertedWorker)
+		require.NoError(t, err, "Expected to update worker to STOPPED")
+
+		// Create a job with final status assigned to the stopped worker
+		testJob, err := model.NewJob("test-task", nil)
+		require.NoError(t, err, "Expected to create test job")
+		testJob.WorkerRID = insertedWorker.RID
+
+		insertedJob, err := queuer.dbJob.InsertJob(testJob)
+		require.NoError(t, err, "Expected to insert test job")
+
+		// Update job to have final status
+		_, err = queuer.DB.Exec(
+			"UPDATE job SET worker_rid = $1, status = $2 WHERE rid = $3",
+			insertedWorker.RID, model.JobStatusSucceeded, insertedJob.RID,
+		)
+		require.NoError(t, err, "Expected to update job status to final")
+
+		// Run the stale job check
+		err = queuer.checkStaleJobs()
+		assert.NoError(t, err, "Expected checkStaleJobs to complete without error")
+
+		// Verify job status remained unchanged
+		updatedJob, err := queuer.dbJob.SelectJob(insertedJob.RID)
+		require.NoError(t, err, "Expected to select job successfully")
+		assert.Equal(t, model.JobStatusSucceeded, updatedJob.Status, "Expected job with final status to remain unchanged")
+	})
+
+	t.Run("Check stale jobs ignores jobs with ready workers", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Create a worker and keep it READY
+		testWorker, err := model.NewWorker("ready-worker", 3)
+		require.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := queuer.dbWorker.InsertWorker(testWorker)
+		require.NoError(t, err, "Expected to insert test worker")
+
+		// Create a job assigned to the ready worker
+		testJob, err := model.NewJob("test-task", nil)
+		require.NoError(t, err, "Expected to create test job")
+		testJob.WorkerRID = insertedWorker.RID
+
+		insertedJob, err := queuer.dbJob.InsertJob(testJob)
+		require.NoError(t, err, "Expected to insert test job")
+
+		// Update job to have worker assignment
+		_, err = queuer.DB.Exec(
+			"UPDATE job SET worker_rid = $1, status = $2 WHERE rid = $3",
+			insertedWorker.RID, model.JobStatusRunning, insertedJob.RID,
+		)
+		require.NoError(t, err, "Expected to update job worker assignment")
+
+		// Run the stale job check
+		err = queuer.checkStaleJobs()
+		assert.NoError(t, err, "Expected checkStaleJobs to complete without error")
+
+		// Verify job status remained unchanged
+		updatedJob, err := queuer.dbJob.SelectJob(insertedJob.RID)
+		require.NoError(t, err, "Expected to select job successfully")
+		assert.Equal(t, model.JobStatusRunning, updatedJob.Status, "Expected job assigned to ready worker to remain unchanged")
+	})
+}

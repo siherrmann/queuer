@@ -24,6 +24,7 @@ type JobDBHandlerFunctions interface {
 	BatchInsertJobs(jobs []*model.Job) error
 	UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error)
 	UpdateJobFinal(job *model.Job) (*model.Job, error)
+	UpdateStaleJobs() (int, error)
 	DeleteJob(rid uuid.UUID) error
 	SelectJob(rid uuid.UUID) (*model.Job, error)
 	SelectAllJobs(lastID int, entries int) ([]*model.Job, error)
@@ -521,6 +522,38 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 	}
 
 	return archivedJob, nil
+}
+
+// UpdateStaleJobs updates all jobs to CANCELLED status where the assigned worker is STOPPED
+// based on the provided threshold. It returns the number of jobs that were updated.
+// Jobs are considered stale if their assigned worker has STOPPED status and the worker's
+// updated_at timestamp is older than the threshold.
+func (r JobDBHandler) UpdateStaleJobs() (int, error) {
+	result, err := r.db.Instance.Exec(
+		`UPDATE job 
+		 SET status = $1 
+		 WHERE status NOT IN ($2, $3, $4)
+		   AND worker_rid IN (
+		       SELECT rid 
+		       FROM worker 
+		       WHERE status = $5
+		   )`,
+		model.JobStatusCancelled,
+		model.JobStatusSucceeded,
+		model.JobStatusCancelled,
+		model.JobStatusFailed,
+		model.WorkerStatusStopped,
+	)
+	if err != nil {
+		return 0, helper.NewError("update stale jobs", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, helper.NewError("get rows affected", err)
+	}
+
+	return int(rowsAffected), nil
 }
 
 // DeleteJob deletes a job record from the database based on its RID.

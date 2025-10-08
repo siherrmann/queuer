@@ -16,7 +16,6 @@ type GetFlags struct {
 }
 
 func AddGetCommand(cmd *cobra.Command, rootFlags *model.RootFlags) {
-	getFlags := &GetFlags{}
 	getCmd := &GetCommand{
 		Cmd: &cobra.Command{
 			Use:   "get",
@@ -35,7 +34,7 @@ Examples:
   queuer get job --rid "550e8400-e29b-41d4-a716-446655440000"`,
 		},
 		RootFlags: rootFlags,
-		GetFlags:  getFlags,
+		GetFlags:  &GetFlags{},
 	}
 
 	getCmd.Cmd.PersistentFlags().StringVarP(&getCmd.GetFlags.RID, "rid", "r", "", "Resource ID (RID) to retrieve")

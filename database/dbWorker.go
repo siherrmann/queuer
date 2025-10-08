@@ -20,7 +20,7 @@ type WorkerDBHandlerFunctions interface {
 	DropTable() error
 	InsertWorker(worker *model.Worker) (*model.Worker, error)
 	UpdateWorker(worker *model.Worker) (*model.Worker, error)
-	UpdateStaleWorker(rid uuid.UUID) error
+	UpdateStaleWorkers(staleThreshold time.Duration) (int, error)
 	DeleteWorker(rid uuid.UUID) error
 	SelectWorker(rid uuid.UUID) (*model.Worker, error)
 	SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error)
@@ -219,19 +219,33 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 	return updatedWorker, err
 }
 
-func (r WorkerDBHandler) UpdateStaleWorker(rid uuid.UUID) error {
-	_, err := r.db.Instance.Exec(
-		`UPDATE worker
-		 SET status = $1
-		 WHERE rid = $2`,
+// UpdateStaleWorkers updates all stale workers to STOPPED status based on the provided threshold.
+// It returns the number of workers that were updated.
+// Workers are considered stale if they have READY or RUNNING status and their updated_at
+// timestamp is older than the threshold.
+func (r WorkerDBHandler) UpdateStaleWorkers(staleThreshold time.Duration) (int, error) {
+	cutoffTime := time.Now().UTC().Add(-staleThreshold)
+
+	result, err := r.db.Instance.Exec(
+		`UPDATE worker 
+		 SET status = $1 
+		 WHERE (status = $2 OR status = $3) 
+		   AND updated_at < $4`,
 		model.WorkerStatusStopped,
-		rid,
+		model.WorkerStatusReady,
+		model.WorkerStatusRunning,
+		cutoffTime,
 	)
 	if err != nil {
-		return helper.NewError("update stale worker", err)
+		return 0, helper.NewError("update stale workers", err)
 	}
 
-	return nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, helper.NewError("get rows affected", err)
+	}
+
+	return int(rowsAffected), nil
 }
 
 // DeleteWorker deletes a worker record from the database based on its RID.

@@ -332,6 +332,116 @@ func TestJobUpdateJobFinalEncrypted(t *testing.T) {
 	assert.Equal(t, insertedJob.Results, archivedJob.Results, "Expected archived job results to match original results after decryption")
 }
 
+func TestUpdateStaleJobs(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	jobDbHandler, err := NewJobDBHandler(database, true)
+	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
+	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
+
+	t.Run("Cancel jobs with stopped workers", func(t *testing.T) {
+		// Create workers and set one to STOPPED
+		worker1, err := model.NewWorker("worker-1", 3)
+		require.NoError(t, err)
+		insertedWorker1, err := workerDbHandler.InsertWorker(worker1)
+		require.NoError(t, err)
+
+		worker2, err := model.NewWorker("worker-2", 3)
+		require.NoError(t, err)
+		insertedWorker2, err := workerDbHandler.InsertWorker(worker2)
+		require.NoError(t, err)
+
+		insertedWorker2.Status = model.WorkerStatusStopped
+		_, err = workerDbHandler.UpdateWorker(insertedWorker2)
+		require.NoError(t, err)
+
+		// Create jobs: QUEUED (stopped worker), SUCCEEDED (stopped worker), QUEUED (ready worker)
+		testCases := []struct {
+			status       string
+			workerRID    string
+			shouldCancel bool
+		}{
+			{model.JobStatusQueued, "stopped", true},     // Should be cancelled
+			{model.JobStatusSucceeded, "stopped", false}, // Should not be cancelled (final status)
+			{model.JobStatusQueued, "ready", false},      // Should not be cancelled (ready worker)
+		}
+
+		jobs := make([]*model.Job, len(testCases))
+		for i, tc := range testCases {
+			job, err := model.NewJob("test-task", nil)
+			require.NoError(t, err)
+
+			if tc.workerRID == "stopped" {
+				job.WorkerRID = insertedWorker2.RID
+			} else {
+				job.WorkerRID = insertedWorker1.RID
+			}
+
+			insertedJob, err := jobDbHandler.InsertJob(job)
+			require.NoError(t, err)
+
+			// Set job status and worker assignment
+			_, err = database.Instance.Exec(
+				"UPDATE job SET status = $1, worker_rid = $2 WHERE rid = $3",
+				tc.status, job.WorkerRID, insertedJob.RID,
+			)
+			require.NoError(t, err)
+			jobs[i] = insertedJob
+		}
+
+		// Test UpdateStaleJobs
+		updatedCount, err := jobDbHandler.UpdateStaleJobs()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, updatedCount, "Expected 1 job to be cancelled")
+
+		// Verify results
+		for i, tc := range testCases {
+			updatedJob, err := jobDbHandler.SelectJob(jobs[i].RID)
+			require.NoError(t, err)
+			if tc.shouldCancel {
+				assert.Equal(t, model.JobStatusCancelled, updatedJob.Status)
+			} else {
+				assert.Equal(t, tc.status, updatedJob.Status)
+			}
+		}
+
+		// Clean up
+		for _, job := range jobs {
+			jobDbHandler.DeleteJob(job.RID)
+		}
+		workerDbHandler.DeleteWorker(insertedWorker1.RID)
+		workerDbHandler.DeleteWorker(insertedWorker2.RID)
+	})
+
+	t.Run("No updates when no stopped workers", func(t *testing.T) {
+		worker, err := model.NewWorker("ready-worker", 3)
+		require.NoError(t, err)
+		insertedWorker, err := workerDbHandler.InsertWorker(worker)
+		require.NoError(t, err)
+
+		job, err := model.NewJob("test-task", nil)
+		require.NoError(t, err)
+		job.WorkerRID = insertedWorker.RID
+		insertedJob, err := jobDbHandler.InsertJob(job)
+		require.NoError(t, err)
+
+		updatedCount, err := jobDbHandler.UpdateStaleJobs()
+		assert.NoError(t, err)
+		assert.Equal(t, 0, updatedCount)
+
+		// Clean up
+		jobDbHandler.DeleteJob(insertedJob.RID)
+		workerDbHandler.DeleteWorker(insertedWorker.RID)
+	})
+}
+
 func TestJobDeleteJob(t *testing.T) {
 	helper.SetTestDatabaseConfigEnvs(t, dbPort)
 	dbConfig, err := helper.NewDatabaseConfiguration()

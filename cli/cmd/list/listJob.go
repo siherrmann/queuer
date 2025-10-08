@@ -51,10 +51,10 @@ func (r *JobCommand) RunJobCommand(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	header := []string{"ID", "RID", "Task name", "Status", "Last update"}
+	header := []string{"ID", "RID", "Task name", "Status", "Last update", "Worker RID"}
 	var rows [][]interface{}
 	for _, job := range jobs {
-		rows = append(rows, []interface{}{job.ID, job.RID.String(), job.TaskName, job.Status, job.UpdatedAt.Format("2006-01-02 15:04:05")})
+		rows = append(rows, []interface{}{job.ID, job.RID.String(), job.TaskName, job.Status, job.UpdatedAt.Format("2006-01-02 15:04:05"), job.WorkerRID.String()})
 	}
 	helper.PrintTable(header, rows)
 }
