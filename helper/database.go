@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -18,23 +19,16 @@ import (
 // Database represents a service that interacts with a database.
 type Database struct {
 	Name     string
-	Logger   *log.Logger
+	Logger   *slog.Logger
 	Instance *sql.DB
 }
 
-func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
-	logger := log.New(os.Stdout, "Database "+name+": ", log.Ltime)
-
+func NewDatabase(name string, dbConfig *DatabaseConfiguration, logger *slog.Logger) *Database {
 	if dbConfig != nil {
 		db := &Database{Name: name, Logger: logger}
 		db.ConnectToDatabase(dbConfig, logger)
 		if db.Instance == nil {
-			logger.Fatal("failed to connect to database")
-		}
-
-		err := db.AddNotifyFunction()
-		if err != nil {
-			logger.Panicf("failed to add notify function: %v", err)
+			panic("error connecting to database")
 		}
 
 		return db
@@ -47,8 +41,7 @@ func NewDatabase(name string, dbConfig *DatabaseConfiguration) *Database {
 	}
 }
 
-func NewDatabaseWithDB(name string, dbConnnection *sql.DB) *Database {
-	logger := log.New(os.Stdout, "Database "+name+": ", log.Ltime)
+func NewDatabaseWithDB(name string, dbConnnection *sql.DB, logger *slog.Logger) *Database {
 	return &Database{
 		Name:     name,
 		Logger:   logger,
@@ -63,6 +56,7 @@ type DatabaseConfiguration struct {
 	Username      string
 	Password      string
 	Schema        string
+	SSLMode       string
 	WithTableDrop bool
 }
 
@@ -77,6 +71,7 @@ func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 		Username:      os.Getenv("QUEUER_DB_USERNAME"),
 		Password:      os.Getenv("QUEUER_DB_PASSWORD"),
 		Schema:        os.Getenv("QUEUER_DB_SCHEMA"),
+		SSLMode:       os.Getenv("QUEUER_DB_SSLMODE"),
 		WithTableDrop: os.Getenv("QUEUER_DB_WITH_TABLE_DROP") == "true",
 	}
 	if len(strings.TrimSpace(config.Host)) == 0 || len(strings.TrimSpace(config.Port)) == 0 || len(strings.TrimSpace(config.Database)) == 0 || len(strings.TrimSpace(config.Username)) == 0 || len(strings.TrimSpace(config.Password)) == 0 || len(strings.TrimSpace(config.Schema)) == 0 {
@@ -86,15 +81,19 @@ func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 }
 
 func (d *DatabaseConfiguration) DatabaseConnectionString() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, d.Schema)
+	sslMode := "require"
+	if len(strings.TrimSpace(d.SSLMode)) > 0 {
+		sslMode = d.SSLMode
+	}
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?application_name=queuer&sslmode=%s&search_path=%s", d.Username, d.Password, d.Host, d.Port, d.Database, sslMode, d.Schema)
 }
 
 // Internal function for the service creation to connect to a database.
 // DatabaseConfiguration must contain uri, username and password.
 // It initializes the database connection and sets the Instance field of the Database struct.
-func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *log.Logger) {
+func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *slog.Logger) {
 	if len(strings.TrimSpace(dbConfig.Host)) == 0 || len(strings.TrimSpace(dbConfig.Port)) == 0 || len(strings.TrimSpace(dbConfig.Database)) == 0 || len(strings.TrimSpace(dbConfig.Username)) == 0 || len(strings.TrimSpace(dbConfig.Password)) == 0 || len(strings.TrimSpace(dbConfig.Schema)) == 0 {
-		logger.Fatalln("database configuration must contain uri, username and password.")
+		panic("database configuration must contain uri, username and password")
 	}
 
 	var connectOnce sync.Once
@@ -103,7 +102,7 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 	connectOnce.Do(func() {
 		dsn, err := pq.ParseURL(dbConfig.DatabaseConnectionString())
 		if err != nil {
-			logger.Fatalf("error parsing database connection string: %v", err)
+			log.Panicf("error parsing database connection string: %s", err.Error())
 		}
 
 		base, err := pq.NewConnector(dsn)
@@ -123,57 +122,17 @@ func (d *Database) ConnectToDatabase(dbConfig *DatabaseConfiguration, logger *lo
 			"CREATE EXTENSION IF NOT EXISTS pg_trgm;",
 		)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Error(err.Error())
 		}
 
 		pingErr := db.Ping()
 		if pingErr != nil {
-			logger.Fatal(pingErr)
+			log.Panicf("error connecting to database: %s", pingErr.Error())
 		}
-		logger.Println("Connected to db")
+		logger.Info("Connected to db")
 	})
 
 	d.Instance = db
-}
-
-// AddNotifyFunction adds a PostgreSQL function to the database that will be called on certain table operations.
-// It creates a function that raises a notification on the specified channel when a row is inserted,
-// updated, or deleted in the job or worker table.
-// The function uses the row_to_json function to convert the row data to JSON format.
-// It returns an error if the function creation fails.
-func (d *Database) AddNotifyFunction() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// RAISE NOTICE 'Trigger called on table: %, operation: %', TG_TABLE_NAME, TG_OP;
-	_, err := d.Instance.ExecContext(
-		ctx,
-		`CREATE OR REPLACE FUNCTION notify_event() RETURNS TRIGGER AS $$
-			DECLARE
-				data JSON;
-				channel TEXT;
-			BEGIN
-				IF (TG_TABLE_NAME = 'job') OR (TG_TABLE_NAME = 'worker') THEN
-					channel := TG_TABLE_NAME;
-				ELSE
-					channel := 'job_archive';
-				END IF;
-
-				IF (TG_OP = 'DELETE') THEN
-					data = row_to_json(OLD);
-				ELSE
-					data = row_to_json(NEW);
-				END IF;
-				PERFORM pg_notify(channel, data::text);
-				RETURN NEW;
-			END;
-		$$ LANGUAGE plpgsql;`,
-	)
-
-	if err != nil {
-		return fmt.Errorf("error creating notify function: %#v", err)
-	}
-	return nil
 }
 
 // CheckTableExistance checks if a table with the specified name exists in the database.

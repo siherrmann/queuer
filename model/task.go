@@ -24,7 +24,7 @@ type Task struct {
 func NewTask(task interface{}) (*Task, error) {
 	taskName, err := helper.GetTaskNameFromFunction(task)
 	if err != nil {
-		return nil, fmt.Errorf("error getting task name: %v", err)
+		return nil, helper.NewError("getting task name", err)
 	}
 
 	return NewTaskWithName(task, taskName)
@@ -32,12 +32,12 @@ func NewTask(task interface{}) (*Task, error) {
 
 func NewTaskWithName(task interface{}, taskName string) (*Task, error) {
 	if len(taskName) == 0 || len(taskName) > 100 {
-		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
+		return nil, helper.NewError("taskName check", fmt.Errorf("taskName must have a length between 1 and 100"))
 	}
 
 	err := helper.CheckValidTask(task)
 	if err != nil {
-		return nil, fmt.Errorf("task must be a function, got %s", reflect.TypeOf(task).Kind())
+		return nil, err
 	}
 
 	inputParameters := []reflect.Type{}

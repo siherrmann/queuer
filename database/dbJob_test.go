@@ -18,20 +18,29 @@ func TestJobNewJobDBHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create database configuration: %v", err)
 	}
-	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
-	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
-	require.NotNil(t, jobDbHandler, "Expected NewJobDBHandler to return a non-nil instance")
-	require.NotNil(t, jobDbHandler.db, "Expected NewJobDBHandler to have a non-nil database instance")
-	require.NotNil(t, jobDbHandler.db.Instance, "Expected NewJobDBHandler to have a non-nil database connection instance")
+	t.Run("Valid call NewJobDBHandler", func(t *testing.T) {
+		database := helper.NewTestDatabase(dbConfig)
 
-	exists, err := jobDbHandler.CheckTablesExistance()
-	assert.NoError(t, err)
-	assert.True(t, exists)
+		jobDbHandler, err := NewJobDBHandler(database, true)
+		assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+		require.NotNil(t, jobDbHandler, "Expected NewJobDBHandler to return a non-nil instance")
+		require.NotNil(t, jobDbHandler.db, "Expected NewJobDBHandler to have a non-nil database instance")
+		require.NotNil(t, jobDbHandler.db.Instance, "Expected NewJobDBHandler to have a non-nil database connection instance")
 
-	err = jobDbHandler.DropTables()
-	assert.NoError(t, err)
+		exists, err := jobDbHandler.CheckTablesExistance()
+		assert.NoError(t, err)
+		assert.True(t, exists)
+
+		err = jobDbHandler.DropTables()
+		assert.NoError(t, err)
+	})
+
+	t.Run("Invalid call NewJobDBHandler with nil database", func(t *testing.T) {
+		_, err := NewJobDBHandler(nil, true)
+		assert.Error(t, err, "Expected error when creating JobDBHandler with nil database")
+		assert.Contains(t, err.Error(), "database connection is nil", "Expected specific error message for nil database connection")
+	})
 }
 
 func TestJobCheckTableExistance(t *testing.T) {
@@ -145,17 +154,75 @@ func TestJobBatchInsertJobs(t *testing.T) {
 	jobDbHandler, err := NewJobDBHandler(database, true)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
-	jobCount := 5
-	jobs := []*model.Job{}
-	for i := 0; i < jobCount; i++ {
-		job, err := model.NewJob("TestTask", nil)
-		require.NoError(t, err, "Expected NewJob to not return an error")
-		require.NotNil(t, job, "Expected NewJob to return a non-nil job")
-		jobs = append(jobs, job)
-	}
+	t.Run("Successful batch insert jobs", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", nil)
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
 
-	err = jobDbHandler.BatchInsertJobs(jobs)
-	assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
+
+	t.Run("Successful batch insert jobs with error options", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", &model.Options{
+				OnError: &model.OnError{
+					Timeout:      0.1,
+					RetryDelay:   1,
+					RetryBackoff: model.RETRY_BACKOFF_EXPONENTIAL,
+					MaxRetries:   3,
+				},
+			})
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
+
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
+
+	t.Run("Successful batch insert jobs with schedule options", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", &model.Options{
+				Schedule: &model.Schedule{
+					Start:    time.Now().Add(time.Second * 10),
+					Interval: time.Second * 5,
+					MaxCount: 10,
+				},
+			})
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
+
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
+
+	t.Run("Successful batch insert jobs with parameters", func(t *testing.T) {
+		jobCount := 5
+		jobs := []*model.Job{}
+		for i := 0; i < jobCount; i++ {
+			job, err := model.NewJob("TestTask", nil)
+			job.Parameters = []interface{}{i, fmt.Sprintf("param-%d", i)}
+			require.NoError(t, err, "Expected NewJob to not return an error")
+			require.NotNil(t, job, "Expected NewJob to return a non-nil job")
+			jobs = append(jobs, job)
+		}
+
+		err = jobDbHandler.BatchInsertJobs(jobs)
+		assert.NoError(t, err, "Expected BatchInsertJobs to not return an error")
+	})
 }
 
 func TestJobUpdateJobsInitial(t *testing.T) {
@@ -263,6 +330,116 @@ func TestJobUpdateJobFinalEncrypted(t *testing.T) {
 	assert.Equal(t, insertedJob.RID, archivedJob.RID, "Expected archived job RID to match inserted job RID")
 	assert.Equal(t, model.JobStatusSucceeded, archivedJob.Status, "Expected archived job status to be SUCCEEDED")
 	assert.Equal(t, insertedJob.Results, archivedJob.Results, "Expected archived job results to match original results after decryption")
+}
+
+func TestUpdateStaleJobs(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	jobDbHandler, err := NewJobDBHandler(database, true)
+	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
+
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
+	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
+
+	t.Run("Cancel jobs with stopped workers", func(t *testing.T) {
+		// Create workers and set one to STOPPED
+		worker1, err := model.NewWorker("worker-1", 3)
+		require.NoError(t, err)
+		insertedWorker1, err := workerDbHandler.InsertWorker(worker1)
+		require.NoError(t, err)
+
+		worker2, err := model.NewWorker("worker-2", 3)
+		require.NoError(t, err)
+		insertedWorker2, err := workerDbHandler.InsertWorker(worker2)
+		require.NoError(t, err)
+
+		insertedWorker2.Status = model.WorkerStatusStopped
+		_, err = workerDbHandler.UpdateWorker(insertedWorker2)
+		require.NoError(t, err)
+
+		// Create jobs: QUEUED (stopped worker), SUCCEEDED (stopped worker), QUEUED (ready worker)
+		testCases := []struct {
+			status       string
+			workerRID    string
+			shouldCancel bool
+		}{
+			{model.JobStatusQueued, "stopped", true},     // Should be cancelled
+			{model.JobStatusSucceeded, "stopped", false}, // Should not be cancelled (final status)
+			{model.JobStatusQueued, "ready", false},      // Should not be cancelled (ready worker)
+		}
+
+		jobs := make([]*model.Job, len(testCases))
+		for i, tc := range testCases {
+			job, err := model.NewJob("test-task", nil)
+			require.NoError(t, err)
+
+			if tc.workerRID == "stopped" {
+				job.WorkerRID = insertedWorker2.RID
+			} else {
+				job.WorkerRID = insertedWorker1.RID
+			}
+
+			insertedJob, err := jobDbHandler.InsertJob(job)
+			require.NoError(t, err)
+
+			// Set job status and worker assignment
+			_, err = database.Instance.Exec(
+				"UPDATE job SET status = $1, worker_rid = $2 WHERE rid = $3",
+				tc.status, job.WorkerRID, insertedJob.RID,
+			)
+			require.NoError(t, err)
+			jobs[i] = insertedJob
+		}
+
+		// Test UpdateStaleJobs
+		updatedCount, err := jobDbHandler.UpdateStaleJobs()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, updatedCount, "Expected 1 job to be cancelled")
+
+		// Verify results
+		for i, tc := range testCases {
+			updatedJob, err := jobDbHandler.SelectJob(jobs[i].RID)
+			require.NoError(t, err)
+			if tc.shouldCancel {
+				assert.Equal(t, model.JobStatusCancelled, updatedJob.Status)
+			} else {
+				assert.Equal(t, tc.status, updatedJob.Status)
+			}
+		}
+
+		// Clean up
+		for _, job := range jobs {
+			jobDbHandler.DeleteJob(job.RID)
+		}
+		workerDbHandler.DeleteWorker(insertedWorker1.RID)
+		workerDbHandler.DeleteWorker(insertedWorker2.RID)
+	})
+
+	t.Run("No updates when no stopped workers", func(t *testing.T) {
+		worker, err := model.NewWorker("ready-worker", 3)
+		require.NoError(t, err)
+		insertedWorker, err := workerDbHandler.InsertWorker(worker)
+		require.NoError(t, err)
+
+		job, err := model.NewJob("test-task", nil)
+		require.NoError(t, err)
+		job.WorkerRID = insertedWorker.RID
+		insertedJob, err := jobDbHandler.InsertJob(job)
+		require.NoError(t, err)
+
+		updatedCount, err := jobDbHandler.UpdateStaleJobs()
+		assert.NoError(t, err)
+		assert.Equal(t, 0, updatedCount)
+
+		// Clean up
+		jobDbHandler.DeleteJob(insertedJob.RID)
+		workerDbHandler.DeleteWorker(insertedWorker.RID)
+	})
 }
 
 func TestJobDeleteJob(t *testing.T) {

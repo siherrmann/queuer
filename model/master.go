@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/helper"
 )
 
 type Master struct {
@@ -47,7 +48,7 @@ func (r *MasterSettings) Unmarshal(value interface{}) error {
 	} else {
 		b, ok := value.([]byte)
 		if !ok {
-			return errors.New("type assertion to []byte failed")
+			return helper.NewError("byte assertion", errors.New("type assertion to []byte failed"))
 		}
 		return json.Unmarshal(b, r)
 	}

@@ -29,7 +29,7 @@ type MasterDBHandler struct {
 // It initializes the database connection and creates the master table if it does not exist.
 func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*MasterDBHandler, error) {
 	if dbConnection == nil {
-		return nil, fmt.Errorf("database connection is nil")
+		return nil, helper.NewError("check", fmt.Errorf("database connection is nil"))
 	}
 
 	masterDbHandler := &MasterDBHandler{
@@ -39,13 +39,13 @@ func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Mas
 	if withTableDrop {
 		err := masterDbHandler.DropTable()
 		if err != nil {
-			return nil, fmt.Errorf("error dropping master table: %w", err)
+			return nil, helper.NewError("drop master table", err)
 		}
 	}
 
 	err := masterDbHandler.CreateTable()
 	if err != nil {
-		return nil, fmt.Errorf("error creating mater table: %#v", err)
+		return nil, helper.NewError("create master table", err)
 	}
 
 	return masterDbHandler, nil
@@ -56,12 +56,12 @@ func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Mas
 func (r MasterDBHandler) CheckTableExistance() (bool, error) {
 	masterTableExists, err := r.db.CheckTableExistance("master")
 	if err != nil {
-		return false, fmt.Errorf("error checking master table existence: %w", err)
+		return false, helper.NewError("master table", err)
 	}
-	return masterTableExists, err
+	return masterTableExists, nil
 }
 
-// CreateTable creates the 'mater' and 'mater_archive' tables in the database.
+// CreateTable creates the 'master' and 'master_archive' tables in the database.
 // If the tables already exist, it does not create them again.
 // It also creates a trigger for notifying events on the table and all necessary indexes.
 func (r MasterDBHandler) CreateTable() error {
@@ -92,11 +92,12 @@ func (r MasterDBHandler) CreateTable() error {
 		log.Panicf("error inserting initial master entry: %#v", err)
 	}
 
-	r.db.Logger.Println("created table master")
+	r.db.Logger.Info("Checked/created table master")
+
 	return nil
 }
 
-// DropTables drops the 'mater' and 'mater_archive' tables from the database.
+// DropTables drops the 'master' and 'master_archive' tables from the database.
 func (r MasterDBHandler) DropTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -104,10 +105,11 @@ func (r MasterDBHandler) DropTable() error {
 	query := `DROP TABLE IF EXISTS master`
 	_, err := r.db.Instance.ExecContext(ctx, query)
 	if err != nil {
-		return fmt.Errorf("error dropping master table: %#v", err)
+		return helper.NewError("drop", err)
 	}
 
-	r.db.Logger.Printf("Dropped table master")
+	r.db.Logger.Info("Dropped table master")
+
 	return nil
 }
 
@@ -167,7 +169,7 @@ func (r MasterDBHandler) UpdateMaster(worker *model.Worker, settings *model.Mast
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("error scanning master for worker id %v: %w", worker.ID, err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return master, nil
@@ -197,7 +199,7 @@ func (r MasterDBHandler) SelectMaster() (*model.Master, error) {
 		&master.UpdatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error scanning master: %w", err)
+		return nil, helper.NewError("scan", err)
 	}
 
 	return master, nil

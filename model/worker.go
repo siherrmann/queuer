@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/helper"
 )
 
 const (
@@ -45,11 +46,11 @@ type Worker struct {
 // It returns a pointer to the new Worker instance or an error if something is invalid.
 func NewWorker(name string, maxConcurrency int) (*Worker, error) {
 	if len(name) == 0 || len(name) > 100 {
-		return nil, fmt.Errorf("name must have a length between 1 and 100")
+		return nil, helper.NewError("name check", fmt.Errorf("name must have a length between 1 and 100"))
 	}
 
 	if maxConcurrency < 1 || maxConcurrency > 100 {
-		return nil, fmt.Errorf("maxConcurrency must be between 1 and 100")
+		return nil, helper.NewError("maxConcurrency check", fmt.Errorf("maxConcurrency must be between 1 and 100"))
 	}
 
 	return &Worker{
@@ -64,16 +65,16 @@ func NewWorker(name string, maxConcurrency int) (*Worker, error) {
 // It returns a pointer to the new Worker instance or an error if something is invalid.
 func NewWorkerWithOptions(name string, maxConcurrency int, options *OnError) (*Worker, error) {
 	if len(name) == 0 || len(name) > 100 {
-		return nil, fmt.Errorf("name must have a length between 1 and 100")
+		return nil, helper.NewError("name check", fmt.Errorf("name must have a length between 1 and 100"))
 	}
 
 	if maxConcurrency < 1 || maxConcurrency > 1000 {
-		return nil, fmt.Errorf("maxConcurrency must be between 1 and 100")
+		return nil, helper.NewError("maxConcurrency check", fmt.Errorf("maxConcurrency must be between 1 and 1000"))
 	}
 
 	err := options.IsValid()
 	if err != nil {
-		return nil, fmt.Errorf("invalid options: %w", err)
+		return nil, helper.NewError("options check", err)
 	}
 
 	return &Worker{

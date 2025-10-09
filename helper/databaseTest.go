@@ -3,6 +3,7 @@ package helper
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"testing"
 	"time"
@@ -60,6 +61,7 @@ func NewTestDatabase(config *DatabaseConfiguration) *Database {
 	return NewDatabase(
 		"test_db",
 		config,
+		slog.Default(),
 	)
 }
 
@@ -73,5 +75,6 @@ func SetTestDatabaseConfigEnvs(t *testing.T, port string) {
 	t.Setenv("QUEUER_DB_USERNAME", dbUser)
 	t.Setenv("QUEUER_DB_PASSWORD", dbPwd)
 	t.Setenv("QUEUER_DB_SCHEMA", "public")
+	t.Setenv("QUEUER_DB_SSLMODE", "disable")
 	t.Setenv("QUEUER_DB_WITH_TABLE_DROP", "true")
 }
