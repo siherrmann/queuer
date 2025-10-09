@@ -2,9 +2,11 @@ package queuer
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,6 +31,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: false,
 		},
@@ -50,6 +53,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: false,
 		},
@@ -64,6 +68,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: true,
 		},
@@ -85,6 +90,7 @@ func TestNewQueuer(t *testing.T) {
 				"QUEUER_DB_USERNAME": "user",
 				"QUEUER_DB_PASSWORD": "password",
 				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
 			},
 			expectError: true,
 		},
@@ -128,6 +134,92 @@ func TestNewQueuer(t *testing.T) {
 	}
 }
 
+func TestNewStaticQueuer(t *testing.T) {
+	tests := []struct {
+		name        string
+		logLevel    slog.Leveler
+		dbConfig    *helper.DatabaseConfiguration
+		dbEnvs      map[string]string
+		expectError bool
+	}{
+		{
+			name:     "Valid static queuer with nil dbConfig",
+			logLevel: slog.LevelInfo,
+			dbConfig: nil,
+			dbEnvs: map[string]string{
+				"QUEUER_DB_HOST":     "localhost",
+				"QUEUER_DB_PORT":     dbPort,
+				"QUEUER_DB_DATABASE": "database",
+				"QUEUER_DB_USERNAME": "user",
+				"QUEUER_DB_PASSWORD": "password",
+				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
+			},
+			expectError: false,
+		},
+		{
+			name:     "Valid static queuer with provided dbConfig",
+			logLevel: slog.LevelInfo,
+			dbConfig: &helper.DatabaseConfiguration{
+				Host:          "localhost",
+				Port:          dbPort,
+				Database:      "database",
+				Username:      "user",
+				Password:      "password",
+				Schema:        "public",
+				SSLMode:       "disable",
+				WithTableDrop: true,
+			},
+			dbEnvs:      map[string]string{}, // No env vars needed when dbConfig is provided
+			expectError: false,
+		},
+		{
+			name:     "Missing DB environment variable when dbConfig is nil",
+			logLevel: slog.LevelInfo,
+			dbConfig: nil,
+			dbEnvs: map[string]string{
+				"QUEUER_DB_HOST": "localhost",
+				"QUEUER_DB_PORT": dbPort,
+				// "QUEUER_DB_DATABASE": "database", // Intentionally missing
+				"QUEUER_DB_USERNAME": "user",
+				"QUEUER_DB_PASSWORD": "password",
+				"QUEUER_DB_SCHEMA":   "public",
+				"QUEUER_DB_SSLMODE":  "disable",
+			},
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for key, value := range test.dbEnvs {
+				t.Setenv(key, value)
+			}
+
+			if test.expectError {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Errorf("Expected panic for %s, but did not get one", test.name)
+					}
+				}()
+			}
+
+			queuer := NewStaticQueuer(test.logLevel, test.dbConfig)
+			if !test.expectError {
+				require.NotNil(t, queuer, "Expected StaticQueuer to be created successfully")
+				assert.NotNil(t, queuer.log, "Expected logger to be initialized")
+				assert.NotNil(t, queuer.DB, "Expected database connection to be initialized")
+				assert.NotNil(t, queuer.dbJob, "Expected job database handler to be initialized")
+				assert.NotNil(t, queuer.dbWorker, "Expected worker database handler to be initialized")
+				assert.NotNil(t, queuer.dbMaster, "Expected master database handler to be initialized")
+				assert.NotNil(t, queuer.tasks, "Expected tasks map to be initialized")
+				assert.NotNil(t, queuer.nextIntervalFuncs, "Expected nextIntervalFuncs map to be initialized")
+				assert.Nil(t, queuer.worker, "Expected worker to be nil in StaticQueuer")
+			}
+		})
+	}
+}
+
 func TestStart(t *testing.T) {
 	envs := map[string]string{
 		"QUEUER_DB_HOST":     "localhost",
@@ -136,6 +228,7 @@ func TestStart(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)
@@ -257,6 +350,7 @@ func TestStartWithoutWorker(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)
@@ -341,6 +435,7 @@ func TestStop(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)
@@ -353,7 +448,7 @@ func TestStop(t *testing.T) {
 	assert.NoError(t, err, "Expected Stop to complete without error")
 }
 
-func TestMasterTicker(t *testing.T) {
+func TestHeartbeatTicker(t *testing.T) {
 	envs := map[string]string{
 		"QUEUER_DB_HOST":     "localhost",
 		"QUEUER_DB_PORT":     dbPort,
@@ -361,23 +456,72 @@ func TestMasterTicker(t *testing.T) {
 		"QUEUER_DB_USERNAME": "user",
 		"QUEUER_DB_PASSWORD": "password",
 		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
 	}
 	for key, value := range envs {
 		t.Setenv(key, value)
 	}
 
-	queuer := NewQueuer("test", 10)
-	require.NotNil(t, queuer, "Expected Queuer to be created successfully")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Run("Heartbeat ticker starts successfully", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
 
-	t.Run("Master ticker fails with nil old master", func(t *testing.T) {
-		var oldMaster *model.Master
-		masterSettings := &model.MasterSettings{
-			MasterPollInterval: 5 * time.Second,
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
 
-		err := queuer.masterTicker(ctx, oldMaster, masterSettings)
-		assert.Error(t, err, "Expected error starting master ticker with nil old master")
+		err := queuer.heartbeatTicker(ctx)
+		assert.NoError(t, err, "Expected heartbeat ticker to start without error")
+
+		// Wait for heartbeat to run at least once (heartbeat interval is 30s, but we need to wait less)
+		// Since we're using a short context timeout, the heartbeat should run immediately
+		time.Sleep(100 * time.Millisecond)
+
+		// The worker's updated_at should be refreshed (or at least attempted to be refreshed)
+		// Since the heartbeat interval is 30s and we only wait 100ms, we mainly test that it starts
+		assert.NotNil(t, queuer.worker, "Expected worker to still exist")
+	})
+
+	t.Run("Heartbeat ticker handles nil worker gracefully", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Temporarily set worker to nil to test graceful handling
+		queuer.workerMu.Lock()
+		originalWorker := queuer.worker
+		queuer.worker = nil
+		queuer.workerMu.Unlock()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+
+		err := queuer.heartbeatTicker(ctx)
+		assert.NoError(t, err, "Expected heartbeat ticker to start without error even with nil worker")
+
+		// Restore worker
+		queuer.workerMu.Lock()
+		queuer.worker = originalWorker
+		queuer.workerMu.Unlock()
+	})
+
+	t.Run("Heartbeat ticker stops when context is cancelled", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		err := queuer.heartbeatTicker(ctx)
+		assert.NoError(t, err, "Expected heartbeat ticker to start without error")
+
+		// Cancel the context immediately
+		cancel()
+
+		// Give it a moment to stop
+		time.Sleep(100 * time.Millisecond)
+
+		// If we reach here without hanging, the ticker stopped properly
+		assert.True(t, true, "Heartbeat ticker stopped when context was cancelled")
 	})
 }

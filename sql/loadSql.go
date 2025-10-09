@@ -13,8 +13,12 @@ var jobSQL string
 //go:embed worker.sql
 var workerSQL string
 
+//go:embed notify.sql
+var notifySQL string
+
 var JobFunctions = []string{"update_job_initial", "update_job_final", "update_job_final_encrypted"}
 var WorkerFunctions = []string{"insert_worker", "update_worker", "delete_worker"}
+var NotifyFunctions = []string{"notify_event"}
 
 func LoadJobSql(db *sql.DB, force bool) error {
 	if !force {
@@ -70,6 +74,35 @@ func LoadWorkerSql(db *sql.DB, force bool) error {
 	}
 
 	fmt.Println("SQL worker functions loaded successfully")
+
+	return nil
+}
+
+func LoadNotifySql(db *sql.DB, force bool) error {
+	if !force {
+		exist, err := checkFunctions(db, NotifyFunctions)
+		if err != nil {
+			return fmt.Errorf("error checking existing notify functions: %w", err)
+		}
+		if exist {
+			return nil
+		}
+	}
+
+	_, err := db.Exec(notifySQL)
+	if err != nil {
+		return fmt.Errorf("error executing notify SQL: %w", err)
+	}
+
+	exist, err := checkFunctions(db, NotifyFunctions)
+	if err != nil {
+		return fmt.Errorf("error checking existing functions: %w", err)
+	}
+	if !exist {
+		return fmt.Errorf("not all required SQL functions were created")
+	}
+
+	log.Println("SQL notify functions loaded successfully")
 
 	return nil
 }

@@ -45,7 +45,7 @@ func (r *Parameters) Unmarshal(value interface{}) error {
 	} else {
 		b, ok := value.([]byte)
 		if !ok {
-			return errors.New("type assertion to []byte failed")
+			return helper.NewError("byte assertion", errors.New("type assertion to []byte failed"))
 		}
 		return json.Unmarshal(b, r)
 	}
@@ -109,23 +109,23 @@ type Job struct {
 func NewJob(task interface{}, options *Options, parameters ...interface{}) (*Job, error) {
 	taskName, err := helper.GetTaskNameFromInterface(task)
 	if err != nil {
-		return nil, fmt.Errorf("error getting task name: %v", err)
+		return nil, helper.NewError("getting task name", err)
 	}
 
 	if len(taskName) == 0 || len(taskName) > 100 {
-		return nil, fmt.Errorf("taskName must have a length between 1 and 100")
+		return nil, helper.NewError("taskName check", fmt.Errorf("taskName must have a length between 1 and 100"))
 	}
 
 	if options != nil && options.OnError != nil {
 		err := options.OnError.IsValid()
 		if err != nil {
-			return nil, fmt.Errorf("invalid OnError options: %v", err)
+			return nil, helper.NewError("OnError check", err)
 		}
 	}
 	if options != nil && options.Schedule != nil {
 		err := options.Schedule.IsValid()
 		if err != nil {
-			return nil, fmt.Errorf("invalid Schedule options: %v", err)
+			return nil, helper.NewError("Schedule check", err)
 		}
 	}
 
@@ -212,13 +212,13 @@ func (ct *DBTime) UnmarshalJSON(b []byte) error {
 
 	tSplit := strings.Split(s, ".")
 	if len(tSplit) != 2 {
-		return fmt.Errorf("invalid time format: %s", s)
+		return helper.NewError("splitting db time format", fmt.Errorf("invalid time format: %s", s))
 	}
 
 	var err error
 	ct.Time, err = time.Parse(dbTimeLayoutWithoutZeroes+strings.Repeat("0", len(tSplit[1])), s)
 	if err != nil {
-		return fmt.Errorf("error parsing time: %s, error: %w", s, err)
+		return helper.NewError("parsing db time", fmt.Errorf("error parsing time: %s, error: %w", s, err))
 	}
 
 	return nil

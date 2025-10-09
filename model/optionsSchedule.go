@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/siherrmann/queuer/helper"
 )
 
 // NextIntervalFunc defines a function type that calculates the next interval
@@ -36,13 +38,13 @@ type Schedule struct {
 // or NextInterval must be provided.
 func (c *Schedule) IsValid() error {
 	if c.Start.IsZero() {
-		return errors.New("start time cannot be zero")
+		return helper.NewError("zero Start check", errors.New("start time cannot be zero"))
 	}
 	if c.MaxCount < 0 {
-		return errors.New("maxCount must be greater than or equal to 0")
+		return helper.NewError("negative MaxCount check", errors.New("maxCount must be greater than or equal to 0"))
 	}
 	if c.MaxCount > 1 && c.Interval <= time.Duration(0) && c.NextInterval == "" {
-		return errors.New("interval must be greater than zero or nextInterval must be provided")
+		return helper.NewError("invalid interval check", errors.New("interval must be greater than zero or nextInterval must be provided"))
 	}
 	return nil
 }
@@ -65,7 +67,7 @@ func (r *Schedule) Unmarshal(value interface{}) error {
 	} else {
 		b, ok := value.([]byte)
 		if !ok {
-			return errors.New("type assertion to []byte failed")
+			return helper.NewError("byte assertion", errors.New("type assertion to []byte failed"))
 		}
 		return json.Unmarshal(b, r)
 	}

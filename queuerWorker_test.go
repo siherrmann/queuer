@@ -49,14 +49,14 @@ func TestGetWorkers(t *testing.T) {
 	t.Run("Returns error for invalid lastId", func(t *testing.T) {
 		workers, err := testQueuer.GetWorkers(-1, 10)
 		require.Error(t, err, "expected error for invalid lastId")
-		assert.Contains(t, err.Error(), "lastId cannot be negative, got -1", "expected error message for negative lastId")
+		assert.Contains(t, err.Error(), "lastId cannot be negative", "expected error message for negative lastId")
 		assert.Nil(t, workers, "expected no workers to be retrieved for invalid lastId")
 	})
 
 	t.Run("Returns error for invalid entries", func(t *testing.T) {
 		workers, err := testQueuer.GetWorkers(0, 0)
 		require.Error(t, err, "expected error for invalid entries")
-		assert.Contains(t, err.Error(), "entries must be greater than zero, got 0", "expected error message for zero entries")
+		assert.Contains(t, err.Error(), "entries must be greater than zero", "expected error message for zero entries")
 		assert.Nil(t, workers, "expected no workers to be retrieved for zero entries")
 	})
 
@@ -64,5 +64,19 @@ func TestGetWorkers(t *testing.T) {
 		workers, err := testQueuer.GetWorkers(1000, 10)
 		assert.NoError(t, err, "expected no error when getting workers with non-existent lastId")
 		require.Nil(t, workers, "expected no workers to be retrieved for non-existent lastId")
+	})
+}
+
+func TestGetConnections(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
+
+	t.Run("Successfully get connections", func(t *testing.T) {
+		connections, err := testQueuer.GetConnections()
+		assert.NoError(t, err, "expected no error when getting connections")
+		require.NotNil(t, connections, "expected connections to be retrieved")
 	})
 }

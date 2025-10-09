@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"reflect"
 	"time"
@@ -23,7 +22,7 @@ type Scheduler struct {
 func NewScheduler(startTime *time.Time, task interface{}, parameters ...interface{}) (*Scheduler, error) {
 	err := helper.CheckValidTaskWithParameters(task, parameters...)
 	if err != nil {
-		return nil, fmt.Errorf("error checking task: %v", err)
+		return nil, helper.NewError("checking task with parameters", err)
 	}
 
 	return &Scheduler{
