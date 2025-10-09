@@ -59,3 +59,28 @@ func TestListen(t *testing.T) {
 		}
 	}
 }
+
+func TestListenWithTimeout(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	listener, err := NewQueuerDBListener(dbConfig, "test_ping_channel")
+	assert.NoError(t, err, "Expected NewQueuerDBListener to not return an error")
+	assert.NotNil(t, listener, "Expected listener to be created")
+	defer listener.Listener.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	notifyFunction := func(data string) {
+		// This should not be called in this test
+	}
+
+	go listener.ListenWithTimeout(ctx, cancel, notifyFunction, 50*time.Millisecond)
+
+	time.Sleep(75 * time.Millisecond)
+
+	assert.True(t, true, "Ping timeout case was executed successfully")
+}

@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+
+	"github.com/siherrmann/queuer/helper"
 )
 
 type Options struct {
@@ -48,7 +50,7 @@ func (r *Options) Unmarshal(value interface{}) error {
 	} else {
 		b, ok := value.([]byte)
 		if !ok {
-			return errors.New("type assertion to []byte failed")
+			return helper.NewError("byte assertion", errors.New("type assertion to []byte failed"))
 		}
 		return json.Unmarshal(b, r)
 	}

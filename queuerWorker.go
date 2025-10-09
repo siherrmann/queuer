@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
 )
 
@@ -12,7 +13,7 @@ import (
 func (q *Queuer) GetWorker(workerRid uuid.UUID) (*model.Worker, error) {
 	worker, err := q.dbWorker.SelectWorker(workerRid)
 	if err != nil {
-		return nil, err
+		return nil, helper.NewError("selecting worker", err)
 	}
 
 	return worker, nil
@@ -22,16 +23,27 @@ func (q *Queuer) GetWorker(workerRid uuid.UUID) (*model.Worker, error) {
 // It returns a slice of workers and an error if any occurs.
 func (q *Queuer) GetWorkers(lastId int, entries int) ([]*model.Worker, error) {
 	if lastId < 0 {
-		return nil, fmt.Errorf("lastId cannot be negative, got %d", lastId)
+		return nil, helper.NewError("lastId check", fmt.Errorf("lastId cannot be negative"))
 	}
 	if entries <= 0 {
-		return nil, fmt.Errorf("entries must be greater than zero, got %d", entries)
+		return nil, helper.NewError("entries check", fmt.Errorf("entries must be greater than zero"))
 	}
 
 	workers, err := q.dbWorker.SelectAllWorkers(lastId, entries)
 	if err != nil {
-		return nil, err
+		return nil, helper.NewError("selecting workers", err)
 	}
 
 	return workers, nil
+}
+
+// GetAllConnections retrieves all connections from the database.
+// It returns a slice of connections and an error if any occurs.
+func (q *Queuer) GetConnections() ([]*model.Connection, error) {
+	connections, err := q.dbWorker.SelectAllConnections()
+	if err != nil {
+		return nil, helper.NewError("selecting connections", err)
+	}
+
+	return connections, nil
 }

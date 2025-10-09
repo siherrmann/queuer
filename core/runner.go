@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/siherrmann/queuer/helper"
@@ -13,6 +14,7 @@ import (
 
 type Runner struct {
 	cancel     context.CancelFunc
+	cancelMu   sync.RWMutex
 	Options    *model.Options
 	Task       interface{}
 	Parameters model.Parameters
@@ -27,7 +29,7 @@ type Runner struct {
 func NewRunner(options *model.Options, task interface{}, parameters ...interface{}) (*Runner, error) {
 	taskInputParameters, err := helper.GetInputParametersFromTask(task)
 	if err != nil {
-		return nil, fmt.Errorf("error getting input parameters of task: %v", err)
+		return nil, helper.NewError("getting task input parameters", err)
 	} else if len(taskInputParameters) != len(parameters) {
 		return nil, fmt.Errorf("task expects %d parameters, got %d", len(taskInputParameters), len(parameters))
 	}
@@ -82,14 +84,20 @@ func NewRunnerFromJob(task *model.Task, job *model.Job) (*Runner, error) {
 // If the context is done, it will cancel the task and return an error.
 // The context's timeout is set based on the OnError options if provided, otherwise it uses a cancelable context.
 func (r *Runner) Run(ctx context.Context) {
+	var cancel context.CancelFunc
 	if r.Options != nil && r.Options.OnError != nil && r.Options.OnError.Timeout > 0 {
-		ctx, r.cancel = context.WithTimeout(
+		ctx, cancel = context.WithTimeout(
 			ctx,
 			time.Duration(math.Round(r.Options.OnError.Timeout*1000))*time.Millisecond,
 		)
 	} else {
-		ctx, r.cancel = context.WithCancel(ctx)
+		ctx, cancel = context.WithCancel(ctx)
 	}
+
+	// Store the cancel function safely
+	r.cancelMu.Lock()
+	r.cancel = cancel
+	r.cancelMu.Unlock()
 
 	resultsChannel := make(chan []interface{}, 1)
 	errorChannel := make(chan error, 1)
@@ -111,7 +119,7 @@ func (r *Runner) Run(ctx context.Context) {
 
 		outputParameters, err := helper.GetOutputParametersFromTask(r.Task)
 		if err != nil {
-			errorChannel <- fmt.Errorf("error getting output parameters of task: %v", err)
+			errorChannel <- helper.NewError("getting task output parameters", err)
 			return
 		}
 
@@ -123,7 +131,7 @@ func (r *Runner) Run(ctx context.Context) {
 		}
 
 		if err != nil {
-			errorChannel <- fmt.Errorf("runner failed with error: %v", err)
+			errorChannel <- err
 		} else {
 			resultsChannel <- resultValues
 		}
@@ -157,7 +165,11 @@ func (r *Runner) Cancel(onCancel ...func()) {
 	}
 
 	// Cancel the context if it exists
-	if r.cancel != nil {
-		r.cancel()
+	r.cancelMu.RLock()
+	cancel := r.cancel
+	r.cancelMu.RUnlock()
+
+	if cancel != nil {
+		cancel()
 	}
 }

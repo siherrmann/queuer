@@ -37,7 +37,7 @@ func TestMasterNewMasterDBHandler(t *testing.T) {
 	t.Run("Invalid call NewMasterDBHandler with nil database", func(t *testing.T) {
 		_, err := NewMasterDBHandler(nil, true)
 		assert.Error(t, err, "Expected error when creating MasterDBHandler with nil database")
-		assert.Equal(t, "database connection is nil", err.Error(), "Expected specific error message for nil database connection")
+		assert.Contains(t, err.Error(), "database connection is nil", "Expected specific error message for nil database connection")
 	})
 }
 

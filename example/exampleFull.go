@@ -12,7 +12,7 @@ import (
 func ExampleFull() {
 	// Example usage of the Queuer package
 	q := queuer.NewQueuer(
-		"exampleWorker",
+		"exampleFullWorker",
 		3,
 		&model.OnError{
 			Timeout:      5,
@@ -31,7 +31,10 @@ func ExampleFull() {
 	// Start the queuer
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	q.Start(ctx, cancel)
+	q.Start(ctx, cancel, &model.MasterSettings{
+		MasterPollInterval: 10 * time.Second,
+		RetentionArchive:   24 * time.Hour,
+	})
 
 	// Example adding a single job to the queue
 	_, err := q.AddJob(ShortTask, 5, "12")

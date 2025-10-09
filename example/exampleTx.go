@@ -9,7 +9,7 @@ import (
 
 func ExampleTx() {
 	// Create a new queuer instance
-	q := queuer.NewQueuer("exampleWorker", 3)
+	q := queuer.NewQueuer("exampleTxWorker", 3)
 
 	// Add a short task to the queuer
 	q.AddTask(ShortTask)
@@ -28,7 +28,7 @@ func ExampleTx() {
 	// Do something with the transaction
 	// eg. `data, err := dataDB.InsertData(tx, "some data")`
 
-	_, err = q.AddJobTx(tx, ShortTask, 5, "12")
+	job, err := q.AddJobTx(tx, ShortTask, 5, "12")
 	if err != nil {
 		log.Printf("Error adding job: %v", err)
 		err = tx.Rollback()
@@ -36,4 +36,28 @@ func ExampleTx() {
 			log.Printf("Error rolling back transaction: %v", err)
 		}
 	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		err = tx.Rollback()
+		if err != nil {
+			log.Printf("Error rolling back transaction: %v", err)
+		}
+	}
+
+	// Wait for job to finish for stopping the queuer
+	job = q.WaitForJobFinished(job.RID)
+
+	log.Printf("Job finished with status: %s", job.Status)
+
+	// Stop the queuer gracefully
+	err = q.Stop()
+	if err != nil {
+		log.Printf("Error stopping queuer: %v", err)
+	}
+
+	// Wait for a while to let the jobs process
+	<-ctx.Done()
+	log.Println("Exiting...")
 }
