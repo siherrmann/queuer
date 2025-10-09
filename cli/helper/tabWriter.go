@@ -16,5 +16,8 @@ func PrintTabbedLines(lines []TabLine) {
 	for _, t := range lines {
 		fmt.Fprintf(w, "%s:\t%v\n", t.Key, t.Value)
 	}
-	w.Flush()
+	err := w.Flush()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error flushing tab writer: %v\n", err)
+	}
 }

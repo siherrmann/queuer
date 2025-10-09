@@ -37,7 +37,14 @@ func ExampleTx() {
 		}
 	}
 
-	tx.Commit()
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		err = tx.Rollback()
+		if err != nil {
+			log.Printf("Error rolling back transaction: %v", err)
+		}
+	}
 
 	// Wait for job to finish for stopping the queuer
 	job = q.WaitForJobFinished(job.RID)
