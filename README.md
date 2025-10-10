@@ -281,17 +281,68 @@ go build -o queuer .
 
 ## Available Commands
 
-The CLI tool supports the following commands:
+The CLI tool supports the following main commands:
 
-- **`connection`** - List all active database connections
-- **`job`** - List all jobs or get a specific job by RID
-- **`jobArchive`** - List all archived jobs or get an archived job by RID  
-- **`worker`** - List all workers or get a specific worker by RID
+### Core Commands
+
+- **`list`** - List queuer resources with pagination support
+  - `list job` - List active jobs (queued, scheduled, running)
+  - `list worker` - List registered workers and their status
+  - `list connection` - List active database connections
+  - `list jobArchive` - List completed/archived jobs
+
+- **`get`** - Get detailed information about a specific resource by RID
+  - `get job --rid <RID>` - Get details of a specific job
+  - `get worker --rid <RID>` - Get worker information and status
+  - `get jobArchive --rid <RID>` - Get archived job details
+
+- **`cancel`** - Cancel operations on specific resources by RID
+  - `cancel job --rid <RID>` - Cancel a running or queued job
+  - `cancel worker --rid <RID>` - Cancel/shutdown a worker
+
+### Utility Commands
+
+- **`version`** - Display version information of the Queuer CLI
+- **`completion`** - Generate autocompletion scripts for various shells
+- **`help`** - Display help information for any command
+
+### Global Flags
+
+- `-v, --verbose` - Enable verbose output for detailed information
+- `-h, --help` - Show help for any command
+
+### Pagination Support
+
+List commands support pagination through:
+- `--lastId <int>` - Last ID from previous call for pagination
+- `--limit <int>` - Maximum number of entries to return (default: 10)
+
+### Examples
+
+```bash
+# List workers with pagination
+queuer list worker --limit 5
+
+# Get specific job details
+queuer get job --rid "550e8400-e29b-41d4-a716-446655440000"
+
+# Cancel a running job
+queuer cancel job --rid "550e8400-e29b-41d4-a716-446655440000"
+
+# List jobs with pagination
+queuer list job --lastId 100 --limit 20
+```
 
 ## Usage
 
-You can use the `help` command to get details about the usage.
-All commands support the `-v, --verbose` flag for detailed output.
+For detailed information about any command, use the built-in help:
+
+```bash
+queuer --help                    # General help
+queuer list --help              # Help for list commands
+queuer get job --help           # Help for specific subcommands
+```
+
 The CLI tool uses the same database configuration environment variables as the main queuer package.
 
 ---
