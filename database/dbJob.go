@@ -106,75 +106,10 @@ func (r JobDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := r.db.Instance.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto;`)
+	// Use the SQL init() function to create all tables, triggers, and indexes
+	_, err := r.db.Instance.ExecContext(ctx, `SELECT init_job();`)
 	if err != nil {
-		log.Panicf("error creating pgcrypto extension: %#v", err)
-	}
-
-	_, err = r.db.Instance.ExecContext(
-		ctx,
-		`CREATE TABLE IF NOT EXISTS job (
-			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-			rid UUID UNIQUE DEFAULT gen_random_uuid(),
-			worker_id BIGINT DEFAULT 0,
-			worker_rid UUID DEFAULT NULL,
-			options JSONB DEFAULT '{}',
-			task_name VARCHAR(100) DEFAULT '',
-			parameters JSONB DEFAULT '[]',
-			status VARCHAR(50) DEFAULT 'QUEUED',
-			scheduled_at TIMESTAMP DEFAULT NULL,
-			started_at TIMESTAMP DEFAULT NULL,
-			schedule_count INT DEFAULT 0,
-			attempts INT DEFAULT 0,
-			results JSONB DEFAULT '[]',
-			results_encrypted BYTEA DEFAULT '',
-			error TEXT DEFAULT '',
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		
-		CREATE TABLE IF NOT EXISTS job_archive (
-			LIKE job INCLUDING DEFAULTS INCLUDING CONSTRAINTS,
-			PRIMARY KEY (id, updated_at)
-		);
-		SELECT create_hypertable('job_archive', by_range('updated_at'), if_not_exists => TRUE);`,
-	)
-	if err != nil {
-		log.Panicf("error creating job table: %#v", err)
-	}
-
-	_, err = r.db.Instance.ExecContext(
-		ctx,
-		`CREATE OR REPLACE TRIGGER job_notify_event
-			BEFORE INSERT OR UPDATE ON job
-			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
-	)
-	if err != nil {
-		log.Panicf("error creating notify trigger on job table: %#v", err)
-	}
-
-	_, err = r.db.Instance.ExecContext(
-		ctx,
-		`CREATE OR REPLACE TRIGGER job_archive_notify_event
-			BEFORE INSERT ON job_archive
-			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
-	)
-	if err != nil {
-		log.Panicf("error creating notify trigger on job_archive table: %#v", err)
-	}
-
-	_, err = r.db.Instance.Exec(
-		`CREATE INDEX IF NOT EXISTS idx_next_interval
-		ON job
-		USING HASH ((options->'schedule'->>'next_interval'));`,
-	)
-	if err != nil {
-		log.Panicf("error creating index on next_interval: %#v", err)
-	}
-
-	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "created_at", "updated_at")
-	if err != nil {
-		log.Panic(err)
+		log.Panicf("error initializing job tables: %#v", err)
 	}
 
 	r.db.Logger.Info("Checked/created table job")
