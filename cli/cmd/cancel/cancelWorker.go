@@ -19,21 +19,18 @@ func AddWorkerCommand(cmd *cobra.Command, cancelFlags *CancelFlags, rootFlags *m
 	workerCmd := &WorkerCommand{
 		Cmd: &cobra.Command{
 			Use:   "worker",
-			Short: "Cancel/shutdown a specific worker by RID",
-			Long: `Cancel or gracefully shutdown a worker using its RID (Resource ID).
+			Short: "Cancel/shut down a specific worker by RID",
+			Long: `Cancel/shut down a worker using its RID (Resource ID).
 
 This command will:
 - Signal the worker to stop accepting new jobs
 - Allow currently running jobs to complete
-- Gracefully shutdown the worker process
+- Shut down the worker process
 - Update the worker status to offline
-- Cancel any jobs assigned to this worker that haven't started
-
-The cancellation is performed gracefully to ensure data integrity and
-prevent job corruption from abrupt worker termination.
-
-Example:
-  queuer cancel worker --rid "123e4567-e89b-12d3-a456-426614174000"`,
+- Cancel any jobs assigned to this worker that haven't started`,
+			Example: helper.FormatCmdExamples("cancel worker", []helper.CmdExample{
+				{Cmd: `--rid "123e4567-e89b-12d3-a456-426614174000"`, Description: "Cancel worker by RID"},
+			}),
 		},
 		RootFlags:   rootFlags,
 		CancelFlags: cancelFlags,

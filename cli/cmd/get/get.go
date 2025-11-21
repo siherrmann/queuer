@@ -1,6 +1,7 @@
 package get
 
 import (
+	"github.com/siherrmann/queuer/cli/helper"
 	"github.com/siherrmann/queuer/cli/model"
 	"github.com/spf13/cobra"
 )
@@ -21,17 +22,16 @@ func AddGetCommand(cmd *cobra.Command, rootFlags *model.RootFlags) {
 			Use:   "get",
 			Short: "Get a specific resource by its RID (Resource ID)",
 			Long: `Retrieve detailed information about a specific queuer resource using its RID.
+The RID (Resource ID) is a UUID that uniquely identifies each resource in the system.
 
 Use subcommands to specify the type of resource to retrieve:
 - job         - Get details of a specific job by RID
 - worker      - Get worker information and status by RID  
-- jobArchive  - Get archived job details by RID
-
-The RID (Resource ID) is a UUID that uniquely identifies each resource in the system.
-
-Examples:
-  queuer get worker --rid "123e4567-e89b-12d3-a456-426614174000"
-  queuer get job --rid "550e8400-e29b-41d4-a716-446655440000"`,
+- jobArchive  - Get archived job details by RID`,
+			Example: helper.FormatCmdExamples("get", []helper.CmdExample{
+				{Cmd: `worker --rid "123e4567-e89b-12d3-a456-426614174000"`, Description: "Get worker details by RID"},
+				{Cmd: `job --rid "550e8400-e29b-41d4-a716-446655440000"`, Description: "Get job details by RID"},
+			}),
 		},
 		RootFlags: rootFlags,
 		GetFlags:  &GetFlags{},

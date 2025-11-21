@@ -27,13 +27,10 @@ This command will:
 - Remove a queued job from the execution queue
 - Mark the job status as cancelled
 - Free up the assigned worker (if any)
-- Prevent any further retry attempts
-
-The cancellation is performed gracefully when possible, allowing the current
-operation to complete before stopping the job execution.
-
-Example:
-  queuer cancel job --rid "550e8400-e29b-41d4-a716-446655440000"`,
+- Prevent any further retry attempts`,
+			Example: helper.FormatCmdExamples("cancel job", []helper.CmdExample{
+				{Cmd: `--rid "550e8400-e29b-41d4-a716-446655440000"`, Description: "Cancel job by RID"},
+			}),
 		},
 		RootFlags:   rootFlags,
 		CancelFlags: cancelFlags,

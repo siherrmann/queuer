@@ -9,6 +9,7 @@ import (
 	"github.com/siherrmann/queuer/cli/cmd/cancel"
 	"github.com/siherrmann/queuer/cli/cmd/get"
 	"github.com/siherrmann/queuer/cli/cmd/list"
+	"github.com/siherrmann/queuer/cli/cmd/manager"
 	"github.com/siherrmann/queuer/cli/model"
 	"github.com/spf13/cobra"
 )
@@ -51,6 +52,7 @@ func Execute() {
 	list.AddListCommand(rootCmd.Cmd, rootFlags)
 	get.AddGetCommand(rootCmd.Cmd, rootFlags)
 	cancel.AddCancelCommand(rootCmd.Cmd, rootFlags)
+	manager.AddManagerCommand(rootCmd.Cmd, rootFlags)
 
 	if err := rootCmd.Cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -26,10 +26,10 @@ This command provides real-time visibility into database connectivity:
 - Process ID (PID) and application name
 - Database username and target database
 - Current query being executed (if any)
-- Connection state and status
-
-Example:
-  queuer list connection                    # Show all active connections`,
+- Connection state and status`,
+			Example: helper.FormatCmdExamples("list connection", []helper.CmdExample{
+				{Cmd: "", Description: "Show all active connections"},
+			}),
 		},
 		ListFlags: listFlags,
 		RootFlags: rootFlags,

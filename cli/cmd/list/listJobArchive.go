@@ -34,12 +34,12 @@ Archived jobs are moved from the active jobs table for:
 
 Pagination options:
 - limit: Number of archived jobs to display (default: 10, max: 100)
-- lastId: Start listing from jobs after this RID for pagination
-
-Examples:
-  queuer list jobArchive                    # Show first 10 archived jobs
-  queuer list jobArchive --limit 50        # Show first 50 archived jobs
-  queuer list jobArchive --limit 20 --lastId "789f0123-e45b-67c8-d901-234567890abc"`,
+- lastId: Start listing from jobs after this RID for pagination`,
+			Example: helper.FormatCmdExamples("list jobArchive", []helper.CmdExample{
+				{Cmd: "", Description: "Show first 10 archived jobs"},
+				{Cmd: "--limit 50", Description: "Show first 50 archived jobs"},
+				{Cmd: `--limit 20 --lastId "789f0123-e45b-67c8-d901-234567890abc"`, Description: "Show 20 archived jobs starting after specified RID"},
+			}),
 		},
 		RootFlags: rootFlags,
 		ListFlags: listFlags,

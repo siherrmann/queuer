@@ -1,6 +1,7 @@
 package list
 
 import (
+	"github.com/siherrmann/queuer/cli/helper"
 	"github.com/siherrmann/queuer/cli/model"
 	"github.com/spf13/cobra"
 )
@@ -28,11 +29,11 @@ the type of resource to list:
 - job         - List active jobs (queued, scheduled, running)
 - worker      - List registered workers and their status  
 - connection  - List active database connections
-- jobArchive  - List completed/archived jobs
-
-Examples:
-  queuer list worker --limit 5
-  queuer list job --lastId 100 --limit 20`,
+- jobArchive  - List completed/archived jobs`,
+			Example: helper.FormatCmdExamples("list", []helper.CmdExample{
+				{Cmd: "worker --limit 5", Description: "List first 5 workers"},
+				{Cmd: "job --lastId 100 --limit 20", Description: "List 20 jobs starting after ID 100"},
+			}),
 		},
 		ListFlags: &ListFlags{},
 	}
