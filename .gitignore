@@ -25,3 +25,8 @@ go.work.sum
 
 # env file
 .env
+
+# Python
+venv/
+!example/cluster/manager/Dockerfile
+!example/cluster/worker/Dockerfile

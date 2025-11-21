@@ -1,0 +1,2 @@
+queuerPy==0.4.0
+openai-whisper==20231117
