@@ -9,6 +9,7 @@ import (
 
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
+	loadSql "github.com/siherrmann/queuer/sql"
 )
 
 // MasterDBHandlerFunctions defines the interface for Master database operations.
@@ -36,14 +37,19 @@ func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Mas
 		db: dbConnection,
 	}
 
+	err := loadSql.LoadMasterSql(masterDbHandler.db.Instance, false)
+	if err != nil {
+		return nil, helper.NewError("load master sql", err)
+	}
+
 	if withTableDrop {
-		err := masterDbHandler.DropTable()
+		err = masterDbHandler.DropTable()
 		if err != nil {
 			return nil, helper.NewError("drop master table", err)
 		}
 	}
 
-	err := masterDbHandler.CreateTable()
+	err = masterDbHandler.CreateTable()
 	if err != nil {
 		return nil, helper.NewError("create master table", err)
 	}
@@ -68,28 +74,10 @@ func (r MasterDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := r.db.Instance.ExecContext(
-		ctx,
-		`CREATE TABLE IF NOT EXISTS master (
-			id INTEGER PRIMARY KEY DEFAULT 1,
-			worker_id BIGINT DEFAULT 0,
-			worker_rid UUID,
-			settings JSONB DEFAULT '{}'::JSONB,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`,
-	)
+	// Use the SQL init_master() function to create the table and initial data
+	_, err := r.db.Instance.ExecContext(ctx, `SELECT init_master();`)
 	if err != nil {
-		log.Panicf("error creating master table: %#v", err)
-	}
-
-	_, err = r.db.Instance.ExecContext(
-		ctx,
-		`INSERT INTO master DEFAULT VALUES
-		ON CONFLICT (id) DO NOTHING;`,
-	)
-	if err != nil {
-		log.Panicf("error inserting initial master entry: %#v", err)
+		log.Panicf("error initializing master table: %#v", err)
 	}
 
 	r.db.Logger.Info("Checked/created table master")
@@ -118,38 +106,7 @@ func (r MasterDBHandler) DropTable() error {
 // It returns the old master entry if it was successfully updated, or nil if no update was done.
 func (r MasterDBHandler) UpdateMaster(worker *model.Worker, settings *model.MasterSettings) (*model.Master, error) {
 	row := r.db.Instance.QueryRow(
-		`WITH current_master AS (
-			SELECT
-				id,
-				worker_id,
-				worker_rid,
-				settings,
-				created_at,
-				updated_at
-			FROM master
-			WHERE id = 1
-			AND (
-				updated_at < (CURRENT_TIMESTAMP - ($4 * INTERVAL '1 minute'))
-				OR worker_id = $1
-				OR worker_id = 0
-			)
-			FOR UPDATE SKIP LOCKED
-		)
-		UPDATE master
-		SET
-			worker_id = $1,
-			worker_rid = $2,
-			settings = $3::JSONB,
-			updated_at = CURRENT_TIMESTAMP
-		FROM current_master
-		WHERE master.id = current_master.id
-		RETURNING
-			current_master.id,
-			current_master.worker_id,
-			current_master.worker_rid,
-			current_master.settings,
-			current_master.created_at,
-			current_master.updated_at;`,
+		`SELECT * FROM update_master($1, $2, $3, $4)`,
 		worker.ID,
 		worker.RID,
 		settings,
@@ -178,15 +135,7 @@ func (r MasterDBHandler) UpdateMaster(worker *model.Worker, settings *model.Mast
 // SelectMaster retrieves the current master entry from the database.
 func (r MasterDBHandler) SelectMaster() (*model.Master, error) {
 	row := r.db.Instance.QueryRow(
-		`SELECT
-			id,
-			worker_id,
-			worker_rid,
-			settings,
-			created_at,
-			updated_at
-        FROM master
-        WHERE id = 1;`,
+		`SELECT * FROM select_master()`,
 	)
 
 	master := &model.Master{}
