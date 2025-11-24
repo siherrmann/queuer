@@ -284,22 +284,7 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 // It returns the updated job records.
 func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
-		`SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			created_at,
-			updated_at
-		FROM update_job_initial($1);`,
+		`SELECT * FROM update_job_initial($1);`,
 		worker.ID,
 	)
 	if err != nil {
@@ -353,24 +338,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 
 	if len(r.EncryptionKey) > 0 {
 		row = r.db.Instance.QueryRow(
-			`SELECT
-				output_id,
-				output_rid,
-				output_worker_id,
-				output_worker_rid,
-				output_options,
-				output_task_name,
-				output_parameters,
-				output_status,
-				output_scheduled_at,
-				output_started_at,
-				output_schedule_count,
-				output_attempts,
-				output_results,
-				output_error,
-				output_created_at,
-				output_updated_at
-			FROM update_job_final_encrypted($1, $2, $3, $4, $5);`,
+			`SELECT * FROM update_job_final_encrypted($1, $2, $3, $4, $5);`,
 			job.ID,
 			job.Status,
 			job.Results,
@@ -379,24 +347,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 		)
 	} else {
 		row = r.db.Instance.QueryRow(
-			`SELECT
-				output_id,
-				output_rid,
-				output_worker_id,
-				output_worker_rid,
-				output_options,
-				output_task_name,
-				output_parameters,
-				output_status,
-				output_scheduled_at,
-				output_started_at,
-				output_schedule_count,
-				output_attempts,
-				output_results,
-				output_error,
-				output_created_at,
-				output_updated_at
-			FROM update_job_final($1, $2, $3, $4);`,
+			`SELECT * FROM update_job_final($1, $2, $3, $4);`,
 			job.ID,
 			job.Status,
 			job.Results,
