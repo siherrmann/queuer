@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -79,6 +80,11 @@ func (r *StartCommand) startDetached() error {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
 
+	// Validate executable path to prevent command injection
+	if !filepath.IsAbs(executable) {
+		return fmt.Errorf("executable path is not absolute: %s", executable)
+	}
+
 	// Prepare arguments for the detached process (without -d flag to avoid recursion)
 	args := []string{
 		"manager", "start",
@@ -86,6 +92,7 @@ func (r *StartCommand) startDetached() error {
 	}
 
 	// Run the command in new process group
+	// #nosec G204 - executable path is validated and args are controlled
 	cmd := exec.Command(executable, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
@@ -106,9 +113,18 @@ func (r *StartCommand) startDetached() error {
 	err = cmd.Start()
 	if err != nil {
 		if devNull != nil {
-			devNull.Close()
+			if closeErr := devNull.Close(); closeErr != nil {
+				return fmt.Errorf("failed to start detached process: %w (also failed to close devNull: %v)", err, closeErr)
+			}
 		}
 		return fmt.Errorf("failed to start detached process: %w", err)
+	}
+
+	// Close devNull if it was opened
+	if devNull != nil {
+		if closeErr := devNull.Close(); closeErr != nil {
+			return fmt.Errorf("process started but failed to close devNull: %w", closeErr)
+		}
 	}
 
 	return nil

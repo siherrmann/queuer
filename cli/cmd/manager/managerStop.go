@@ -75,6 +75,12 @@ func (r *StopCommand) RunStopCommand(cmd *cobra.Command, args []string) {
 }
 
 func (r *StopCommand) findProcessByPort(port int) ([]int, error) {
+	// Validate port range to prevent command injection
+	if port < 1 || port > 65535 {
+		return nil, fmt.Errorf("invalid port number: %d", port)
+	}
+	
+	// #nosec G204 - port is validated to be within valid range
 	cmd := exec.Command("lsof", "-ti", fmt.Sprintf(":%d", port))
 	output, err := cmd.Output()
 	if err != nil {
@@ -98,10 +104,19 @@ func (r *StopCommand) findProcessByPort(port int) ([]int, error) {
 }
 
 func (r *StopCommand) terminateProcess(pid int) bool {
-	cmd := exec.Command("kill", "-TERM", strconv.Itoa(pid))
+	// Validate PID to prevent command injection
+	if pid <= 0 || pid > 4194304 { // Max PID on most systems
+		return false
+	}
+	
+	pidStr := strconv.Itoa(pid)
+	
+	// #nosec G204 - PID is validated to be within valid range
+	cmd := exec.Command("kill", "-TERM", pidStr)
 	err := cmd.Run()
 	if err != nil {
-		cmd = exec.Command("kill", "-KILL", strconv.Itoa(pid))
+		// #nosec G204 - PID is validated to be within valid range
+		cmd = exec.Command("kill", "-KILL", pidStr)
 		err = cmd.Run()
 		if err != nil {
 			return false
@@ -111,7 +126,8 @@ func (r *StopCommand) terminateProcess(pid int) bool {
 	// Wait a moment and check if process is still running
 	time.Sleep(1 * time.Second)
 
-	cmd = exec.Command("kill", "-0", strconv.Itoa(pid))
+	// #nosec G204 - PID is validated to be within valid range
+	cmd = exec.Command("kill", "-0", pidStr)
 	err = cmd.Run()
 
 	return err != nil
