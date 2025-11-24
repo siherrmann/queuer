@@ -79,7 +79,7 @@ func (r *StopCommand) findProcessByPort(port int) ([]int, error) {
 	if port < 1 || port > 65535 {
 		return nil, fmt.Errorf("invalid port number: %d", port)
 	}
-	
+
 	// #nosec G204 - port is validated to be within valid range
 	cmd := exec.Command("lsof", "-ti", fmt.Sprintf(":%d", port))
 	output, err := cmd.Output()
@@ -108,9 +108,9 @@ func (r *StopCommand) terminateProcess(pid int) bool {
 	if pid <= 0 || pid > 4194304 { // Max PID on most systems
 		return false
 	}
-	
+
 	pidStr := strconv.Itoa(pid)
-	
+
 	// #nosec G204 - PID is validated to be within valid range
 	cmd := exec.Command("kill", "-TERM", pidStr)
 	err := cmd.Run()
