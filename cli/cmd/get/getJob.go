@@ -27,10 +27,10 @@ This command displays complete job information including:
 - Task name and type
 - Job status (QUEUED, SCHEDULED, RUNNING)
 - Timestamp of the last update
-- Error details (if applicable)
-
-Example:
-  queuer get job --rid "550e8400-e29b-41d4-a716-446655440000"`,
+- Error details (if applicable)`,
+			Example: helper.FormatCmdExamples("get job", []helper.CmdExample{
+				{Cmd: `--rid "550e8400-e29b-41d4-a716-446655440000"`, Description: "Get job details by RID"},
+			}),
 		},
 		RootFlags: rootFlags,
 		GetFlags:  getFlags,

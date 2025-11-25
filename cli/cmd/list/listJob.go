@@ -29,12 +29,12 @@ This command shows active jobs with their current status and key information:
 
 Pagination options:
 - limit: Number of jobs to display (default: 10, max: 100)
-- lastId: Start listing from jobs after this RID for pagination
-
-Examples:
-  queuer list job                           # Show first 10 jobs
-  queuer list job --limit 25               # Show first 25 jobs
-  queuer list job --limit 20 --lastId "550e8400-e29b-41d4-a716-446655440000"`,
+- lastId: Start listing from jobs after this RID for pagination`,
+			Example: helper.FormatCmdExamples("list job", []helper.CmdExample{
+				{Cmd: "", Description: "Show first 10 jobs"},
+				{Cmd: "--limit 25", Description: "Show first 25 jobs"},
+				{Cmd: `--limit 20 --lastId "550e8400-e29b-41d4-a716-446655440000"`, Description: "Show 20 jobs starting after specified RID"},
+			}),
 		},
 		RootFlags: rootFlags,
 		ListFlags: listFlags,

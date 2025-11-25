@@ -29,12 +29,12 @@ This command shows worker information including:
 
 Pagination options:
 - limit: Number of workers to display (default: 10, max: 100)
-- lastId: Start listing from workers after this RID for pagination
-
-Examples:
-  queuer list worker                        # Show first 10 workers
-  queuer list worker --limit 50            # Show first 50 workers
-  queuer list worker --limit 20 --lastId "123e4567-e89b-12d3-a456-426614174000"`,
+- lastId: Start listing from workers after this RID for pagination`,
+			Example: helper.FormatCmdExamples("list worker", []helper.CmdExample{
+				{Cmd: "", Description: "Show first 10 workers"},
+				{Cmd: "--limit 50", Description: "Show first 50 workers"},
+				{Cmd: `--limit 20 --lastId "123e4567-e89b-12d3-a456-426614174000"`, Description: "Show 20 workers starting after specified RID"},
+			}),
 		},
 		RootFlags: rootFlags,
 		ListFlags: listFlags,

@@ -26,10 +26,10 @@ This command displays complete worker information including:
 - Worker ID and RID
 - Worker name
 - Worker status (READY, RUNNING, FAILED, STOPPED)
-- Timestamp of the last update
-
-Example:
-  queuer get worker --rid "123e4567-e89b-12d3-a456-426614174000"`,
+- Timestamp of the last update`,
+			Example: helper.FormatCmdExamples("get worker", []helper.CmdExample{
+				{Cmd: `--rid "123e4567-e89b-12d3-a456-426614174000"`, Description: "Get worker details by RID"},
+			}),
 		},
 		RootFlags: rootFlags,
 		GetFlags:  getFlags,

@@ -106,75 +106,10 @@ func (r JobDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := r.db.Instance.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto;`)
+	// Use the SQL init() function to create all tables, triggers, and indexes
+	_, err := r.db.Instance.ExecContext(ctx, `SELECT init_job();`)
 	if err != nil {
-		log.Panicf("error creating pgcrypto extension: %#v", err)
-	}
-
-	_, err = r.db.Instance.ExecContext(
-		ctx,
-		`CREATE TABLE IF NOT EXISTS job (
-			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-			rid UUID UNIQUE DEFAULT gen_random_uuid(),
-			worker_id BIGINT DEFAULT 0,
-			worker_rid UUID DEFAULT NULL,
-			options JSONB DEFAULT '{}',
-			task_name VARCHAR(100) DEFAULT '',
-			parameters JSONB DEFAULT '[]',
-			status VARCHAR(50) DEFAULT 'QUEUED',
-			scheduled_at TIMESTAMP DEFAULT NULL,
-			started_at TIMESTAMP DEFAULT NULL,
-			schedule_count INT DEFAULT 0,
-			attempts INT DEFAULT 0,
-			results JSONB DEFAULT '[]',
-			results_encrypted BYTEA DEFAULT '',
-			error TEXT DEFAULT '',
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		
-		CREATE TABLE IF NOT EXISTS job_archive (
-			LIKE job INCLUDING DEFAULTS INCLUDING CONSTRAINTS,
-			PRIMARY KEY (id, updated_at)
-		);
-		SELECT create_hypertable('job_archive', by_range('updated_at'), if_not_exists => TRUE);`,
-	)
-	if err != nil {
-		log.Panicf("error creating job table: %#v", err)
-	}
-
-	_, err = r.db.Instance.ExecContext(
-		ctx,
-		`CREATE OR REPLACE TRIGGER job_notify_event
-			BEFORE INSERT OR UPDATE ON job
-			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
-	)
-	if err != nil {
-		log.Panicf("error creating notify trigger on job table: %#v", err)
-	}
-
-	_, err = r.db.Instance.ExecContext(
-		ctx,
-		`CREATE OR REPLACE TRIGGER job_archive_notify_event
-			BEFORE INSERT ON job_archive
-			FOR EACH ROW EXECUTE PROCEDURE notify_event();`,
-	)
-	if err != nil {
-		log.Panicf("error creating notify trigger on job_archive table: %#v", err)
-	}
-
-	_, err = r.db.Instance.Exec(
-		`CREATE INDEX IF NOT EXISTS idx_next_interval
-		ON job
-		USING HASH ((options->'schedule'->>'next_interval'));`,
-	)
-	if err != nil {
-		log.Panicf("error creating index on next_interval: %#v", err)
-	}
-
-	err = r.db.CreateIndexes("job", "worker_id", "worker_rid", "status", "created_at", "updated_at")
-	if err != nil {
-		log.Panic(err)
+		log.Panicf("error initializing job tables: %#v", err)
 	}
 
 	r.db.Logger.Info("Checked/created table job")
@@ -208,22 +143,7 @@ func (r JobDBHandler) DropTables() error {
 func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := r.db.Instance.QueryRow(
-		`INSERT INTO job (options, task_name, parameters, status, scheduled_at, schedule_count)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			schedule_count,
-			attempts,
-			created_at,
-			updated_at;`,
+		`SELECT * FROM insert_job($1, $2, $3, $4, $5, $6)`,
 		job.Options,
 		job.TaskName,
 		job.Parameters,
@@ -258,27 +178,13 @@ func (r JobDBHandler) InsertJob(job *model.Job) (*model.Job, error) {
 func (r JobDBHandler) InsertJobTx(tx *sql.Tx, job *model.Job) (*model.Job, error) {
 	newJob := &model.Job{}
 	row := tx.QueryRow(
-		`INSERT INTO job (options, task_name, parameters, status, scheduled_at)
-			VALUES ($1, $2, $3, $4, $5)
-		RETURNING
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			schedule_count,
-			attempts,
-			created_at,
-			updated_at;`,
+		`SELECT * FROM insert_job($1, $2, $3, $4, $5, $6)`,
 		job.Options,
 		job.TaskName,
 		job.Parameters,
 		job.Status,
 		job.ScheduledAt,
+		job.ScheduleCount,
 	)
 
 	err := row.Scan(
@@ -378,22 +284,7 @@ func (r JobDBHandler) BatchInsertJobs(jobs []*model.Job) error {
 // It returns the updated job records.
 func (r JobDBHandler) UpdateJobsInitial(worker *model.Worker) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
-		`SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			created_at,
-			updated_at
-		FROM update_job_initial($1);`,
+		`SELECT * FROM update_job_initial($1);`,
 		worker.ID,
 	)
 	if err != nil {
@@ -447,24 +338,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 
 	if len(r.EncryptionKey) > 0 {
 		row = r.db.Instance.QueryRow(
-			`SELECT
-				output_id,
-				output_rid,
-				output_worker_id,
-				output_worker_rid,
-				output_options,
-				output_task_name,
-				output_parameters,
-				output_status,
-				output_scheduled_at,
-				output_started_at,
-				output_schedule_count,
-				output_attempts,
-				output_results,
-				output_error,
-				output_created_at,
-				output_updated_at
-			FROM update_job_final_encrypted($1, $2, $3, $4, $5);`,
+			`SELECT * FROM update_job_final_encrypted($1, $2, $3, $4, $5);`,
 			job.ID,
 			job.Status,
 			job.Results,
@@ -473,24 +347,7 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 		)
 	} else {
 		row = r.db.Instance.QueryRow(
-			`SELECT
-				output_id,
-				output_rid,
-				output_worker_id,
-				output_worker_rid,
-				output_options,
-				output_task_name,
-				output_parameters,
-				output_status,
-				output_scheduled_at,
-				output_started_at,
-				output_schedule_count,
-				output_attempts,
-				output_results,
-				output_error,
-				output_created_at,
-				output_updated_at
-			FROM update_job_final($1, $2, $3, $4);`,
+			`SELECT * FROM update_job_final($1, $2, $3, $4);`,
 			job.ID,
 			job.Status,
 			job.Results,
@@ -529,38 +386,26 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 // Jobs are considered stale if their assigned worker has STOPPED status and the worker's
 // updated_at timestamp is older than the threshold.
 func (r JobDBHandler) UpdateStaleJobs() (int, error) {
-	result, err := r.db.Instance.Exec(
-		`UPDATE job 
-		 SET status = $1 
-		 WHERE status NOT IN ($2, $3, $4)
-		   AND worker_rid IN (
-		       SELECT rid 
-		       FROM worker 
-		       WHERE status = $5
-		   )`,
+	var affectedRows int
+	err := r.db.Instance.QueryRow(
+		`SELECT update_stale_jobs($1, $2, $3, $4, $5)`,
 		model.JobStatusCancelled,
 		model.JobStatusSucceeded,
 		model.JobStatusCancelled,
 		model.JobStatusFailed,
 		model.WorkerStatusStopped,
-	)
+	).Scan(&affectedRows)
 	if err != nil {
 		return 0, helper.NewError("update stale jobs", err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return 0, helper.NewError("get rows affected", err)
-	}
-
-	return int(rowsAffected), nil
+	return affectedRows, nil
 }
 
 // DeleteJob deletes a job record from the database based on its RID.
 func (r JobDBHandler) DeleteJob(rid uuid.UUID) error {
 	_, err := r.db.Instance.Exec(
-		`DELETE FROM job
-		WHERE rid = $1`,
+		`SELECT delete_job($1::UUID)`,
 		rid,
 	)
 	if err != nil {
@@ -573,30 +418,7 @@ func (r JobDBHandler) DeleteJob(rid uuid.UUID) error {
 // SelectJob retrieves a single job record from the database based on its RID.
 func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
-		`SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			CASE
-				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
-				ELSE results
-			END AS results,
-			error,
-			created_at,
-			updated_at
-		FROM
-			job
-		WHERE
-			rid = $2`,
+		`SELECT * FROM select_job($1, $2)`,
 		r.EncryptionKey,
 		rid,
 	)
@@ -631,39 +453,7 @@ func (r JobDBHandler) SelectJob(rid uuid.UUID) (*model.Job, error) {
 // It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
-		`SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			CASE
-				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
-				ELSE results
-			END AS results,
-			error,
-			created_at,
-			updated_at
-		FROM
-			job
-		WHERE (0 = $2
-			OR created_at < (
-				SELECT
-					d.created_at
-				FROM
-					job AS d
-				WHERE
-					d.id = $2))
-		ORDER BY
-			created_at DESC
-		LIMIT $3;`,
+		`SELECT * FROM select_all_jobs($1, $2, $3)`,
 		r.EncryptionKey,
 		lastID,
 		entries,
@@ -714,38 +504,7 @@ func (r JobDBHandler) SelectAllJobs(lastID int, entries int) ([]*model.Job, erro
 // It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
-		`SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			CASE
-				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
-				ELSE results
-			END AS results,
-			error,
-			created_at,
-			updated_at
-		FROM job
-		WHERE worker_rid = $2
-			AND (0 = $3
-				OR created_at < (
-					SELECT
-						d.created_at
-					FROM
-						job AS d
-					WHERE
-						d.id = $3))
-		ORDER BY created_at DESC
-		LIMIT $4;`,
+		`SELECT * FROM select_all_jobs_by_worker_rid($1, $2, $3, $4)`,
 		r.EncryptionKey,
 		workerRid,
 		lastID,
@@ -800,43 +559,8 @@ func (r JobDBHandler) SelectAllJobsByWorkerRID(workerRid uuid.UUID, lastID int, 
 //
 // It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries int) ([]*model.Job, error) {
-	rows, err := r.db.Instance.Query(`
-		SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			CASE
-				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
-				ELSE results
-			END AS results,
-			error,
-			created_at,
-			updated_at
-		FROM job
-		WHERE (rid::text ILIKE '%' || $2 || '%'
-				OR worker_id::text ILIKE '%' || $2 || '%'
-				OR task_name ILIKE '%' || $2 || '%'
-				OR status ILIKE '%' || $2 || '%')
-			AND (0 = $3
-				OR created_at < (
-					SELECT
-						u.created_at
-					FROM
-						job AS u
-					WHERE
-						u.id = $3))
-		ORDER BY
-			created_at DESC
-		LIMIT $4`,
+	rows, err := r.db.Instance.Query(
+		`SELECT * FROM select_all_jobs_by_search($1, $2, $3, $4)`,
 		r.EncryptionKey,
 		search,
 		lastID,
@@ -889,7 +613,7 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 // AddRetentionArchive updates the retention archive settings for the job archive.
 func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
 	_, err := r.db.Instance.Exec(
-		`SELECT add_retention_policy('job_archive', ($1 * INTERVAL '1 day'));`,
+		`SELECT add_retention_archive($1)`,
 		int(retention.Hours()/24),
 	)
 	if err != nil {
@@ -902,7 +626,7 @@ func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
 // RemoveRetentionArchive removes the retention archive settings for the job archive.
 func (r JobDBHandler) RemoveRetentionArchive() error {
 	_, err := r.db.Instance.Exec(
-		`SELECT remove_retention_policy('job_archive');`,
+		`SELECT remove_retention_archive()`,
 	)
 	if err != nil {
 		return helper.NewError("exec", err)
@@ -914,30 +638,7 @@ func (r JobDBHandler) RemoveRetentionArchive() error {
 // SelectJobFromArchive retrieves a single archived job record from the database based on its RID.
 func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 	row := r.db.Instance.QueryRow(
-		`SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			CASE
-				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
-				ELSE results
-			END AS results,
-			error,
-			created_at,
-			updated_at
-		FROM
-			job_archive
-		WHERE
-			rid = $2`,
+		`SELECT * FROM select_job_from_archive($1, $2)`,
 		r.EncryptionKey,
 		rid,
 	)
@@ -972,39 +673,7 @@ func (r JobDBHandler) SelectJobFromArchive(rid uuid.UUID) (*model.Job, error) {
 // It returns jobs that were created before the specified lastID, or the newest jobs if lastID is 0.
 func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*model.Job, error) {
 	rows, err := r.db.Instance.Query(
-		`SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			CASE
-				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
-				ELSE results
-			END AS results,
-			error,
-			created_at,
-			updated_at
-		FROM
-			job_archive
-		WHERE (0 = $2
-			OR created_at < (
-				SELECT
-					d.created_at
-				FROM
-					job_archive AS d
-				WHERE
-					d.id = $2))
-		ORDER BY
-			created_at DESC
-		LIMIT $3;`,
+		`SELECT * FROM select_all_jobs_from_archive($1, $2, $3)`,
 		r.EncryptionKey,
 		lastID,
 		entries,
@@ -1055,43 +724,8 @@ func (r JobDBHandler) SelectAllJobsFromArchive(lastID int, entries int) ([]*mode
 // It searches across 'rid', 'worker_id', 'task_name', and 'status' fields.
 // It returns jobs that were created before the specified lastID, or the newest jobs if lastID
 func (r JobDBHandler) SelectAllJobsFromArchiveBySearch(search string, lastID int, entries int) ([]*model.Job, error) {
-	rows, err := r.db.Instance.Query(`
-		SELECT
-			id,
-			rid,
-			worker_id,
-			worker_rid,
-			options,
-			task_name,
-			parameters,
-			status,
-			scheduled_at,
-			started_at,
-			schedule_count,
-			attempts,
-			CASE
-				WHEN octet_length(results_encrypted) > 0 THEN pgp_sym_decrypt(results_encrypted, $1::text)::jsonb
-				ELSE results
-			END AS results,
-			error,
-			created_at,
-			updated_at
-		FROM job_archive
-		WHERE (rid::text ILIKE '%' || $2 || '%'
-				OR worker_id::text ILIKE '%' || $2 || '%'
-				OR task_name ILIKE '%' || $2 || '%'
-				OR status ILIKE '%' || $2 || '%')
-			AND (0 = $3
-				OR created_at < (
-					SELECT
-						u.created_at
-					FROM
-						job_archive AS u
-					WHERE
-						u.id = $3))
-		ORDER BY
-			created_at DESC
-		LIMIT $4`,
+	rows, err := r.db.Instance.Query(
+		`SELECT * FROM select_all_jobs_from_archive_by_search($1, $2, $3, $4)`,
 		r.EncryptionKey,
 		search,
 		lastID,

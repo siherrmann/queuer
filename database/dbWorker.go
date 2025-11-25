@@ -84,29 +84,9 @@ func (r WorkerDBHandler) CreateTable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := r.db.Instance.ExecContext(
-		ctx,
-		`CREATE TABLE IF NOT EXISTS worker (
-			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-			rid UUID UNIQUE DEFAULT gen_random_uuid(),
-			name VARCHAR(100) DEFAULT '',
-			options JSONB DEFAULT '{}',
-			available_tasks VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
-			available_next_interval VARCHAR[] DEFAULT ARRAY[]::VARCHAR[],
-			current_concurrency INT DEFAULT 0,
-			max_concurrency INT DEFAULT 1,
-			status VARCHAR(50) DEFAULT 'READY',
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
-	)
+	_, err := r.db.Instance.ExecContext(ctx, `SELECT init_worker();`)
 	if err != nil {
-		log.Panicf("error creating worker table: %#v", err)
-	}
-
-	err = r.db.CreateIndexes("worker", "rid", "name", "status")
-	if err != nil {
-		log.Panicf("error creating indexes on worker table: %#v", err)
+		log.Panicf("error initializing worker table: %#v", err)
 	}
 
 	r.db.Logger.Info("Checked/created table worker")
@@ -226,26 +206,19 @@ func (r WorkerDBHandler) UpdateWorker(worker *model.Worker) (*model.Worker, erro
 func (r WorkerDBHandler) UpdateStaleWorkers(staleThreshold time.Duration) (int, error) {
 	cutoffTime := time.Now().UTC().Add(-staleThreshold)
 
-	result, err := r.db.Instance.Exec(
-		`UPDATE worker 
-		 SET status = $1 
-		 WHERE (status = $2 OR status = $3) 
-		   AND updated_at < $4`,
+	var rowsAffected int
+	err := r.db.Instance.QueryRow(
+		`SELECT update_stale_workers($1, $2, $3, $4)`,
 		model.WorkerStatusStopped,
 		model.WorkerStatusReady,
 		model.WorkerStatusRunning,
 		cutoffTime,
-	)
+	).Scan(&rowsAffected)
 	if err != nil {
 		return 0, helper.NewError("update stale workers", err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return 0, helper.NewError("get rows affected", err)
-	}
-
-	return int(rowsAffected), nil
+	return rowsAffected, nil
 }
 
 // DeleteWorker deletes a worker record from the database based on its RID.
@@ -268,21 +241,7 @@ func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 	worker := &model.Worker{}
 	row := r.db.Instance.QueryRow(
-		`SELECT
-			id,
-			rid,
-			name,
-			options,
-			available_tasks,
-			available_next_interval,
-			max_concurrency,
-			status,
-			created_at,
-			updated_at
-		FROM
-			worker
-		WHERE
-			rid = $1`,
+		`SELECT * FROM select_worker($1)`,
 		rid,
 	)
 	err := row.Scan(
@@ -309,30 +268,7 @@ func (r WorkerDBHandler) SelectWorker(rid uuid.UUID) (*model.Worker, error) {
 // It returns workers that were created before the specified lastID, or the newest workers if lastID is 0.
 func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error) {
 	rows, err := r.db.Instance.Query(
-		`SELECT
-			id,
-			rid,
-			name,
-			options,
-			available_tasks,
-			available_next_interval,
-			max_concurrency,
-			status,
-			created_at,
-			updated_at
-		FROM
-			worker
-		WHERE (0 = $1
-			OR created_at < (
-				SELECT
-					d.created_at
-				FROM
-					worker AS d
-				WHERE
-					d.id = $1))
-		ORDER BY
-			created_at DESC
-		LIMIT $2`,
+		`SELECT * FROM select_all_workers($1, $2)`,
 		lastID,
 		entries,
 	)
@@ -378,33 +314,8 @@ func (r WorkerDBHandler) SelectAllWorkers(lastID int, entries int) ([]*model.Wor
 // It returns a slice of worker records, ordered by creation date in descending order.
 // It returns workers that were created before the specified lastID, or the newest workers if last
 func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, entries int) ([]*model.Worker, error) {
-	rows, err := r.db.Instance.Query(`
-		SELECT
-			id,
-			rid,
-			name,
-			options,
-			available_tasks,
-			available_next_interval,
-			max_concurrency,
-			status,
-			created_at,
-			updated_at
-		FROM worker
-		WHERE (name ILIKE '%' || $1 || '%'
-				OR array_to_string(available_tasks, ',') ILIKE '%' || $1 || '%'
-				OR status ILIKE '%' || $1 || '%')
-			AND (0 = $2
-				OR created_at < (
-					SELECT
-						u.created_at
-					FROM
-						worker AS u
-					WHERE
-						u.id = $2))
-		ORDER BY
-			created_at DESC
-		LIMIT $3`,
+	rows, err := r.db.Instance.Query(
+		`SELECT * FROM select_all_workers_by_search($1, $2, $3)`,
 		search,
 		lastID,
 		entries,
@@ -450,9 +361,7 @@ func (r WorkerDBHandler) SelectAllWorkersBySearch(search string, lastID int, ent
 // If the query fails, it returns an error.
 func (r WorkerDBHandler) SelectAllConnections() ([]*model.Connection, error) {
 	rows, err := r.db.Instance.Query(
-		`SELECT pid, datname, usename, application_name, query, state
-        FROM pg_stat_activity
-        WHERE application_name='queuer'`,
+		`SELECT * FROM select_all_connections()`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error querying active connections: %w", err)

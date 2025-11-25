@@ -30,10 +30,10 @@ This command displays complete archived job information including:
 - Error details (if applicable)
 
 Archived jobs are historical records of completed job executions that have been
-moved from the active jobs table for performance and storage optimization.
-
-Example:
-  queuer get jobArchive --rid "789f0123-e45b-67c8-d901-234567890abc"`,
+moved from the active jobs table for performance and storage optimization.`,
+			Example: helper.FormatCmdExamples("get jobArchive", []helper.CmdExample{
+				{Cmd: `--rid "789f0123-e45b-67c8-d901-234567890abc"`, Description: "Get archived job details by RID"},
+			}),
 		},
 		RootFlags: rootFlags,
 		GetFlags:  getFlags,
