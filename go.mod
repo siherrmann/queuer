@@ -1,6 +1,6 @@
 module github.com/siherrmann/queuer
 
-go 1.24.0
+go 1.25.2
 
 require (
 	github.com/google/uuid v1.6.0
@@ -67,6 +67,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.10 // indirect
+	github.com/siherrmann/queuerSql v0.0.0-20251128145510-d4488b8fe466
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.10.1
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
@@ -84,3 +85,5 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/siherrmann/queuerSql => ./sql
