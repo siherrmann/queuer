@@ -9,7 +9,7 @@ import (
 
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
-	loadSql "github.com/siherrmann/queuer/sql"
+	loadSql "github.com/siherrmann/queuerSql"
 )
 
 // MasterDBHandlerFunctions defines the interface for Master database operations.

@@ -11,7 +11,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
-	loadSql "github.com/siherrmann/queuer/sql"
+	loadSql "github.com/siherrmann/queuerSql"
 )
 
 // JobDBHandlerFunctions defines the interface for Job database operations.
