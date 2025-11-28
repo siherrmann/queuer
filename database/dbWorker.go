@@ -10,7 +10,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
-	loadSql "github.com/siherrmann/queuer/sql"
+	loadSql "github.com/siherrmann/queuerSql"
 )
 
 // WorkerDBHandlerFunctions defines the interface for Worker database operations.
