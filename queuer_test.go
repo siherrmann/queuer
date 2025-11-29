@@ -267,8 +267,9 @@ func TestStart(t *testing.T) {
 
 		masterSettings := &model.MasterSettings{
 			MasterPollInterval: 5 * time.Second,
-			JobDeleteThreshold: 30,
+			JobDeleteThreshold: 30 * 24 * time.Hour, // 30 days
 		}
+		masterSettings.SetDefault() // Set default values for comparison
 		queuer.Start(ctx, cancel, masterSettings)
 
 		time.Sleep(6 * time.Second) // Wait for the ticker to run at least once
@@ -292,9 +293,11 @@ func TestStart(t *testing.T) {
 		ctx1, cancel1 := context.WithCancel(context.Background())
 		defer cancel1()
 		masterSettings1 := &model.MasterSettings{
+			MasterLockTimeout:  10 * time.Second, // Short timeout for test
 			MasterPollInterval: 5 * time.Second,
 			JobDeleteThreshold: 30 * 24 * time.Hour,
 		}
+		masterSettings1.SetDefault() // Set default values for comparison
 		queuer1.Start(ctx1, cancel1, masterSettings1)
 
 		queuer2 := NewQueuer("test", 20)
@@ -302,9 +305,11 @@ func TestStart(t *testing.T) {
 		ctx2, cancel2 := context.WithCancel(context.Background())
 		defer cancel2()
 		masterSettings2 := &model.MasterSettings{
+			MasterLockTimeout:  10 * time.Second, // Short timeout for test
 			MasterPollInterval: 3 * time.Second,
 			JobDeleteThreshold: 20 * 24 * time.Hour,
 		}
+		masterSettings2.SetDefault() // Set default values for comparison
 		queuer2.Start(ctx2, cancel2, masterSettings2)
 
 		time.Sleep(6 * time.Second) // Wait for the ticker to run at least once
@@ -323,7 +328,7 @@ func TestStart(t *testing.T) {
 		// Cancel the first queuer
 		cancel1()
 
-		time.Sleep(6 * time.Second) // Wait for the ticker to run at least once
+		time.Sleep(12 * time.Second) // Wait for master lock timeout (10s) + buffer
 
 		master, err = queuer2.dbMaster.SelectMaster()
 		assert.NoError(t, err, "Expected no error selecting master")
@@ -378,9 +383,11 @@ func TestStartWithoutWorker(t *testing.T) {
 		ctx1, cancel1 := context.WithCancel(context.Background())
 		defer cancel1()
 		masterSettings1 := &model.MasterSettings{
+			MasterLockTimeout:  10 * time.Second, // Short timeout for test
 			MasterPollInterval: 5 * time.Second,
 			JobDeleteThreshold: 30 * 24 * time.Hour,
 		}
+		masterSettings1.SetDefault() // Set default values for comparison
 		queuer1.StartWithoutWorker(ctx1, cancel1, true, masterSettings1)
 
 		queuer2 := NewQueuer("test", 20)
@@ -388,9 +395,11 @@ func TestStartWithoutWorker(t *testing.T) {
 		ctx2, cancel2 := context.WithCancel(context.Background())
 		defer cancel2()
 		masterSettings2 := &model.MasterSettings{
+			MasterLockTimeout:  10 * time.Second, // Short timeout for test
 			MasterPollInterval: 3 * time.Second,
 			JobDeleteThreshold: 20 * 24 * time.Hour,
 		}
+		masterSettings2.SetDefault() // Set default values for comparison
 		queuer2.StartWithoutWorker(ctx2, cancel2, true, masterSettings2)
 
 		time.Sleep(6 * time.Second) // Wait for the ticker to run at least once
@@ -409,7 +418,7 @@ func TestStartWithoutWorker(t *testing.T) {
 		// Cancel the first queuer
 		cancel1()
 
-		time.Sleep(6 * time.Second) // Wait for the ticker to run at least once
+		time.Sleep(12 * time.Second) // Wait for master lock timeout (10s) + buffer
 
 		master, err = queuer2.dbMaster.SelectMaster()
 		assert.NoError(t, err, "Expected no error selecting master")
