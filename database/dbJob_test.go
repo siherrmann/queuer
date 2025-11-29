@@ -346,7 +346,7 @@ func TestUpdateStaleJobs(t *testing.T) {
 	workerDbHandler, err := NewWorkerDBHandler(database, true)
 	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
 
-	t.Run("Cancel jobs with stopped workers", func(t *testing.T) {
+	t.Run("Requeue jobs with stopped workers", func(t *testing.T) {
 		// Create workers and set one to STOPPED
 		worker1, err := model.NewWorker("worker-1", 3)
 		require.NoError(t, err)
@@ -364,13 +364,13 @@ func TestUpdateStaleJobs(t *testing.T) {
 
 		// Create jobs: QUEUED (stopped worker), SUCCEEDED (stopped worker), QUEUED (ready worker)
 		testCases := []struct {
-			status       string
-			workerRID    string
-			shouldCancel bool
+			status        string
+			workerRID     string
+			shouldRequeue bool
 		}{
-			{model.JobStatusQueued, "stopped", true},     // Should be cancelled
-			{model.JobStatusSucceeded, "stopped", false}, // Should not be cancelled (final status)
-			{model.JobStatusQueued, "ready", false},      // Should not be cancelled (ready worker)
+			{model.JobStatusQueued, "stopped", true},     // Should be requeued
+			{model.JobStatusSucceeded, "stopped", false}, // Should not be requeued (final status)
+			{model.JobStatusQueued, "ready", false},      // Should not be requeued (ready worker)
 		}
 
 		jobs := make([]*model.Job, len(testCases))
@@ -399,14 +399,14 @@ func TestUpdateStaleJobs(t *testing.T) {
 		// Test UpdateStaleJobs
 		updatedCount, err := jobDbHandler.UpdateStaleJobs()
 		assert.NoError(t, err)
-		assert.Equal(t, 1, updatedCount, "Expected 1 job to be cancelled")
+		assert.Equal(t, 1, updatedCount, "Expected 1 job to be requeued")
 
 		// Verify results
 		for i, tc := range testCases {
 			updatedJob, err := jobDbHandler.SelectJob(jobs[i].RID)
 			require.NoError(t, err)
-			if tc.shouldCancel {
-				assert.Equal(t, model.JobStatusCancelled, updatedJob.Status)
+			if tc.shouldRequeue {
+				assert.Equal(t, model.JobStatusQueued, updatedJob.Status)
 			} else {
 				assert.Equal(t, tc.status, updatedJob.Status)
 			}
@@ -459,12 +459,19 @@ func TestJobDeleteJob(t *testing.T) {
 	insertedJob, err := jobDbHandler.InsertJob(job)
 	require.NoError(t, err, "Expected InsertJob to not return an error")
 
+	// First, archive the job by marking it as completed (this moves it from job to job_archive)
+	insertedJob.Status = model.JobStatusSucceeded
+	archivedJob, err := jobDbHandler.UpdateJobFinal(insertedJob)
+	require.NoError(t, err, "Expected UpdateJobFinal to not return an error")
+	require.NotNil(t, archivedJob, "Expected archived job to not be nil")
+
+	// Now delete it from the archive
 	err = jobDbHandler.DeleteJob(insertedJob.RID)
 	assert.NoError(t, err, "Expected DeleteJob to not return an error")
 
-	// Verify that the job no longer exists
-	deletedJob, err := jobDbHandler.SelectJob(insertedJob.RID)
-	require.Error(t, err, "Expected SelectJob to return an error")
+	// Verify that the job no longer exists in the archive
+	deletedJob, err := jobDbHandler.SelectJobFromArchive(insertedJob.RID)
+	require.Error(t, err, "Expected SelectJobFromArchive to return an error")
 	assert.Contains(t, err.Error(), sql.ErrNoRows.Error(), "Expected error to contain sql.ErrNoRows for deleted job")
 	assert.Nil(t, deletedJob, "Expected deleted job to be nil")
 }

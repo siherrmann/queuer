@@ -251,6 +251,191 @@ func TestWorkerDeleteWorker(t *testing.T) {
 	assert.Nil(t, deletedWorker, "Expected deleted worker to be nil")
 }
 
+func TestDeleteStaleWorkers(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+
+	workerDbHandler, err := NewWorkerDBHandler(database, true)
+	assert.NoError(t, err, "Expected NewWorkerDBHandler to not return an error")
+
+	t.Run("Delete stale workers with different statuses", func(t *testing.T) {
+		// Create workers: STOPPED (stale), STOPPED (fresh), READY (stale), RUNNING (stale)
+		testCases := []struct {
+			status       string
+			makeStale    bool
+			shouldDelete bool
+		}{
+			{model.WorkerStatusStopped, true, true},   // Should be deleted
+			{model.WorkerStatusStopped, false, false}, // Should not be deleted (fresh)
+			{model.WorkerStatusReady, true, false},    // Should not be deleted (not STOPPED)
+			{model.WorkerStatusRunning, true, false},  // Should not be deleted (not STOPPED)
+		}
+
+		workers := make([]*model.Worker, len(testCases))
+
+		for i, tc := range testCases {
+			testWorker, err := model.NewWorker(fmt.Sprintf("worker-%d", i), 3)
+			require.NoError(t, err, "Expected to create test worker %d", i)
+
+			insertedWorker, err := workerDbHandler.InsertWorker(testWorker)
+			require.NoError(t, err, "Expected to insert worker %d", i)
+
+			insertedWorker.Status = tc.status
+			updatedWorker, err := workerDbHandler.UpdateWorker(insertedWorker)
+			require.NoError(t, err, "Expected to update worker %d status", i)
+			workers[i] = updatedWorker
+		}
+
+		// Make some workers stale (older than 1 hour)
+		staleTime := time.Now().UTC().Add(-1 * time.Hour)
+		for i, tc := range testCases {
+			if tc.makeStale {
+				_, err = database.Instance.Exec(
+					"UPDATE worker SET updated_at = $1 WHERE rid = $2",
+					staleTime, workers[i].RID,
+				)
+				require.NoError(t, err, "Expected to make worker %d stale", i)
+			}
+		}
+
+		// Test DeleteStaleWorkers - should delete only stale STOPPED workers
+		deleteThreshold := 10 * time.Minute
+		deletedCount, err := workerDbHandler.DeleteStaleWorkers(deleteThreshold)
+		assert.NoError(t, err, "Expected DeleteStaleWorkers to complete successfully")
+		assert.Equal(t, 1, deletedCount, "Expected 1 worker to be deleted (stale STOPPED)")
+
+		// Verify only the stale STOPPED worker was deleted
+		for i, tc := range testCases {
+			worker, err := workerDbHandler.SelectWorker(workers[i].RID)
+
+			if tc.shouldDelete {
+				assert.Error(t, err, "Expected worker %d to be deleted", i)
+				assert.Nil(t, worker, "Expected deleted worker %d to be nil", i)
+			} else {
+				assert.NoError(t, err, "Expected worker %d to still exist", i)
+				assert.NotNil(t, worker, "Expected worker %d to not be nil", i)
+				assert.Equal(t, tc.status, worker.Status, "Expected worker %d status to remain unchanged", i)
+			}
+		}
+
+		// Clean up remaining workers
+		for i, tc := range testCases {
+			if !tc.shouldDelete {
+				err = workerDbHandler.DeleteWorker(workers[i].RID)
+				assert.NoError(t, err, "Expected to delete remaining worker %d", i)
+			}
+		}
+	})
+
+	t.Run("No stale workers to delete", func(t *testing.T) {
+		// Create fresh workers with different statuses
+		statuses := []string{model.WorkerStatusReady, model.WorkerStatusRunning, model.WorkerStatusStopped}
+		workers := make([]*model.Worker, len(statuses))
+
+		for i, status := range statuses {
+			testWorker, err := model.NewWorker(fmt.Sprintf("fresh-worker-%d", i), 3)
+			require.NoError(t, err, "Expected to create fresh worker %d", i)
+
+			insertedWorker, err := workerDbHandler.InsertWorker(testWorker)
+			require.NoError(t, err, "Expected to insert fresh worker %d", i)
+
+			insertedWorker.Status = status
+			updatedWorker, err := workerDbHandler.UpdateWorker(insertedWorker)
+			require.NoError(t, err, "Expected to update fresh worker %d status", i)
+			workers[i] = updatedWorker
+		}
+
+		// Test with short threshold - no workers should be deleted
+		deletedCount, err := workerDbHandler.DeleteStaleWorkers(10 * time.Second)
+		assert.NoError(t, err, "Expected DeleteStaleWorkers to complete successfully")
+		assert.Equal(t, 0, deletedCount, "Expected no workers to be deleted")
+
+		// Verify all workers still exist
+		for i, worker := range workers {
+			existingWorker, err := workerDbHandler.SelectWorker(worker.RID)
+			assert.NoError(t, err, "Expected fresh worker %d to still exist", i)
+			assert.NotNil(t, existingWorker, "Expected fresh worker %d to not be nil", i)
+		}
+
+		// Clean up
+		for i, worker := range workers {
+			err = workerDbHandler.DeleteWorker(worker.RID)
+			assert.NoError(t, err, "Expected to delete fresh worker %d", i)
+		}
+	})
+
+	t.Run("Delete only STOPPED workers older than threshold", func(t *testing.T) {
+		// Create multiple STOPPED workers with different timestamps
+		testCases := []struct {
+			name         string
+			ageMinutes   int
+			shouldDelete bool
+		}{
+			{"very-old-stopped", 120, true}, // 2 hours old, should be deleted
+			{"old-stopped", 30, true},       // 30 minutes old, should be deleted
+			{"recent-stopped", 5, false},    // 5 minutes old, should not be deleted
+			{"fresh-stopped", 1, false},     // 1 minute old, should not be deleted
+		}
+
+		workers := make([]*model.Worker, len(testCases))
+
+		for i, tc := range testCases {
+			testWorker, err := model.NewWorker(tc.name, 3)
+			require.NoError(t, err, "Expected to create worker %s", tc.name)
+
+			insertedWorker, err := workerDbHandler.InsertWorker(testWorker)
+			require.NoError(t, err, "Expected to insert worker %s", tc.name)
+
+			// Set status to STOPPED
+			insertedWorker.Status = model.WorkerStatusStopped
+			updatedWorker, err := workerDbHandler.UpdateWorker(insertedWorker)
+			require.NoError(t, err, "Expected to update worker %s status", tc.name)
+
+			// Set custom timestamp
+			timestamp := time.Now().UTC().Add(-time.Duration(tc.ageMinutes) * time.Minute)
+			_, err = database.Instance.Exec(
+				"UPDATE worker SET updated_at = $1 WHERE rid = $2",
+				timestamp, updatedWorker.RID,
+			)
+			require.NoError(t, err, "Expected to set custom timestamp for worker %s", tc.name)
+
+			workers[i] = updatedWorker
+		}
+
+		// Test with 15 minute threshold
+		deleteThreshold := 15 * time.Minute
+		deletedCount, err := workerDbHandler.DeleteStaleWorkers(deleteThreshold)
+		assert.NoError(t, err, "Expected DeleteStaleWorkers to complete successfully")
+		assert.Equal(t, 2, deletedCount, "Expected 2 workers to be deleted (older than 15 minutes)")
+
+		// Verify results
+		for i, tc := range testCases {
+			worker, err := workerDbHandler.SelectWorker(workers[i].RID)
+
+			if tc.shouldDelete {
+				assert.Error(t, err, "Expected worker %s to be deleted", tc.name)
+				assert.Nil(t, worker, "Expected deleted worker %s to be nil", tc.name)
+			} else {
+				assert.NoError(t, err, "Expected worker %s to still exist", tc.name)
+				assert.NotNil(t, worker, "Expected worker %s to not be nil", tc.name)
+				assert.Equal(t, model.WorkerStatusStopped, worker.Status, "Expected worker %s to remain STOPPED", tc.name)
+			}
+		}
+
+		// Clean up remaining workers
+		for i, tc := range testCases {
+			if !tc.shouldDelete {
+				err = workerDbHandler.DeleteWorker(workers[i].RID)
+				assert.NoError(t, err, "Expected to delete remaining worker %s", tc.name)
+			}
+		}
+	})
+}
+
 func TestWorkerSelectWorker(t *testing.T) {
 	helper.SetTestDatabaseConfigEnvs(t, dbPort)
 	dbConfig, err := helper.NewDatabaseConfiguration()

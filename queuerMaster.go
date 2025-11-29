@@ -16,18 +16,18 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 		return helper.NewError("old master check", fmt.Errorf("old master is nil"))
 	}
 
-	if oldMaster.Settings.RetentionArchive == 0 {
-		err := q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
-		if err != nil {
-			return helper.NewError("adding retention archive", err)
-		}
-	} else if oldMaster.Settings.RetentionArchive != masterSettings.RetentionArchive {
+	if masterSettings.JobDeleteThreshold == 0 {
 		err := q.dbJob.RemoveRetentionArchive()
 		if err != nil {
 			return helper.NewError("removing retention archive", err)
 		}
+	} else if oldMaster.Settings.JobDeleteThreshold != masterSettings.JobDeleteThreshold {
+		err := q.dbJob.RemoveRetentionArchive()
+		if err != nil {
+			q.log.Warn("Error removing retention archive (expected if none existed)", slog.String("error", err.Error()))
+		}
 
-		err = q.dbJob.AddRetentionArchive(masterSettings.RetentionArchive)
+		err = q.dbJob.AddRetentionArchive(masterSettings.JobDeleteThreshold)
 		if err != nil {
 			return helper.NewError("adding retention archive", err)
 		}
@@ -54,6 +54,11 @@ func (q *Queuer) masterTicker(ctx context.Context, oldMaster *model.Master, mast
 			err = q.checkStaleWorkers()
 			if err != nil {
 				q.log.Error("Error checking for stale workers", slog.String("error", err.Error()))
+			}
+
+			err = q.deleteStaleWorkers()
+			if err != nil {
+				q.log.Error("Error deleting stale workers", slog.String("error", err.Error()))
 			}
 
 			err = q.checkStaleJobs()
@@ -84,6 +89,20 @@ func (q *Queuer) checkStaleWorkers() error {
 
 	if staleCount > 0 {
 		q.log.Info("Updated stale workers", slog.Int("count", staleCount))
+	}
+
+	return nil
+}
+
+func (q *Queuer) deleteStaleWorkers() error {
+	deleteThreshold := 10 * time.Minute
+	deletedCount, err := q.dbWorker.DeleteStaleWorkers(deleteThreshold)
+	if err != nil {
+		return helper.NewError("deleting stale workers", err)
+	}
+
+	if deletedCount > 0 {
+		q.log.Info("Deleted stale workers", slog.Int("count", deletedCount))
 	}
 
 	return nil
