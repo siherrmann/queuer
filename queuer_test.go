@@ -267,7 +267,7 @@ func TestStart(t *testing.T) {
 
 		masterSettings := &model.MasterSettings{
 			MasterPollInterval: 5 * time.Second,
-			RetentionArchive:   30,
+			JobDeleteThreshold: 30,
 		}
 		queuer.Start(ctx, cancel, masterSettings)
 
@@ -279,7 +279,7 @@ func TestStart(t *testing.T) {
 		assert.Equal(t, queuer.worker.RID, master.WorkerRID, "Expected master RID to match worker RID")
 		assert.Equal(t, queuer.worker.ID, master.WorkerID, "Expected master ID to match worker ID")
 		assert.Equal(t, queuer.worker.Status, model.WorkerStatusRunning, "Expected worker status to be RUNNING")
-		assert.Equal(t, masterSettings.RetentionArchive, master.Settings.RetentionArchive, "Expected master retention archive to match")
+		assert.Equal(t, masterSettings.JobDeleteThreshold, master.Settings.JobDeleteThreshold, "Expected master retention archive to match")
 
 		// Check if the master updated_at is within the last 2 seconds,
 		// as the ticker runs every 5 seconds and we waited 6 seconds.
@@ -293,7 +293,7 @@ func TestStart(t *testing.T) {
 		defer cancel1()
 		masterSettings1 := &model.MasterSettings{
 			MasterPollInterval: 5 * time.Second,
-			RetentionArchive:   30 * 24 * time.Hour,
+			JobDeleteThreshold: 30 * 24 * time.Hour,
 		}
 		queuer1.Start(ctx1, cancel1, masterSettings1)
 
@@ -303,7 +303,7 @@ func TestStart(t *testing.T) {
 		defer cancel2()
 		masterSettings2 := &model.MasterSettings{
 			MasterPollInterval: 3 * time.Second,
-			RetentionArchive:   20 * 24 * time.Hour,
+			JobDeleteThreshold: 20 * 24 * time.Hour,
 		}
 		queuer2.Start(ctx2, cancel2, masterSettings2)
 
@@ -379,7 +379,7 @@ func TestStartWithoutWorker(t *testing.T) {
 		defer cancel1()
 		masterSettings1 := &model.MasterSettings{
 			MasterPollInterval: 5 * time.Second,
-			RetentionArchive:   30 * 24 * time.Hour,
+			JobDeleteThreshold: 30 * 24 * time.Hour,
 		}
 		queuer1.StartWithoutWorker(ctx1, cancel1, true, masterSettings1)
 
@@ -389,7 +389,7 @@ func TestStartWithoutWorker(t *testing.T) {
 		defer cancel2()
 		masterSettings2 := &model.MasterSettings{
 			MasterPollInterval: 3 * time.Second,
-			RetentionArchive:   20 * 24 * time.Hour,
+			JobDeleteThreshold: 20 * 24 * time.Hour,
 		}
 		queuer2.StartWithoutWorker(ctx2, cancel2, true, masterSettings2)
 

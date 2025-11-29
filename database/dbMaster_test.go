@@ -101,8 +101,8 @@ func TestMasterUpdateMaster(t *testing.T) {
 		RID: uuid.New(),
 	}
 	settings := &model.MasterSettings{
-		RetentionArchive:  30,
-		MasterLockTimeout: 10 * time.Minute,
+		JobDeleteThreshold: 30,
+		MasterLockTimeout:  10 * time.Minute,
 	}
 	masterOld, err := workerDbHandler.UpdateMaster(worker1, settings)
 	assert.NoError(t, err, "Expected no error updating master")
@@ -117,7 +117,7 @@ func TestMasterUpdateMaster(t *testing.T) {
 	assert.NotNil(t, master, "Expected master to not be nil")
 	assert.Equal(t, worker1.ID, master.WorkerID, "Expected master worker ID to match worker ID")
 	assert.Equal(t, worker1.RID, master.WorkerRID, "Expected master worker RID to match worker RID")
-	assert.Equal(t, settings.RetentionArchive, master.Settings.RetentionArchive, "Expected master retention archive to match")
+	assert.Equal(t, settings.JobDeleteThreshold, master.Settings.JobDeleteThreshold, "Expected master retention archive to match")
 
 	worker2 := &model.Worker{
 		ID:  2,
@@ -145,8 +145,8 @@ func TestMasterSelectMaster(t *testing.T) {
 		RID: uuid.New(),
 	}
 	settings := &model.MasterSettings{
-		RetentionArchive:  30,
-		MasterLockTimeout: 10 * time.Minute,
+		JobDeleteThreshold: 30,
+		MasterLockTimeout:  10 * time.Minute,
 	}
 	master, err := workerDbHandler.UpdateMaster(worker, settings)
 	require.NoError(t, err, "Expected no error updating master")
@@ -158,5 +158,5 @@ func TestMasterSelectMaster(t *testing.T) {
 	assert.Equal(t, 1, master.ID, "Expected master ID to be 1")
 	assert.Equal(t, worker.ID, master.WorkerID, "Expected master worker ID to be 1")
 	assert.Equal(t, worker.RID, master.WorkerRID, "Expected master worker RID to not equal to worker RID")
-	assert.Equal(t, settings.RetentionArchive, master.Settings.RetentionArchive, "Expected master retention archive to be 30")
+	assert.Equal(t, settings.JobDeleteThreshold, master.Settings.JobDeleteThreshold, "Expected master retention archive to be 30")
 }

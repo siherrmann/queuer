@@ -223,6 +223,8 @@ func NewStaticQueuer(logLevel slog.Leveler, dbConfig *helper.DatabaseConfigurati
 }
 
 // Start starts the queuer by initializing the job listeners and starting the job poll ticker.
+// If masterSettings are provided, it also starts the master poll ticker.
+// If masterSettings contain 0 values, they are set to default values.
 // It checks if the queuer is initialized properly, and if not, it logs a panic error and exits the program.
 // It runs the job processing in a separate goroutine and listens for job events.
 //
@@ -297,6 +299,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 		}
 
 		if len(masterSettings) > 0 && masterSettings[0] != nil {
+			masterSettings[0].SetDefault()
 			err = q.pollMasterTicker(ctx, masterSettings[0])
 			if err != nil && ctx.Err() == nil {
 				q.log.Error("Error starting master poll ticker", slog.String("error", err.Error()))

@@ -26,8 +26,19 @@ type MasterSettings struct {
 	// MasterPollInterval is the interval at which the master worker
 	// updates the master entry to stay master.
 	MasterPollInterval time.Duration `json:"master_poll_interval"`
-	// RetentionArchive is the duration for which archived data is retained.
-	RetentionArchive time.Duration `json:"retention_archive"`
+	// JobDeleteThreshold is the duration for which archived data is retained.
+	JobDeleteThreshold time.Duration `json:"retention_archive"`
+	// WorkerStaleThreshold is the duration after which a worker
+	// is considered stale if it hasn't updated its heartbeat
+	// and gets updated to status STOPPED.
+	WorkerStaleThreshold time.Duration `json:"worker_stale_threshold"`
+	// WorkerDeleteThreshold is the duration after which a stale worker
+	// is deleted from the database.
+	WorkerDeleteThreshold time.Duration `json:"worker_delete_threshold"`
+	// JobStaleThreshold is the duration after which a job
+	// is considered stale if it hasn't been updated
+	// and gets updated to status CANCELED.
+	JobStaleThreshold time.Duration `json:"job_stale_threshold"`
 }
 
 func (c MasterSettings) Value() (driver.Value, error) {
@@ -53,4 +64,25 @@ func (r *MasterSettings) Unmarshal(value interface{}) error {
 		return json.Unmarshal(b, r)
 	}
 	return nil
+}
+
+func (r *MasterSettings) SetDefault() {
+	if r.MasterLockTimeout == 0 {
+		r.MasterLockTimeout = 5 * time.Minute
+	}
+	if r.MasterPollInterval == 0 {
+		r.MasterPollInterval = 1 * time.Minute
+	}
+	if r.WorkerStaleThreshold == 0 {
+		r.WorkerStaleThreshold = 5 * time.Minute
+	}
+	if r.WorkerDeleteThreshold == 0 {
+		r.WorkerDeleteThreshold = 24 * time.Hour
+	}
+	if r.JobStaleThreshold == 0 {
+		r.JobStaleThreshold = 1 * time.Hour
+	}
+	if r.JobDeleteThreshold == 0 {
+		r.JobDeleteThreshold = 7 * 24 * time.Hour
+	}
 }

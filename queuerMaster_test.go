@@ -135,6 +135,118 @@ func TestCheckStaleWorkers(t *testing.T) {
 	})
 }
 
+func TestDeleteStaleWorkers(t *testing.T) {
+	envs := map[string]string{
+		"QUEUER_DB_HOST":     "localhost",
+		"QUEUER_DB_PORT":     dbPort,
+		"QUEUER_DB_DATABASE": "database",
+		"QUEUER_DB_USERNAME": "user",
+		"QUEUER_DB_PASSWORD": "password",
+		"QUEUER_DB_SCHEMA":   "public",
+		"QUEUER_DB_SSLMODE":  "disable",
+	}
+	for key, value := range envs {
+		t.Setenv(key, value)
+	}
+
+	t.Run("Delete stale workers with no workers", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+
+		err := queuer.deleteStaleWorkers()
+		assert.NoError(t, err, "Expected deleteStaleWorkers to complete without error when no workers exist")
+
+		err = queuer.Stop()
+		assert.NoError(t, err, "Expected Queuer to stop successfully")
+	})
+
+	t.Run("Delete stale workers removes old stopped workers", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Create a worker and set it to STOPPED with old timestamp
+		testWorker, err := model.NewWorker("old-stopped-worker", 3)
+		require.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := queuer.dbWorker.InsertWorker(testWorker)
+		require.NoError(t, err, "Expected to insert test worker")
+
+		// Update worker to STOPPED status and set updated_at to 15 minutes ago (older than 10 minute threshold)
+		oldTimestamp := time.Now().UTC().Add(-15 * time.Minute)
+		_, err = queuer.DB.Exec(
+			"UPDATE worker SET status = $1, updated_at = $2 WHERE rid = $3",
+			model.WorkerStatusStopped, oldTimestamp, insertedWorker.RID,
+		)
+		require.NoError(t, err, "Expected to update worker to old stopped status")
+
+		// Run the stale worker deletion
+		err = queuer.deleteStaleWorkers()
+		assert.NoError(t, err, "Expected deleteStaleWorkers to complete without error")
+
+		// Verify worker was deleted
+		_, err = queuer.dbWorker.SelectWorker(insertedWorker.RID)
+		assert.Error(t, err, "Expected worker to be deleted")
+	})
+
+	t.Run("Delete stale workers ignores recent stopped workers", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Create a worker and set it to STOPPED with recent timestamp
+		testWorker, err := model.NewWorker("recent-stopped-worker", 3)
+		require.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := queuer.dbWorker.InsertWorker(testWorker)
+		require.NoError(t, err, "Expected to insert test worker")
+
+		// Update worker to STOPPED status with recent timestamp (within 10 minute threshold)
+		insertedWorker.Status = model.WorkerStatusStopped
+		_, err = queuer.dbWorker.UpdateWorker(insertedWorker)
+		require.NoError(t, err, "Expected to update worker to stopped status")
+
+		// Run the stale worker deletion
+		err = queuer.deleteStaleWorkers()
+		assert.NoError(t, err, "Expected deleteStaleWorkers to complete without error")
+
+		// Verify worker still exists
+		worker, err := queuer.dbWorker.SelectWorker(insertedWorker.RID)
+		require.NoError(t, err, "Expected to select worker successfully")
+		assert.Equal(t, model.WorkerStatusStopped, worker.Status, "Expected recent stopped worker to remain")
+	})
+
+	t.Run("Delete stale workers ignores active workers", func(t *testing.T) {
+		queuer := NewQueuer("test", 10)
+		require.NotNil(t, queuer, "Expected Queuer to be created successfully")
+		defer queuer.Stop()
+
+		// Create a worker and keep it in READY status with old timestamp
+		testWorker, err := model.NewWorker("old-active-worker", 3)
+		require.NoError(t, err, "Expected to create test worker")
+
+		insertedWorker, err := queuer.dbWorker.InsertWorker(testWorker)
+		require.NoError(t, err, "Expected to insert test worker")
+
+		// Update worker with old timestamp but keep it READY
+		oldTimestamp := time.Now().UTC().Add(-15 * time.Minute)
+		_, err = queuer.DB.Exec(
+			"UPDATE worker SET updated_at = $1 WHERE rid = $2",
+			oldTimestamp, insertedWorker.RID,
+		)
+		require.NoError(t, err, "Expected to update worker timestamp")
+
+		// Run the stale worker deletion
+		err = queuer.deleteStaleWorkers()
+		assert.NoError(t, err, "Expected deleteStaleWorkers to complete without error")
+
+		// Verify worker still exists (not deleted because it's not STOPPED)
+		worker, err := queuer.dbWorker.SelectWorker(insertedWorker.RID)
+		require.NoError(t, err, "Expected to select worker successfully")
+		assert.Equal(t, model.WorkerStatusReady, worker.Status, "Expected active worker to remain unchanged")
+	})
+}
+
 func TestCheckStaleJobs(t *testing.T) {
 	envs := map[string]string{
 		"QUEUER_DB_HOST":     "localhost",
@@ -195,10 +307,10 @@ func TestCheckStaleJobs(t *testing.T) {
 		err = queuer.checkStaleJobs()
 		assert.NoError(t, err, "Expected checkStaleJobs to complete without error")
 
-		// Verify job was cancelled
+		// Verify job was reset to queued
 		updatedJob, err := queuer.dbJob.SelectJob(insertedJob.RID)
 		require.NoError(t, err, "Expected to select job successfully")
-		assert.Equal(t, model.JobStatusCancelled, updatedJob.Status, "Expected job assigned to stopped worker to be cancelled")
+		assert.Equal(t, model.JobStatusQueued, updatedJob.Status, "Expected job assigned to stopped worker to be reset to queued")
 	})
 
 	t.Run("Check stale jobs ignores jobs with final statuses", func(t *testing.T) {

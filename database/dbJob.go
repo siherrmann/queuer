@@ -381,10 +381,9 @@ func (r JobDBHandler) UpdateJobFinal(job *model.Job) (*model.Job, error) {
 	return archivedJob, nil
 }
 
-// UpdateStaleJobs updates all jobs to CANCELLED status where the assigned worker is STOPPED
-// based on the provided threshold. It returns the number of jobs that were updated.
-// Jobs are considered stale if their assigned worker has STOPPED status and the worker's
-// updated_at timestamp is older than the threshold.
+// UpdateStaleJobs updates all jobs to QUEUED status where the assigned worker is STOPPED
+// so they can be picked up by available workers again. It returns the number of jobs that were updated.
+// Jobs are considered stale if their assigned worker has STOPPED status.
 func (r JobDBHandler) UpdateStaleJobs() (int, error) {
 	var affectedRows int
 	err := r.db.Instance.QueryRow(

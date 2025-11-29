@@ -33,7 +33,7 @@ func ExampleFull() {
 	defer cancel()
 	q.Start(ctx, cancel, &model.MasterSettings{
 		MasterPollInterval: 10 * time.Second,
-		RetentionArchive:   24 * time.Hour,
+		JobDeleteThreshold: 24 * time.Hour,
 	})
 
 	// Example adding a single job to the queue

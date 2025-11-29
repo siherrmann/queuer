@@ -22,6 +22,7 @@ type WorkerDBHandlerFunctions interface {
 	UpdateWorker(worker *model.Worker) (*model.Worker, error)
 	UpdateStaleWorkers(staleThreshold time.Duration) (int, error)
 	DeleteWorker(rid uuid.UUID) error
+	DeleteStaleWorkers(deleteThreshold time.Duration) (int, error)
 	SelectWorker(rid uuid.UUID) (*model.Worker, error)
 	SelectAllWorkers(lastID int, entries int) ([]*model.Worker, error)
 	SelectAllWorkersBySearch(search string, lastID int, entries int) ([]*model.Worker, error)
@@ -233,6 +234,23 @@ func (r WorkerDBHandler) DeleteWorker(rid uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// DeleteStaleWorkers deletes workers that have been in STOPPED status for longer than the deleteThreshold.
+// It returns the number of workers that were deleted.
+func (r WorkerDBHandler) DeleteStaleWorkers(deleteThreshold time.Duration) (int, error) {
+	cutoffTime := time.Now().UTC().Add(-deleteThreshold)
+
+	var rowsAffected int
+	err := r.db.Instance.QueryRow(
+		`SELECT delete_stale_workers($1)`,
+		cutoffTime,
+	).Scan(&rowsAffected)
+	if err != nil {
+		return 0, helper.NewError("delete stale workers", err)
+	}
+
+	return rowsAffected, nil
 }
 
 // SelectWorker retrieves a single worker record from the database based on its RID.
