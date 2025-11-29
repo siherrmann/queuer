@@ -903,3 +903,30 @@ func TestReaddJobFromArchive(t *testing.T) {
 
 	testQueuer.Stop()
 }
+
+func TestDeleteJob(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	testQueuer.AddTask(TaskMock)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.Start(ctx, cancel)
+
+	t.Run("Successfully deletes a job", func(t *testing.T) {
+		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		assert.NoError(t, err, "AddJob should not return an error on success")
+
+		job = testQueuer.WaitForJobFinished(job.RID)
+		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
+
+		err = testQueuer.DeleteJob(job.RID)
+		assert.NoError(t, err, "DeleteJob should not return an error on success")
+
+		jobArchived, err := testQueuer.dbJob.SelectJobFromArchive(job.RID)
+		assert.Error(t, err, "SelectJobFromArchive should return an error for deleted job")
+		assert.Nil(t, jobArchived, "SelectJobFromArchive should return nil for deleted job")
+	})
+
+	testQueuer.Stop()
+}

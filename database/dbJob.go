@@ -389,7 +389,7 @@ func (r JobDBHandler) UpdateStaleJobs() (int, error) {
 	var affectedRows int
 	err := r.db.Instance.QueryRow(
 		`SELECT update_stale_jobs($1, $2, $3, $4, $5)`,
-		model.JobStatusCancelled,
+		model.JobStatusQueued,
 		model.JobStatusSucceeded,
 		model.JobStatusCancelled,
 		model.JobStatusFailed,
@@ -400,19 +400,6 @@ func (r JobDBHandler) UpdateStaleJobs() (int, error) {
 	}
 
 	return affectedRows, nil
-}
-
-// DeleteJob deletes a job record from the database based on its RID.
-func (r JobDBHandler) DeleteJob(rid uuid.UUID) error {
-	_, err := r.db.Instance.Exec(
-		`SELECT delete_job($1::UUID)`,
-		rid,
-	)
-	if err != nil {
-		return helper.NewError("exec", err)
-	}
-
-	return nil
 }
 
 // SelectJob retrieves a single job record from the database based on its RID.
@@ -627,6 +614,21 @@ func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
 func (r JobDBHandler) RemoveRetentionArchive() error {
 	_, err := r.db.Instance.Exec(
 		`SELECT remove_retention_archive()`,
+	)
+	if err != nil {
+		return helper.NewError("exec", err)
+	}
+
+	return nil
+}
+
+// DeleteJob deletes a job record from the job archive based on its RID.
+// We only delete jobs from the archive as queued and running jobs should be cancelled first.
+// Cancelling a job will move it to the archive with CANCELLED status.
+func (r JobDBHandler) DeleteJob(rid uuid.UUID) error {
+	_, err := r.db.Instance.Exec(
+		`SELECT delete_job($1::UUID)`,
+		rid,
 	)
 	if err != nil {
 		return helper.NewError("exec", err)

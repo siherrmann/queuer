@@ -240,6 +240,18 @@ func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) (*model.Job, error) {
 	return newJob, nil
 }
 
+// DeleteJob deletes a job by its RID.
+func (q *Queuer) DeleteJob(jobRid uuid.UUID) error {
+	err := q.dbJob.DeleteJob(jobRid)
+	if err != nil {
+		return helper.NewError("deleting job", err)
+	}
+
+	q.log.Info("Job deleted", slog.String("job_rid", jobRid.String()))
+
+	return nil
+}
+
 // GetJob retrieves a job by its RID.
 func (q *Queuer) GetJob(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJob(jobRid)
