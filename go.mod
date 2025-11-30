@@ -67,7 +67,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.10 // indirect
-	github.com/siherrmann/queuerSql v0.0.0-20251129210855-0dcd844d7c2c
+	github.com/siherrmann/queuerSql v0.0.0-20251130135331-9ed23b19fae5
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.10.1
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
