@@ -67,6 +67,38 @@ func TestGetWorkers(t *testing.T) {
 	})
 }
 
+func TestGetWorkersBySearch(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
+
+	t.Run("Successfully search for workers by name", func(t *testing.T) {
+		// The queuer creates a worker with name "TestQueuer"
+		workers, err := testQueuer.GetWorkersBySearch("TestQueuer", 0, 10)
+		assert.NoError(t, err, "expected no error when searching for workers")
+		require.NotNil(t, workers, "expected workers to be retrieved")
+		assert.GreaterOrEqual(t, len(workers), 1, "expected at least one worker matching search term")
+		assert.Equal(t, "TestQueuer", workers[0].Name, "expected worker name to match search term")
+	})
+
+	t.Run("Successfully search for workers by status", func(t *testing.T) {
+		workers, err := testQueuer.GetWorkersBySearch("READY", 0, 10)
+		assert.NoError(t, err, "expected no error when searching for workers by status")
+		require.NotNil(t, workers, "expected workers to be retrieved")
+		assert.GreaterOrEqual(t, len(workers), 1, "expected at least one worker with READY status")
+	})
+
+	t.Run("Returns empty result for non-matching search", func(t *testing.T) {
+		workers, err := testQueuer.GetWorkersBySearch("NonExistentWorker", 0, 10)
+		assert.NoError(t, err, "expected no error when searching with non-matching term")
+		if workers != nil {
+			assert.Len(t, workers, 0, "expected empty slice for non-matching search")
+		}
+	})
+}
+
 func TestGetConnections(t *testing.T) {
 	helper.SetTestDatabaseConfigEnvs(t, dbPort)
 	testQueuer := NewQueuer("TestQueuer", 100)

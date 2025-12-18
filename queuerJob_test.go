@@ -904,6 +904,94 @@ func TestReaddJobFromArchive(t *testing.T) {
 	testQueuer.Stop()
 }
 
+func TestGetJobsBySearch(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	testQueuer.AddTask(TaskMock)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.Start(ctx, cancel)
+
+	t.Run("Successfully search for jobs", func(t *testing.T) {
+		// Add multiple jobs with different task names
+		job1, err := testQueuer.AddJob(TaskMock, 1, "1")
+		assert.NoError(t, err, "AddJob should not return an error")
+		require.NotNil(t, job1, "Job1 should not be nil")
+
+		job2, err := testQueuer.AddJob(TaskMock, 1, "2")
+		assert.NoError(t, err, "AddJob should not return an error")
+		require.NotNil(t, job2, "Job2 should not be nil")
+
+		// Search for jobs by task name
+		jobs, err := testQueuer.GetJobsBySearch("TaskMock", 0, 10)
+		assert.NoError(t, err, "GetJobsBySearch should not return an error")
+		assert.GreaterOrEqual(t, len(jobs), 2, "Should find at least 2 jobs matching TaskMock")
+
+		// Search for jobs by status
+		jobs, err = testQueuer.GetJobsBySearch("QUEUED", 0, 10)
+		assert.NoError(t, err, "GetJobsBySearch should not return an error")
+		assert.GreaterOrEqual(t, len(jobs), 0, "Should not error when searching for QUEUED status")
+	})
+
+	t.Run("Returns empty result for non-matching search", func(t *testing.T) {
+		jobs, err := testQueuer.GetJobsBySearch("NonExistentTask", 0, 10)
+		assert.NoError(t, err, "GetJobsBySearch should not return an error")
+		if jobs != nil {
+			assert.Len(t, jobs, 0, "Should return empty slice for non-matching search")
+		}
+	})
+
+	testQueuer.Stop()
+}
+
+func TestGetJobsEndedBySearch(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	testQueuer.AddTask(TaskMock)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.Start(ctx, cancel)
+
+	t.Run("Successfully search for ended jobs", func(t *testing.T) {
+		// Add jobs and wait for them to finish
+		job1, err := testQueuer.AddJob(TaskMock, 1, "1")
+		assert.NoError(t, err, "AddJob should not return an error")
+		require.NotNil(t, job1, "Job1 should not be nil")
+
+		job2, err := testQueuer.AddJob(TaskMock, 1, "2")
+		assert.NoError(t, err, "AddJob should not return an error")
+		require.NotNil(t, job2, "Job2 should not be nil")
+
+		// Wait for jobs to finish
+		finishedJob1 := testQueuer.WaitForJobFinished(job1.RID)
+		assert.NotNil(t, finishedJob1, "Job1 should finish")
+		assert.Contains(t, []string{model.JobStatusSucceeded, model.JobStatusFailed}, finishedJob1.Status, "Job1 should have finished")
+
+		finishedJob2 := testQueuer.WaitForJobFinished(job2.RID)
+		assert.NotNil(t, finishedJob2, "Job2 should finish")
+		assert.Contains(t, []string{model.JobStatusSucceeded, model.JobStatusFailed}, finishedJob2.Status, "Job2 should have finished")
+
+		// Search for ended jobs by task name
+		jobs, err := testQueuer.GetJobsEndedBySearch("TaskMock", 0, 10)
+		assert.NoError(t, err, "GetJobsEndedBySearch should not return an error")
+		assert.GreaterOrEqual(t, len(jobs), 2, "Should find at least 2 ended jobs matching TaskMock")
+
+		// Search for ended jobs by status - just verify no error
+		_, err = testQueuer.GetJobsEndedBySearch("SUCCEEDED", 0, 10)
+		assert.NoError(t, err, "GetJobsEndedBySearch should not return an error when searching by status")
+	})
+
+	t.Run("Returns empty result for non-matching search in archive", func(t *testing.T) {
+		jobs, err := testQueuer.GetJobsEndedBySearch("NonExistentEndedTask", 0, 10)
+		assert.NoError(t, err, "GetJobsEndedBySearch should not return an error")
+		if jobs != nil {
+			assert.Len(t, jobs, 0, "Should return empty slice for non-matching search")
+		}
+	})
+
+	testQueuer.Stop()
+}
+
 func TestDeleteJob(t *testing.T) {
 	helper.SetTestDatabaseConfigEnvs(t, dbPort)
 	testQueuer := NewQueuer("TestQueuer", 100)
