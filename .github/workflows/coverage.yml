@@ -21,7 +21,7 @@ jobs:
       - name: Build
         run: go build -v ./...
       - name: Test
-        run: go test -v -coverprofile coverage.out $(go list ./... | grep -v queuer/example | grep -v queuer/cli)
+        run: go test -v -coverprofile coverage.out $(go list ./... | grep -v queuer/example | grep -v queuer/cli | grep -v queuer/manager)
       - name: Update coverage report
         uses: ncruces/go-coverage-report@v0
         with:

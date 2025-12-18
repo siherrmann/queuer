@@ -272,6 +272,26 @@ func (q *Queuer) GetJobs(lastId int, entries int) ([]*model.Job, error) {
 	return jobs, nil
 }
 
+// GetJobsBySearch retrieves jobs that match the given search term.
+func (q *Queuer) GetJobsBySearch(search string, lastId int, entries int) ([]*model.Job, error) {
+	jobs, err := q.dbJob.SelectAllJobsBySearch(search, lastId, entries)
+	if err != nil {
+		return nil, helper.NewError("selecting jobs by search", err)
+	}
+
+	return jobs, nil
+}
+
+// GetJobsByWorkerRID retrieves jobs assigned to a specific worker by its RID.
+func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int) ([]*model.Job, error) {
+	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, lastId, entries)
+	if err != nil {
+		return nil, helper.NewError("selecting jobs by worker RID", err)
+	}
+
+	return jobs, nil
+}
+
 // GetJobEnded retrieves a job that has ended (succeeded, cancelled or failed) by its RID.
 func (q *Queuer) GetJobEnded(jobRid uuid.UUID) (*model.Job, error) {
 	job, err := q.dbJob.SelectJobFromArchive(jobRid)
@@ -292,11 +312,11 @@ func (q *Queuer) GetJobsEnded(lastId int, entries int) ([]*model.Job, error) {
 	return jobs, nil
 }
 
-// GetJobsByWorkerRID retrieves jobs assigned to a specific worker by its RID.
-func (q *Queuer) GetJobsByWorkerRID(workerRid uuid.UUID, lastId int, entries int) ([]*model.Job, error) {
-	jobs, err := q.dbJob.SelectAllJobsByWorkerRID(workerRid, lastId, entries)
+// GetJobsEndedBySearch retrieves ended jobs that match the given search term.
+func (q *Queuer) GetJobsEndedBySearch(search string, lastId int, entries int) ([]*model.Job, error) {
+	jobs, err := q.dbJob.SelectAllJobsFromArchiveBySearch(search, lastId, entries)
 	if err != nil {
-		return nil, helper.NewError("selecting jobs by worker RID", err)
+		return nil, helper.NewError("selecting ended jobs by search", err)
 	}
 
 	return jobs, nil
