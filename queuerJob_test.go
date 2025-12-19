@@ -116,23 +116,9 @@ func TestAddJobRunning(t *testing.T) {
 		assert.NoError(t, err, "GetJob should not return an error")
 		assert.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
 
-		done := make(chan struct{})
-		go func() {
-			job = testQueuer.WaitForJobFinished(job.RID)
-			assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
-			assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
-			close(done)
-		}()
-
-	outerloop:
-		for {
-			select {
-			case <-done:
-				break outerloop
-			case <-time.After(5 * time.Second):
-				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
-			}
-		}
+		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
+		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
 
 		jobNotExisting, err := testQueuer.GetJob(job.RID)
 		assert.Error(t, err, "GetJob should return an error for ended job")
@@ -161,23 +147,9 @@ func TestAddJobRunning(t *testing.T) {
 		require.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
 		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Running status")
 
-		done := make(chan struct{})
-		go func() {
-			job = testQueuer.WaitForJobFinished(job.RID)
-			assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
-			assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
-			close(done)
-		}()
-
-	outerloop:
-		for {
-			select {
-			case <-done:
-				break outerloop
-			case <-time.After(5 * time.Second):
-				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
-			}
-		}
+		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
+		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
 
 		// Check if the job is archived
 		jobNotExisting, err := testQueuer.GetJob(job.RID)
@@ -204,23 +176,9 @@ func TestAddJobRunning(t *testing.T) {
 		require.NotNil(t, job, "GetJob should return the job that is currently running")
 		assert.Equal(t, model.JobStatusScheduled, job.Status, "Job should be in Scheduled status")
 
-		done := make(chan struct{})
-		go func() {
-			job = testQueuer.WaitForJobFinished(job.RID)
-			assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
-			assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
-			close(done)
-		}()
-
-	outerloop:
-		for {
-			select {
-			case <-done:
-				break outerloop
-			case <-time.After(5 * time.Second):
-				t.Fatal("WaitForJobFinished timed out waiting for job to finish")
-			}
-		}
+		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
+		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
+		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
 
 		// Check if the job is archived
 		jobNotExisting, err := testQueuer.GetJob(job.RID)
@@ -514,12 +472,12 @@ func TestAddJobWithScheduleOptionsRunning(t *testing.T) {
 
 		log.Printf("Second job started: %v", secondJob)
 
-		secondJob = testQueuer.WaitForJobFinished(secondJob.RID)
+		secondJob = testQueuer.WaitForJobFinished(secondJob.RID, 10*time.Second)
 		assert.Equal(t, model.JobStatusSucceeded, secondJob.Status, "Second job should have status Succeeded")
 		close(secondJobFinished)
 	}()
 
-	job = testQueuer.WaitForJobFinished(job.RID)
+	job = testQueuer.WaitForJobFinished(job.RID, 10*time.Second)
 	assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
 	assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
 
@@ -723,7 +681,7 @@ func TestWaitForJobFinished(t *testing.T) {
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
-		job = testQueuer.WaitForJobFinished(job.RID)
+		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
 		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
 		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
 
@@ -734,7 +692,7 @@ func TestWaitForJobFinished(t *testing.T) {
 	})
 
 	t.Run("Successfully cancel context while waiting for job", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job, err := testQueuer.AddJob(TaskMock, 10, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		go func() {
@@ -742,7 +700,7 @@ func TestWaitForJobFinished(t *testing.T) {
 			cancel()
 		}()
 
-		job = testQueuer.WaitForJobFinished(job.RID)
+		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
 		assert.Nil(t, job, "WaitForJobFinished should return nil when context is cancelled")
 	})
 
@@ -963,12 +921,12 @@ func TestGetJobsEndedBySearch(t *testing.T) {
 		require.NotNil(t, job2, "Job2 should not be nil")
 
 		// Wait for jobs to finish
-		finishedJob1 := testQueuer.WaitForJobFinished(job1.RID)
-		assert.NotNil(t, finishedJob1, "Job1 should finish")
+		finishedJob1 := testQueuer.WaitForJobFinished(job1.RID, 30*time.Second)
+		require.NotNil(t, finishedJob1, "Job1 should finish within timeout")
 		assert.Contains(t, []string{model.JobStatusSucceeded, model.JobStatusFailed}, finishedJob1.Status, "Job1 should have finished")
 
-		finishedJob2 := testQueuer.WaitForJobFinished(job2.RID)
-		assert.NotNil(t, finishedJob2, "Job2 should finish")
+		finishedJob2 := testQueuer.WaitForJobFinished(job2.RID, 30*time.Second)
+		require.NotNil(t, finishedJob2, "Job2 should finish within timeout")
 		assert.Contains(t, []string{model.JobStatusSucceeded, model.JobStatusFailed}, finishedJob2.Status, "Job2 should have finished")
 
 		// Search for ended jobs by task name
@@ -1004,7 +962,7 @@ func TestDeleteJob(t *testing.T) {
 		job, err := testQueuer.AddJob(TaskMock, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
-		job = testQueuer.WaitForJobFinished(job.RID)
+		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
 		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
 		assert.Equal(t, model.JobStatusSucceeded, job.Status, "WaitForJobFinished should return job with status Succeeded")
 

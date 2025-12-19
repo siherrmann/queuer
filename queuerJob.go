@@ -162,7 +162,13 @@ func (q *Queuer) WaitForJobAdded() *model.Job {
 
 // WaitForJobFinished waits for a job to finish and returns the job.
 // It listens for job delete events and returns the job when it is finished.
-func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
+// If timeout is reached before the job finishes, it returns nil.
+func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID, timeout time.Duration) *model.Job {
+	// First check if the job is already finished (in archive)
+	if archivedJob, err := q.dbJob.SelectJobFromArchive(jobRid); err == nil && archivedJob != nil {
+		return archivedJob
+	}
+
 	jobFinished := make(chan *model.Job, 1)
 	outerReady := make(chan struct{})
 	ready := make(chan struct{})
@@ -177,10 +183,14 @@ func (q *Queuer) WaitForJobFinished(jobRid uuid.UUID) *model.Job {
 
 	<-outerReady
 	<-ready
+
+	timeoutChan := time.After(timeout)
 	for {
 		select {
 		case job := <-jobFinished:
 			return job
+		case <-timeoutChan:
+			return nil
 		case <-q.ctx.Done():
 			return nil
 		}

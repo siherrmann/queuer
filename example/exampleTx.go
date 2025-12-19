@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/siherrmann/queuer"
 )
@@ -47,7 +48,7 @@ func ExampleTx() {
 	}
 
 	// Wait for job to finish for stopping the queuer
-	job = q.WaitForJobFinished(job.RID)
+	job = q.WaitForJobFinished(job.RID, 30*time.Second)
 
 	log.Printf("Job finished with status: %s", job.Status)
 
