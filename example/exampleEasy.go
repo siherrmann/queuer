@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/siherrmann/queuer"
 )
@@ -25,7 +26,7 @@ func ExampleEasy() {
 		log.Fatalf("Error adding job: %v", err)
 	}
 
-	job = q.WaitForJobFinished(job.RID)
+	job = q.WaitForJobFinished(job.RID, 30*time.Second)
 
 	log.Printf("Job finished with status: %s", job.Status)
 
