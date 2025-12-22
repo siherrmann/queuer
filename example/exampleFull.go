@@ -37,7 +37,7 @@ func ExampleFull() {
 	})
 
 	// Example adding a single job to the queue
-	_, err := q.AddJob(ShortTask, 5, "12")
+	_, err := q.AddJob(ShortTask, nil, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job: %v", err)
 	}
@@ -69,7 +69,7 @@ func ExampleFull() {
 			Interval: time.Second * 5,
 		},
 	}
-	_, err = q.AddJobWithOptions(options, ShortTask, 5, "12")
+	_, err = q.AddJobWithOptions(options, ShortTask, nil, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job with options: %v", err)
 	}
@@ -82,7 +82,7 @@ func ExampleFull() {
 			MaxCount: 10,
 		},
 	}
-	job, err := q.AddJobWithOptions(options, LongTask, time.Now().Second(), "1")
+	job, err := q.AddJobWithOptions(options, LongTask, nil, time.Now().Second(), "1")
 	if err != nil {
 		log.Fatalf("Error adding job with schedule options: %v", err)
 	}

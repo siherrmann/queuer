@@ -21,7 +21,7 @@ func ExampleEasy() {
 	q.Start(ctx, cancel)
 
 	// Add a job to the queue
-	job, err := q.AddJob(ShortTask, 5, "12")
+	job, err := q.AddJob(ShortTask, nil, 5, "12")
 	if err != nil {
 		log.Fatalf("Error adding job: %v", err)
 	}
