@@ -17,9 +17,9 @@ import (
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
 // It returns the created job or an error if something goes wrong.
-func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job, error) {
+func (q *Queuer) AddJob(task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
 	options := q.mergeOptions(nil)
-	job, err := q.addJob(task, options, parameters...)
+	job, err := q.addJob(task, options, parametersKeyed, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job", slog.String("error", err.Error()))
 		return nil, helper.NewError("adding job", err)
@@ -34,9 +34,9 @@ func (q *Queuer) AddJob(task interface{}, parameters ...interface{}) (*model.Job
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
 // It returns the created job or an error if something goes wrong.
-func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parameters ...interface{}) (*model.Job, error) {
+func (q *Queuer) AddJobTx(tx *sql.Tx, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
 	options := q.mergeOptions(nil)
-	job, err := q.addJobTx(tx, task, options, parameters...)
+	job, err := q.addJobTx(tx, task, options, parametersKeyed, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job with transaction", slog.String("error", err.Error()))
 		return nil, helper.NewError("adding job", err)
@@ -79,9 +79,9 @@ Example usage:
 		}
 	}
 */
-func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
+func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
-	job, err := q.addJob(task, options, parameters...)
+	job, err := q.addJob(task, options, parametersKeyed, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job with options", slog.String("error", err.Error()))
 		return nil, helper.NewError("adding job", err)
@@ -96,9 +96,9 @@ func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, par
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
 // It returns the created job or an error if something goes wrong.
-func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task interface{}, parameters ...interface{}) (*model.Job, error) {
+func (q *Queuer) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
-	job, err := q.addJobTx(tx, task, options, parameters...)
+	job, err := q.addJobTx(tx, task, options, parametersKeyed, parameters...)
 	if err != nil {
 		q.log.Error("Error adding job with transaction and options", slog.String("error", err.Error()))
 		return nil, helper.NewError("adding job", err)
@@ -116,7 +116,7 @@ func (q *Queuer) AddJobs(batchJobs []model.BatchJob) error {
 	var jobs []*model.Job
 	for _, batchJob := range batchJobs {
 		options := q.mergeOptions(batchJob.Options)
-		newJob, err := model.NewJob(batchJob.Task, options, batchJob.Parameters...)
+		newJob, err := model.NewJob(batchJob.Task, options, batchJob.ParametersKeyed, batchJob.Parameters...)
 		if err != nil {
 			return fmt.Errorf("error creating job with job options: %v", err)
 		}
@@ -240,7 +240,7 @@ func (q *Queuer) ReaddJobFromArchive(jobRid uuid.UUID) (*model.Job, error) {
 	}
 
 	// Readd the job to the queue
-	newJob, err := q.AddJobWithOptions(job.Options, job.TaskName, job.Parameters...)
+	newJob, err := q.AddJobWithOptions(job.Options, job.TaskName, job.ParametersKeyed, job.Parameters...)
 	if err != nil {
 		return nil, helper.NewError("readding job", err)
 	}
@@ -350,8 +350,8 @@ func (q *Queuer) mergeOptions(options *model.Options) *model.Options {
 }
 
 // addJob adds a job to the queue with all necessary parameters.
-func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
-	newJob, err := model.NewJob(task, options, parameters...)
+func (q *Queuer) addJob(task interface{}, options *model.Options, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
+	newJob, err := model.NewJob(task, options, parametersKeyed, parameters...)
 	if err != nil {
 		return nil, helper.NewError("creating job", err)
 	}
@@ -365,8 +365,8 @@ func (q *Queuer) addJob(task interface{}, options *model.Options, parameters ...
 }
 
 // addJobTx adds a job to the queue with all necessary parameters.
-func (q *Queuer) addJobTx(tx *sql.Tx, task interface{}, options *model.Options, parameters ...interface{}) (*model.Job, error) {
-	newJob, err := model.NewJob(task, options, parameters...)
+func (q *Queuer) addJobTx(tx *sql.Tx, task interface{}, options *model.Options, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
+	newJob, err := model.NewJob(task, options, parametersKeyed, parameters...)
 	if err != nil {
 		return nil, helper.NewError("creating job", err)
 	}

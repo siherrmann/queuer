@@ -29,7 +29,7 @@ func ExampleTx() {
 	// Do something with the transaction
 	// eg. `data, err := dataDB.InsertData(tx, "some data")`
 
-	job, err := q.AddJobTx(tx, ShortTask, 5, "12")
+	job, err := q.AddJobTx(tx, ShortTask, nil, 5, "12")
 	if err != nil {
 		log.Printf("Error adding job: %v", err)
 		err = tx.Rollback()
