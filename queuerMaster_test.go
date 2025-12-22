@@ -289,7 +289,7 @@ func TestCheckStaleJobs(t *testing.T) {
 		require.NoError(t, err, "Expected to update worker to STOPPED")
 
 		// Create a job assigned to the stopped worker
-		testJob, err := model.NewJob("test-task", nil)
+		testJob, err := model.NewJob("test-task", nil, nil)
 		require.NoError(t, err, "Expected to create test job")
 		testJob.WorkerRID = insertedWorker.RID
 
@@ -330,7 +330,7 @@ func TestCheckStaleJobs(t *testing.T) {
 		require.NoError(t, err, "Expected to update worker to STOPPED")
 
 		// Create a job with final status assigned to the stopped worker
-		testJob, err := model.NewJob("test-task", nil)
+		testJob, err := model.NewJob("test-task", nil, nil)
 		require.NoError(t, err, "Expected to create test job")
 		testJob.WorkerRID = insertedWorker.RID
 
@@ -367,7 +367,7 @@ func TestCheckStaleJobs(t *testing.T) {
 		require.NoError(t, err, "Expected to insert test worker")
 
 		// Create a job assigned to the ready worker
-		testJob, err := model.NewJob("test-task", nil)
+		testJob, err := model.NewJob("test-task", nil, nil)
 		require.NoError(t, err, "Expected to create test job")
 		testJob.WorkerRID = insertedWorker.RID
 

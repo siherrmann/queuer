@@ -68,7 +68,7 @@ func TestAddJob(t *testing.T) {
 		}
 
 		params := []interface{}{1, "2"}
-		job, err := testQueuer.AddJob(TaskMock, params...)
+		job, err := testQueuer.AddJob(TaskMock, nil, params...)
 		log.Printf("Job added 1: %v", job)
 
 		assert.NoError(t, err, "AddJob should not return an error on success")
@@ -79,7 +79,7 @@ func TestAddJob(t *testing.T) {
 
 	t.Run("Returns error for nil function", func(t *testing.T) {
 		var nilTask func() // Invalid nil function
-		job, err := testQueuer.AddJob(nilTask, "param1")
+		job, err := testQueuer.AddJob(nilTask, nil, "param1")
 		log.Printf("Job added 2: %v", job)
 
 		assert.Error(t, err, "AddJob should return an error for nil task (via addJobFn)")
@@ -89,7 +89,7 @@ func TestAddJob(t *testing.T) {
 
 	t.Run("Returns error for invalid task type", func(t *testing.T) {
 		invalidTask := 123 // Invalid integer type instead of a function
-		job, err := testQueuer.AddJob(invalidTask, "param1")
+		job, err := testQueuer.AddJob(invalidTask, nil, "param1")
 		log.Printf("Job added 3: %v", job)
 
 		assert.Error(t, err, "AddJob should return an error for invalid task type")
@@ -109,7 +109,7 @@ func TestAddJobRunning(t *testing.T) {
 	testQueuer.Start(ctx, cancel)
 
 	t.Run("Successfully runs a job without options", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job, err := testQueuer.AddJob(TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		queuedJob, err := testQueuer.GetJob(job.RID)
@@ -139,7 +139,7 @@ func TestAddJobRunning(t *testing.T) {
 			},
 		}
 
-		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
+		job, err := testQueuer.AddJobWithOptions(options, TaskMock, nil, 1, "2")
 		require.NoError(t, err, "AddJob should not return an error on success")
 
 		queuedJob, err := testQueuer.GetJob(job.RID)
@@ -171,7 +171,7 @@ func TestAddJobRunning(t *testing.T) {
 			},
 		}
 
-		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
+		job, err := testQueuer.AddJobWithOptions(options, TaskMock, nil, 1, "2")
 		require.NoError(t, err, "AddJob should not return an error on success")
 		require.NotNil(t, job, "GetJob should return the job that is currently running")
 		assert.Equal(t, model.JobStatusScheduled, job.Status, "Job should be in Scheduled status")
@@ -212,7 +212,7 @@ func TestAddJobTx(t *testing.T) {
 		tx, err := testQueuer.DB.Begin()
 		require.NoError(t, err, "Begin transaction should not return an error")
 
-		job, err := testQueuer.AddJobTx(tx, TaskMock, params...)
+		job, err := testQueuer.AddJobTx(tx, TaskMock, nil, params...)
 		assert.NoError(t, err, "AddJobTx should not return an error on success")
 		assert.Equal(t, expectedJob.TaskName, job.TaskName, "AddJobTx should return the correct task name")
 		assert.EqualValues(t, expectedJob.Parameters, job.Parameters, "AddJobTx should return the correct parameters")
@@ -227,7 +227,7 @@ func TestAddJobTx(t *testing.T) {
 		tx, err := testQueuer.DB.Begin()
 		require.NoError(t, err, "Begin transaction should not return an error")
 
-		job, err := testQueuer.AddJobTx(tx, nilTask, "param1")
+		job, err := testQueuer.AddJobTx(tx, nilTask, nil, "param1")
 		assert.Error(t, err, "AddJobTx should return an error for nil task (via addJobFn)")
 		assert.Nil(t, job, "Job should be nil for nil task")
 
@@ -240,7 +240,7 @@ func TestAddJobTx(t *testing.T) {
 		tx, err := testQueuer.DB.Begin()
 		require.NoError(t, err, "Begin transaction should not return an error")
 
-		job, err := testQueuer.AddJobTx(tx, invalidTask, "param1")
+		job, err := testQueuer.AddJobTx(tx, invalidTask, nil, "param1")
 		assert.Error(t, err, "AddJobTx should return an error for invalid task type")
 		assert.Nil(t, job, "Job should be nil for invalid task type")
 		assert.Contains(t, err.Error(), "task must be a function, got int", "Error message should reflect invalid task type handling")
@@ -280,7 +280,7 @@ func TestAddJobWithOptions(t *testing.T) {
 		}
 
 		params := []interface{}{1, "2"}
-		job, err := testQueuer.AddJobWithOptions(options, TaskMock, params...)
+		job, err := testQueuer.AddJobWithOptions(options, TaskMock, nil, params...)
 
 		assert.NoError(t, err, "AddJobWithOptions should not return an error on success")
 		assert.Equal(t, expectedJob.TaskName, job.TaskName, "AddJobWithOptions should return the correct task name")
@@ -296,7 +296,7 @@ func TestAddJobWithOptions(t *testing.T) {
 		}
 
 		params := []interface{}{1, "2"}
-		job, err := testQueuer.AddJobWithOptions(nil, TaskMock, params...)
+		job, err := testQueuer.AddJobWithOptions(nil, TaskMock, nil, params...)
 
 		assert.NoError(t, err, "AddJobWithOptions should not return an error on success")
 		assert.Equal(t, expectedJob.TaskName, job.TaskName, "AddJobWithOptions should return the correct task name")
@@ -319,7 +319,7 @@ func TestAddJobWithOptions(t *testing.T) {
 		}
 
 		params := []interface{}{1, "2"}
-		job, err := testQueuer.AddJobWithOptions(options, TaskMock, params...)
+		job, err := testQueuer.AddJobWithOptions(options, TaskMock, nil, params...)
 
 		assert.Error(t, err, "AddJobWithOptions should return an error for invalid options")
 		assert.Nil(t, job, "Job should be nil for invalid options")
@@ -349,7 +349,7 @@ func TestAddJobWithOptionsRunning(t *testing.T) {
 			},
 		}
 
-		job, err := testQueuer.AddJobWithOptions(options, newMockFailer.TaskMockFailing, 1, "3")
+		job, err := testQueuer.AddJobWithOptions(options, newMockFailer.TaskMockFailing, nil, 1, "3")
 		assert.NoError(t, err, "AddJobWithOptions should not return an error on success")
 
 		time.Sleep(4 * time.Second)
@@ -381,7 +381,7 @@ func TestAddJobWithOptionsRunning(t *testing.T) {
 			},
 		}
 
-		job, err := testQueuer.AddJobWithOptions(options, newMockFailer.TaskMockFailing, 1, "100")
+		job, err := testQueuer.AddJobWithOptions(options, newMockFailer.TaskMockFailing, nil, 1, "100")
 		assert.NoError(t, err, "AddJobWithOptions should not return an error on success")
 
 		time.Sleep(4 * time.Second)
@@ -412,7 +412,7 @@ func TestAddJobWithOptionsRunning(t *testing.T) {
 			},
 		}
 
-		job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
+		job, err := testQueuer.AddJobWithOptions(options, TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJobWithOptions should work")
 		assert.NotNil(t, job, "Job should be added successfully")
 
@@ -456,7 +456,7 @@ func TestAddJobWithScheduleOptionsRunning(t *testing.T) {
 		},
 	}
 
-	job, err := testQueuer.AddJobWithOptions(options, TaskMock, 1, "2")
+	job, err := testQueuer.AddJobWithOptions(options, TaskMock, nil, 1, "2")
 	require.NoError(t, err, "AddJobWithOptions should not return an error on success")
 	require.NotNil(t, job, "AddJobWithOptions should return a job")
 	require.NotNil(t, job.Options, "Job options should not be nil")
@@ -532,7 +532,7 @@ func TestAddJobWithOptionsTx(t *testing.T) {
 		tx, err := testQueuer.DB.Begin()
 		require.NoError(t, err, "Begin transaction should not return an error")
 
-		job, err := testQueuer.AddJobWithOptionsTx(tx, options, TaskMock, params...)
+		job, err := testQueuer.AddJobWithOptionsTx(tx, options, TaskMock, nil, params...)
 		assert.NoError(t, err, "AddJobWithOptionsTx should not return an error on success")
 		assert.Equal(t, expectedJob.TaskName, job.TaskName, "AddJobWithOptionsTx should return the correct task name")
 		assert.EqualValues(t, expectedJob.Parameters, job.Parameters, "AddJobWithOptionsTx should return the correct parameters")
@@ -548,7 +548,7 @@ func TestAddJobWithOptionsTx(t *testing.T) {
 		tx, err := testQueuer.DB.Begin()
 		require.NoError(t, err, "Begin transaction should not return an error")
 
-		job, err := testQueuer.AddJobWithOptionsTx(tx, nil, nilTask)
+		job, err := testQueuer.AddJobWithOptionsTx(tx, nil, nilTask, nil)
 		assert.Error(t, err, "AddJobWithOptionsTx should return an error for nil task (via addJobFn)")
 		assert.Nil(t, job, "Job should be nil for nil task")
 		assert.Contains(t, err.Error(), "task value must not be nil", "Error message should reflect nil task handling")
@@ -561,7 +561,7 @@ func TestAddJobWithOptionsTx(t *testing.T) {
 		tx, err := testQueuer.DB.Begin()
 		require.NoError(t, err, "Begin transaction should not return an error")
 
-		job, err := testQueuer.AddJobWithOptionsTx(tx, nil, invalidTask, "param1")
+		job, err := testQueuer.AddJobWithOptionsTx(tx, nil, invalidTask, nil, "param1")
 		assert.Error(t, err, "AddJobWithOptionsTx should return an error for invalid task type")
 		assert.Nil(t, job, "Job should be nil for invalid task type")
 		assert.Contains(t, err.Error(), "task must be a function, got int", "Error message should reflect invalid task type handling")
@@ -633,7 +633,7 @@ func TestWaitForJobStarted(t *testing.T) {
 		close(testEnded)
 	}()
 
-	job, err := testQueuer.AddJob(TaskMock, 2, "2")
+	job, err := testQueuer.AddJob(TaskMock, nil, 2, "2")
 	assert.NoError(t, err, "AddJob should not return an error on success")
 	assert.NotNil(t, job, "AddJob should return a valid job")
 
@@ -661,7 +661,7 @@ func TestWaitForJobStartedRunning(t *testing.T) {
 		close(testEnded)
 	}()
 
-	job, err := testQueuer.AddJob(TaskMock, 2, "2")
+	job, err := testQueuer.AddJob(TaskMock, nil, 2, "2")
 	assert.NoError(t, err, "AddJob should not return an error on success")
 	assert.NotNil(t, job, "AddJob should return a valid job")
 
@@ -678,7 +678,7 @@ func TestWaitForJobFinished(t *testing.T) {
 	testQueuer.Start(ctx, cancel)
 
 	t.Run("Successfully waits for a job to finish", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job, err := testQueuer.AddJob(TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
@@ -692,7 +692,7 @@ func TestWaitForJobFinished(t *testing.T) {
 	})
 
 	t.Run("Successfully cancel context while waiting for job", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 10, "2")
+		job, err := testQueuer.AddJob(TaskMock, nil, 10, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		go func() {
@@ -715,7 +715,7 @@ func TestCancelJob(t *testing.T) {
 	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully cancels a queued job", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job, err := testQueuer.AddJob(TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		cancelledJob, err := testQueuer.CancelJob(job.RID)
@@ -749,7 +749,7 @@ func TestCancelJobRunning(t *testing.T) {
 	testQueuer.Start(ctx, cancel)
 
 	t.Run("Successfully cancels a running job", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 3, "2")
+		job, err := testQueuer.AddJob(TaskMock, nil, 3, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		queuedJob, err := testQueuer.GetJob(job.RID)
@@ -786,10 +786,10 @@ func TestCancelAllJobsByWorkerRunning(t *testing.T) {
 	testQueuer.Start(ctx, cancel)
 
 	t.Run("Successfully cancels all jobs by worker RID", func(t *testing.T) {
-		job1, err := testQueuer.AddJob(TaskMock, 10, "2")
+		job1, err := testQueuer.AddJob(TaskMock, nil, 10, "2")
 		require.NoError(t, err, "AddJob should not return an error on success")
 
-		job2, err := testQueuer.AddJob(TaskMock, 10, "4")
+		job2, err := testQueuer.AddJob(TaskMock, nil, 10, "4")
 		require.NoError(t, err, "AddJob should not return an error on success")
 
 		time.Sleep(1 * time.Second)
@@ -830,7 +830,7 @@ func TestReaddJobFromArchive(t *testing.T) {
 	testQueuer.StartWithoutWorker(ctx, cancel, true)
 
 	t.Run("Successfully readds a job from archive", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job, err := testQueuer.AddJob(TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		job, err = testQueuer.GetJob(job.RID)
@@ -872,11 +872,11 @@ func TestGetJobsBySearch(t *testing.T) {
 
 	t.Run("Successfully search for jobs", func(t *testing.T) {
 		// Add multiple jobs with different task names
-		job1, err := testQueuer.AddJob(TaskMock, 1, "1")
+		job1, err := testQueuer.AddJob(TaskMock, nil, 1, "1")
 		assert.NoError(t, err, "AddJob should not return an error")
 		require.NotNil(t, job1, "Job1 should not be nil")
 
-		job2, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job2, err := testQueuer.AddJob(TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error")
 		require.NotNil(t, job2, "Job2 should not be nil")
 
@@ -912,11 +912,11 @@ func TestGetJobsEndedBySearch(t *testing.T) {
 
 	t.Run("Successfully search for ended jobs", func(t *testing.T) {
 		// Add jobs and wait for them to finish
-		job1, err := testQueuer.AddJob(TaskMock, 1, "1")
+		job1, err := testQueuer.AddJob(TaskMock, nil, 1, "1")
 		assert.NoError(t, err, "AddJob should not return an error")
 		require.NotNil(t, job1, "Job1 should not be nil")
 
-		job2, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job2, err := testQueuer.AddJob(TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error")
 		require.NotNil(t, job2, "Job2 should not be nil")
 
@@ -959,7 +959,7 @@ func TestDeleteJob(t *testing.T) {
 	testQueuer.Start(ctx, cancel)
 
 	t.Run("Successfully deletes a job", func(t *testing.T) {
-		job, err := testQueuer.AddJob(TaskMock, 1, "2")
+		job, err := testQueuer.AddJob(TaskMock, nil, 1, "2")
 		assert.NoError(t, err, "AddJob should not return an error on success")
 
 		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)

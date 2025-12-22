@@ -17,7 +17,7 @@ func (m *ManagerHandler) AddJob(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid job data")
 	}
 
-	jobAdded, err := m.queuer.AddJob(job.TaskName, job.Parameters...)
+	jobAdded, err := m.queuer.AddJob(job.TaskName, job.ParametersKeyed, job.Parameters...)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to add job to queuer")
 	}

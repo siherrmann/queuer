@@ -134,7 +134,7 @@ func TestNewJob(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			job, err := NewJob(test.task, test.options, test.parameters...)
+			job, err := NewJob(test.task, test.options, nil, test.parameters...)
 			if test.wantErr {
 				assert.Error(t, err, "NewJob should return an error for invalid options")
 				assert.Nil(t, job, "Job should be nil for invalid options")
