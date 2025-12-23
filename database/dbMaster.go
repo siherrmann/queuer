@@ -37,16 +37,21 @@ func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Mas
 		db: dbConnection,
 	}
 
-	err := loadSql.LoadMasterSql(masterDbHandler.db.Instance, false)
-	if err != nil {
-		return nil, helper.NewError("load master sql", err)
-	}
-
 	if withTableDrop {
+		err := dbConnection.DropFunctionsFromPublicSchema(loadSql.MasterFunctions)
+		if err != nil {
+			return nil, helper.NewError("drop master functions", err)
+		}
+
 		err = masterDbHandler.DropTable()
 		if err != nil {
 			return nil, helper.NewError("drop master table", err)
 		}
+	}
+
+	err := loadSql.LoadMasterSql(masterDbHandler.db.Instance, false)
+	if err != nil {
+		return nil, helper.NewError("load master sql", err)
 	}
 
 	err = masterDbHandler.CreateTable()
@@ -94,14 +99,6 @@ func (r MasterDBHandler) DropTable() error {
 	_, err := r.db.Instance.ExecContext(ctx, query)
 	if err != nil {
 		return helper.NewError("drop", err)
-	}
-
-	for _, functionName := range loadSql.MasterFunctions {
-		dropFunctionQuery := fmt.Sprintf(`DROP FUNCTION IF EXISTS %s;`, functionName)
-		_, err = r.db.Instance.ExecContext(ctx, dropFunctionQuery)
-		if err != nil {
-			return helper.NewError("drop function "+functionName, err)
-		}
 	}
 
 	r.db.Logger.Info("Dropped table master")
