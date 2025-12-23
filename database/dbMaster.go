@@ -96,6 +96,14 @@ func (r MasterDBHandler) DropTable() error {
 		return helper.NewError("drop", err)
 	}
 
+	for _, functionName := range loadSql.MasterFunctions {
+		dropFunctionQuery := fmt.Sprintf(`DROP FUNCTION IF EXISTS %s;`, functionName)
+		_, err = r.db.Instance.ExecContext(ctx, dropFunctionQuery)
+		if err != nil {
+			return helper.NewError("drop function "+functionName, err)
+		}
+	}
+
 	r.db.Logger.Info("Dropped table master")
 
 	return nil

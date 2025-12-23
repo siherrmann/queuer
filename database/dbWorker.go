@@ -110,6 +110,14 @@ func (r WorkerDBHandler) DropTable() error {
 		return helper.NewError("worker table", err)
 	}
 
+	for _, functionName := range loadSql.WorkerFunctions {
+		dropFunctionQuery := fmt.Sprintf(`DROP FUNCTION IF EXISTS %s;`, functionName)
+		_, err = r.db.Instance.ExecContext(ctx, dropFunctionQuery)
+		if err != nil {
+			return helper.NewError("drop function "+functionName, err)
+		}
+	}
+
 	r.db.Logger.Info("Dropped table worker")
 
 	return nil

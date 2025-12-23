@@ -134,6 +134,14 @@ func (r JobDBHandler) DropTables() error {
 		return helper.NewError("job_archive table", err)
 	}
 
+	for _, functionName := range loadSql.JobFunctions {
+		dropFunctionQuery := fmt.Sprintf(`DROP FUNCTION IF EXISTS %s;`, functionName)
+		_, err = r.db.Instance.ExecContext(ctx, dropFunctionQuery)
+		if err != nil {
+			return helper.NewError("drop function "+functionName, err)
+		}
+	}
+
 	r.db.Logger.Info("Dropped table job")
 
 	return nil
