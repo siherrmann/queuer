@@ -60,6 +60,18 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encrypti
 		jobDbHandler.EncryptionKey = encryptionKey[0]
 	}
 
+	if withTableDrop {
+		err := dbConnection.DropFunctionsFromPublicSchema(loadSql.JobFunctions)
+		if err != nil {
+			return nil, helper.NewError("drop job functions", err)
+		}
+
+		err = jobDbHandler.DropTables()
+		if err != nil {
+			return nil, helper.NewError("drop tables", err)
+		}
+	}
+
 	err := loadSql.LoadJobSql(jobDbHandler.db.Instance, false)
 	if err != nil {
 		return nil, helper.NewError("load job sql", err)
@@ -68,13 +80,6 @@ func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encrypti
 	err = loadSql.LoadNotifySql(jobDbHandler.db.Instance, false)
 	if err != nil {
 		return nil, helper.NewError("load notify sql", err)
-	}
-
-	if withTableDrop {
-		err := jobDbHandler.DropTables()
-		if err != nil {
-			return nil, helper.NewError("drop tables", err)
-		}
 	}
 
 	err = jobDbHandler.CreateTable()
