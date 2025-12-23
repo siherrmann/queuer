@@ -316,3 +316,52 @@ func (d *Database) Close() error {
 	log.Printf("Disconnected from database: %v", d.Instance)
 	return d.Instance.Close()
 }
+
+// DropFunctionsFromPublicSchema drops user-defined functions from the public schema.
+// It queries pg_proc to find all overloaded versions of the specified functions,
+// filters to only public schema functions, excludes extension-owned functions,
+// and drops each by its full signature. This is SQL injection safe as it uses
+// parameterized queries for function name lookup.
+func (d *Database) DropFunctionsFromPublicSchema(functionNames []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, functionName := range functionNames {
+		// Query for all overloaded versions, filtering to public schema and excluding extensions
+		rows, queryErr := d.Instance.QueryContext(ctx, `
+			SELECT pg_proc.oid::regprocedure::text
+			FROM pg_proc
+			JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid
+			WHERE pg_proc.proname = $1
+			  AND pg_namespace.nspname = 'public'
+			  AND NOT EXISTS (
+			    SELECT 1 FROM pg_depend
+			    WHERE objid = pg_proc.oid AND deptype = 'e'
+			  )
+		`, functionName)
+		if queryErr != nil {
+			return NewError("query function overloads "+functionName, queryErr)
+		}
+		defer rows.Close()
+
+		var signatures []string
+		for rows.Next() {
+			var signature string
+			if scanErr := rows.Scan(&signature); scanErr != nil {
+				return NewError("scan function signature", scanErr)
+			}
+			signatures = append(signatures, signature)
+		}
+
+		// Drop each overloaded function by its full signature
+		for _, signature := range signatures {
+			dropQuery := fmt.Sprintf(`DROP FUNCTION IF EXISTS %s;`, signature)
+			_, err := d.Instance.ExecContext(ctx, dropQuery)
+			if err != nil {
+				return NewError("drop function "+signature, err)
+			}
+		}
+	}
+
+	return nil
+}

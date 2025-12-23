@@ -133,7 +133,7 @@ func TestAddJobRunning(t *testing.T) {
 	t.Run("Successfully runs a job with schedule options once", func(t *testing.T) {
 		options := &model.Options{
 			Schedule: &model.Schedule{
-				Start:    time.Now().Add(1 * time.Second),
+				Start:    time.Now().Add(2 * time.Second),
 				MaxCount: 1,
 				Interval: 15 * time.Second,
 			},
@@ -144,8 +144,8 @@ func TestAddJobRunning(t *testing.T) {
 
 		queuedJob, err := testQueuer.GetJob(job.RID)
 		require.NoError(t, err, "GetJob should not return an error")
-		require.NotNil(t, queuedJob, "GetJob should return the job that is currently running")
-		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Running status")
+		require.NotNil(t, queuedJob, "GetJob should return the scheduled job")
+		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Scheduled status")
 
 		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
 		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
