@@ -112,3 +112,55 @@ func TestGetConnections(t *testing.T) {
 		require.NotNil(t, connections, "expected connections to be retrieved")
 	})
 }
+
+func TestStopWorker(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
+
+	t.Run("Successfully stop worker", func(t *testing.T) {
+		err := testQueuer.StopWorker(testQueuer.worker.RID)
+		assert.NoError(t, err, "expected no error when stopping worker")
+
+		// Verify worker status is set to STOPPED
+		retrievedWorker, err := testQueuer.GetWorker(testQueuer.worker.RID)
+		assert.NoError(t, err, "expected no error when getting worker")
+		require.NotNil(t, retrievedWorker, "expected worker to be retrieved")
+		assert.Equal(t, "STOPPED", retrievedWorker.Status, "expected worker status to be STOPPED")
+	})
+
+	t.Run("Returns error for non-existent worker", func(t *testing.T) {
+		nonExistentWorkerRid := uuid.New()
+		err := testQueuer.StopWorker(nonExistentWorkerRid)
+		assert.Error(t, err, "expected error when stopping non-existent worker")
+		assert.Contains(t, err.Error(), "getting worker", "expected error message for non-existent worker")
+	})
+}
+
+func TestStopWorkerGracefully(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	testQueuer := NewQueuer("TestQueuer", 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	testQueuer.StartWithoutWorker(ctx, cancel, true)
+
+	t.Run("Successfully stop worker gracefully", func(t *testing.T) {
+		err := testQueuer.StopWorkerGracefully(testQueuer.worker.RID)
+		assert.NoError(t, err, "expected no error when stopping worker gracefully")
+
+		// Verify worker status is set to STOPPING
+		retrievedWorker, err := testQueuer.GetWorker(testQueuer.worker.RID)
+		assert.NoError(t, err, "expected no error when getting worker")
+		require.NotNil(t, retrievedWorker, "expected worker to be retrieved")
+		assert.Equal(t, "STOPPING", retrievedWorker.Status, "expected worker status to be STOPPING")
+	})
+
+	t.Run("Returns error for non-existent worker", func(t *testing.T) {
+		nonExistentWorkerRid := uuid.New()
+		err := testQueuer.StopWorkerGracefully(nonExistentWorkerRid)
+		assert.Error(t, err, "expected error when stopping non-existent worker gracefully")
+		assert.Contains(t, err.Error(), "getting worker", "expected error message for non-existent worker")
+	})
+}

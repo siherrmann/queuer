@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/siherrmann/queuer/core"
 	"github.com/siherrmann/queuer/database"
 	"github.com/siherrmann/queuer/helper"
@@ -22,9 +23,10 @@ import (
 // It provides methods to start, stop, and manage jobs and workers.
 // It also handles database connections and listeners for job events.
 type Queuer struct {
-	DB               *sql.DB
-	JobPollInterval  time.Duration
-	RetentionArchive time.Duration
+	DB                 *sql.DB
+	JobPollInterval    time.Duration
+	WorkerPollInterval time.Duration
+	RetentionArchive   time.Duration
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -145,16 +147,17 @@ func NewQueuerWithDB(name string, maxConcurrency int, encryptionKey string, dbCo
 	logger.Info("Queuer with worker created", slog.String("worker_name", newWorker.Name), slog.String("worker_rid", worker.RID.String()))
 
 	return &Queuer{
-		log:               logger,
-		worker:            worker,
-		DB:                dbCon.Instance,
-		dbConfig:          dbConfig,
-		dbJob:             dbJob,
-		dbWorker:          dbWorker,
-		dbMaster:          dbMaster,
-		JobPollInterval:   1 * time.Minute,
-		tasks:             map[string]*model.Task{},
-		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
+		log:                logger,
+		worker:             worker,
+		DB:                 dbCon.Instance,
+		dbConfig:           dbConfig,
+		dbJob:              dbJob,
+		dbWorker:           dbWorker,
+		dbMaster:           dbMaster,
+		JobPollInterval:    1 * time.Minute,
+		WorkerPollInterval: 30 * time.Second,
+		tasks:              map[string]*model.Task{},
+		nextIntervalFuncs:  map[string]model.NextIntervalFunc{},
 	}
 }
 
@@ -210,15 +213,16 @@ func NewStaticQueuer(logLevel slog.Leveler, dbConfig *helper.DatabaseConfigurati
 	}
 
 	return &Queuer{
-		log:               logger,
-		DB:                dbCon.Instance,
-		dbConfig:          dbConfig,
-		dbJob:             dbJob,
-		dbWorker:          dbWorker,
-		dbMaster:          dbMaster,
-		JobPollInterval:   1 * time.Minute,
-		tasks:             map[string]*model.Task{},
-		nextIntervalFuncs: map[string]model.NextIntervalFunc{},
+		log:                logger,
+		DB:                 dbCon.Instance,
+		dbConfig:           dbConfig,
+		dbJob:              dbJob,
+		dbWorker:           dbWorker,
+		dbMaster:           dbMaster,
+		JobPollInterval:    1 * time.Minute,
+		WorkerPollInterval: 30 * time.Second,
+		tasks:              map[string]*model.Task{},
+		nextIntervalFuncs:  map[string]model.NextIntervalFunc{},
 	}
 }
 
@@ -404,6 +408,11 @@ func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFu
 // Stop stops the queuer by closing the job listeners, cancelling all queued and running jobs,
 // and cancelling the context to stop the queuer.
 func (q *Queuer) Stop() error {
+	// Check if already stopped
+	if q.DB == nil {
+		return nil // Already stopped
+	}
+
 	// Close db listeners
 	if q.jobDbListener != nil {
 		err := q.jobDbListener.Listener.Close()
@@ -420,20 +429,32 @@ func (q *Queuer) Stop() error {
 
 	// Update worker status to stopped
 	var err error
+	var workerRID uuid.UUID
 	q.workerMu.Lock()
-	q.worker.Status = model.WorkerStatusStopped
-	q.worker, err = q.dbWorker.UpdateWorker(q.worker)
-	workerRID := q.worker.RID
+	if q.worker != nil {
+		q.worker.Status = model.WorkerStatusStopped
+		q.worker, err = q.dbWorker.UpdateWorker(q.worker)
+		if err == nil && q.worker != nil {
+			workerRID = q.worker.RID
+		}
+	}
 	q.workerMu.Unlock()
 	if err != nil {
 		return helper.NewError("updating worker status to stopped", err)
 	}
 
-	// Cancel all queued and running jobs
-	err = q.CancelAllJobsByWorker(workerRID, 100)
-	if err != nil {
-		return helper.NewError("cancelling all jobs by worker", err)
+	// Cancel all queued and running jobs (only if we have a valid worker RID)
+	if workerRID != uuid.Nil {
+		err = q.CancelAllJobsByWorker(workerRID, 100)
+		if err != nil {
+			return helper.NewError("cancelling all jobs by worker", err)
+		}
 	}
+	q.activeRunners.Range(func(key, value interface{}) bool {
+		value.(*core.Runner).Cancel()
+		q.activeRunners.Delete(key)
+		return true
+	})
 
 	// Cancel the context to stop the queuer
 	if q.ctx != nil {
@@ -557,11 +578,8 @@ func (q *Queuer) listenWithoutRunning(ctx context.Context, cancel context.Cancel
 }
 
 func (q *Queuer) heartbeatTicker(ctx context.Context) error {
-	// Default heartbeat interval of 30 seconds
-	heartbeatInterval := 30 * time.Second
-
 	ticker, err := core.NewTicker(
-		heartbeatInterval,
+		q.WorkerPollInterval,
 		func() {
 			q.log.Debug("Sending worker heartbeat...")
 			q.workerMu.RLock()
@@ -572,15 +590,53 @@ func (q *Queuer) heartbeatTicker(ctx context.Context) error {
 				return
 			}
 
-			// Update worker to refresh the updated_at timestamp
-			updatedWorker, err := q.dbWorker.UpdateWorker(worker)
+			workerFromDb, err := q.dbWorker.SelectWorker(worker.RID)
 			if err != nil {
-				q.log.Error("Error updating worker heartbeat", slog.String("error", err.Error()))
+				q.log.Error("Error selecting worker for heartbeat", slog.String("error", err.Error()))
 				return
 			}
 
+			switch workerFromDb.Status {
+			case model.WorkerStatusStopped:
+				q.log.Info("Stopping worker...", slog.String("worker_status", string(workerFromDb.Status)))
+				err = q.Stop()
+				if err != nil {
+					q.log.Error("Error stopping queuer", slog.String("error", err.Error()))
+				}
+				return
+			case model.WorkerStatusStopping:
+				if workerFromDb.MaxConcurrency != 0 {
+					q.log.Info("Gracefully stopping worker...", slog.String("worker_status", string(workerFromDb.Status)))
+					workerFromDb.MaxConcurrency = 0
+					workerFromDb, err = q.dbWorker.UpdateWorker(workerFromDb)
+					if err != nil {
+						q.log.Error("Error updating worker concurrency", slog.String("error", err.Error()))
+						return
+					}
+				} else if helper.LenSyncMap(&q.activeRunners) == 0 {
+					q.log.Info("All running jobs finished, stopping worker...", slog.String("worker_status", string(workerFromDb.Status)))
+					workerFromDb.Status = model.WorkerStatusStopped
+					workerFromDb, err = q.dbWorker.UpdateWorker(workerFromDb)
+					if err != nil {
+						q.log.Error("Error updating worker status to stopped", slog.String("error", err.Error()))
+						return
+					}
+					err = q.Stop()
+					if err != nil {
+						q.log.Error("Error stopping queuer", slog.String("error", err.Error()))
+					}
+					return
+				}
+			default:
+				workerFromDb, err = q.dbWorker.UpdateWorker(worker)
+				if err != nil {
+					q.log.Error("Error updating worker heartbeat", slog.String("error", err.Error()))
+					return
+				}
+			}
+
 			q.workerMu.Lock()
-			q.worker = updatedWorker
+			q.worker = workerFromDb
 			q.workerMu.Unlock()
 		},
 	)

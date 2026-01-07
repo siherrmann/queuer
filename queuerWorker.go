@@ -8,6 +8,54 @@ import (
 	"github.com/siherrmann/queuer/model"
 )
 
+// StopWorkerGracefully sets the status of the specified worker to 'STOPPING'
+// to cancel running jobs when stopping.
+func (q *Queuer) StopWorker(workerRid uuid.UUID) error {
+	worker, err := q.GetWorker(workerRid)
+	if err != nil {
+		return helper.NewError("getting worker", err)
+	}
+	worker.Status = model.WorkerStatusStopped
+
+	worker, err = q.dbWorker.UpdateWorker(worker)
+	if err != nil {
+		return helper.NewError("updating worker status to stopped", err)
+	}
+
+	// Update local worker object if this is the current queuer's worker
+	if q.worker != nil && q.worker.RID == workerRid {
+		q.workerMu.Lock()
+		q.worker = worker
+		q.workerMu.Unlock()
+	}
+
+	return nil
+}
+
+// StopWorkerGracefully sets the worker's status to STOPPING
+// to allow it to finish current tasks before stopping.
+func (q *Queuer) StopWorkerGracefully(workerRid uuid.UUID) error {
+	worker, err := q.GetWorker(workerRid)
+	if err != nil {
+		return helper.NewError("getting worker", err)
+	}
+	worker.Status = model.WorkerStatusStopping
+
+	worker, err = q.dbWorker.UpdateWorker(worker)
+	if err != nil {
+		return helper.NewError("updating worker status to stopping", err)
+	}
+
+	// Update local worker object if this is the current queuer's worker
+	if q.worker != nil && q.worker.RID == workerRid {
+		q.workerMu.Lock()
+		q.worker = worker
+		q.workerMu.Unlock()
+	}
+
+	return nil
+}
+
 // GetWorker retrieves a worker by its RID (Resource Identifier).
 func (q *Queuer) GetWorker(workerRid uuid.UUID) (*model.Worker, error) {
 	worker, err := q.dbWorker.SelectWorker(workerRid)
