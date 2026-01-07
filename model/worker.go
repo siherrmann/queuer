@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	WorkerStatusReady   = "READY"
-	WorkerStatusRunning = "RUNNING"
-	WorkerStatusFailed  = "FAILED"
-	WorkerStatusStopped = "STOPPED"
+	WorkerStatusReady    = "READY"
+	WorkerStatusRunning  = "RUNNING"
+	WorkerStatusFailed   = "FAILED"
+	WorkerStatusStopping = "STOPPING"
+	WorkerStatusStopped  = "STOPPED"
 )
 
 // Worker represents a worker that can execute tasks.
