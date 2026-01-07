@@ -143,7 +143,48 @@ The `Stop` method gracefully shuts down the Queuer instance, releasing resources
 func (q *Queuer) Stop() error
 ```
 
-The `Stop` method cancels all jobs, closes db listeners and returns an error if any step of the stopping process encounters an issue
+The `Stop` method cancels all jobs, closes db listeners and returns an error if any step of the stopping process encounters an issue. **Note:** This method can only be used to stop the current worker instance that the code is running in. To stop other workers, use `StopWorker` or `StopWorkerGracefully`.
+
+---
+
+## StopWorker
+
+The `StopWorker` method immediately stops a worker by setting its status to `STOPPED`. This will cancel all running jobs on that worker.
+
+```go
+func (q *Queuer) StopWorker(workerRID uuid.UUID) error
+```
+
+- `workerRID`: The `uuid.UUID` identifying the worker to stop.
+
+When a worker is stopped:
+- The worker status is immediately set to `STOPPED` in the database
+- The heartbeat ticker detects the `STOPPED` status and calls `Stop()` on that worker
+- All running jobs on that worker are cancelled immediately
+- The worker will no longer accept new jobs
+
+This method is useful for immediately shutting down a worker, for example in emergency situations or when you need to take a worker offline quickly.
+
+---
+
+## StopWorkerGracefully
+
+The `StopWorkerGracefully` method gracefully stops a worker by setting its status to `STOPPING`. This allows currently running jobs to complete before the worker shuts down.
+
+```go
+func (q *Queuer) StopWorkerGracefully(workerRID uuid.UUID) error
+```
+
+- `workerRID`: The `uuid.UUID` identifying the worker to stop gracefully.
+
+When a worker is stopped gracefully:
+- The worker status is set to `STOPPING` in the database
+- The heartbeat ticker detects the `STOPPING` status and sets `maxConcurrency` to `0`
+- Currently running jobs are allowed to complete normally
+- No new jobs will be accepted by this worker
+- Once all running jobs have finished, the worker status is automatically set to `STOPPED` and the worker shuts down
+
+This method is ideal for maintenance scenarios where you want to ensure all in-progress work completes before shutting down the worker.
 
 ---
 
