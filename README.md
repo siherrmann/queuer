@@ -14,7 +14,7 @@ The job table contains only queued, scheduled and running tasks. The ended jobs 
 
 ---
 
-# 🛠️ Installation
+## 🛠️ Installation
 
 To integrate the queuer package into your Go project, use the standard go get command:
 
