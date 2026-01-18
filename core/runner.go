@@ -10,6 +10,7 @@ import (
 
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
+	vh "github.com/siherrmann/validator/helper"
 )
 
 type Runner struct {
@@ -35,12 +36,11 @@ func NewRunner(options *model.Options, task interface{}, parameters ...interface
 	}
 
 	for i, param := range parameters {
-		// Convert json float to int if the parameter is int
-		if taskInputParameters[i].Kind() == reflect.Int && reflect.TypeOf(param).Kind() == reflect.Float64 {
-			parameters[i] = int(param.(float64))
-		} else if taskInputParameters[i].Kind() != reflect.TypeOf(param).Kind() {
+		paramConverted, err := vh.AnyToType(param, taskInputParameters[i])
+		if err != nil {
 			return nil, fmt.Errorf("parameter %d of task must be of type %s, got %s", i, taskInputParameters[i].Kind(), reflect.TypeOf(param).Kind())
 		}
+		parameters[i] = paramConverted
 	}
 
 	err = helper.CheckValidTaskWithParameters(task, parameters...)

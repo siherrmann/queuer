@@ -425,3 +425,138 @@ outerLoop:
 		}
 	}
 }
+
+// Test structs for struct parameter tests
+type TestConfig struct {
+	Name  string
+	Value int
+}
+
+type TestData struct {
+	ID      int
+	Message string
+	Active  bool
+}
+
+// Task function that accepts a struct and pointer to struct
+func taskWithStructParams(config TestConfig, data *TestData) (string, error) {
+	if data == nil {
+		return "", fmt.Errorf("data cannot be nil")
+	}
+	return fmt.Sprintf("%s-%d: %s (ID: %d, Active: %t)", config.Name, config.Value, data.Message, data.ID, data.Active), nil
+}
+
+// TestNewRunnerWithStructParameters tests the runner with struct and pointer-to-struct parameters
+func TestNewRunnerWithStructParameters(t *testing.T) {
+	tests := []struct {
+		name       string
+		param1     interface{}
+		param2     interface{}
+		wantErr    bool
+		wantResult string
+	}{
+		{
+			name: "Valid Struct and Pointer",
+			param1: TestConfig{
+				Name:  "config",
+				Value: 42,
+			},
+			param2: &TestData{
+				ID:      1,
+				Message: "test message",
+				Active:  true,
+			},
+			wantErr:    false,
+			wantResult: "config-42: test message (ID: 1, Active: true)",
+		},
+		{
+			name: "Map to Struct and Map to Pointer Conversion",
+			param1: map[string]interface{}{
+				"Name":  "fromMap",
+				"Value": 99,
+			},
+			param2: map[string]interface{}{
+				"ID":      2,
+				"Message": "converted from map",
+				"Active":  false,
+			},
+			wantErr:    false,
+			wantResult: "fromMap-99: converted from map (ID: 2, Active: false)",
+		},
+		{
+			name: "Struct Value and Map to Pointer",
+			param1: TestConfig{
+				Name:  "direct",
+				Value: 10,
+			},
+			param2: map[string]interface{}{
+				"ID":      3,
+				"Message": "mixed params",
+				"Active":  true,
+			},
+			wantErr:    false,
+			wantResult: "direct-10: mixed params (ID: 3, Active: true)",
+		},
+		{
+			name: "Map to Struct with Type Conversion",
+			param1: map[string]interface{}{
+				"Name":  "typeConv",
+				"Value": 25.0, // float64 should convert to int
+			},
+			param2: map[string]interface{}{
+				"ID":      4.0, // float64 should convert to int
+				"Message": "type conversion test",
+				"Active":  true,
+			},
+			wantErr:    false,
+			wantResult: "typeConv-25: type conversion test (ID: 4, Active: true)",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mockTask, err := model.NewTask(taskWithStructParams)
+			require.NoError(t, err, "Failed to create mock task")
+
+			job := &model.Job{
+				TaskName: mockTask.Name,
+				Parameters: []interface{}{
+					test.param1,
+					test.param2,
+				},
+				Options: &model.Options{
+					OnError: &model.OnError{
+						Timeout: 5.0,
+					},
+				},
+			}
+
+			runner, err := NewRunnerFromJob(mockTask, job)
+			if test.wantErr {
+				assert.Error(t, err, "NewRunnerFromJob should return an error")
+				return
+			}
+
+			require.NoError(t, err, "NewRunnerFromJob should not return an error")
+			assert.NotNil(t, runner)
+
+			go runner.Run(context.Background())
+
+		outerLoop:
+			for {
+				select {
+				case err := <-runner.ErrorChannel:
+					assert.NoError(t, err, "Runner should not return an error")
+					break outerLoop
+				case results := <-runner.ResultsChannel:
+					assert.NotNil(t, results)
+					assert.Len(t, results, 1)
+					assert.Equal(t, test.wantResult, results[0])
+					break outerLoop
+				case <-time.After(2 * time.Second):
+					t.Fatal("Test timed out")
+				}
+			}
+		})
+	}
+}
