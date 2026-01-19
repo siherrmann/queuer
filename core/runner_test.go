@@ -438,12 +438,27 @@ type TestData struct {
 	Active  bool
 }
 
+// Nested struct that contains both a struct and pointer to struct
+type NestedStruct struct {
+	Config   TestConfig
+	DataPtr  *TestData
+	Metadata string
+}
+
 // Task function that accepts a struct and pointer to struct
 func taskWithStructParams(config TestConfig, data *TestData) (string, error) {
 	if data == nil {
 		return "", fmt.Errorf("data cannot be nil")
 	}
 	return fmt.Sprintf("%s-%d: %s (ID: %d, Active: %t)", config.Name, config.Value, data.Message, data.ID, data.Active), nil
+}
+
+// Task function that accepts a nested struct with both struct and pointer fields
+func taskWithNestedStruct(nested NestedStruct) (string, error) {
+	if nested.DataPtr == nil {
+		return "", fmt.Errorf("nested.DataPtr cannot be nil")
+	}
+	return fmt.Sprintf("%s: %s-%d | %s (ID: %d, Active: %t)", nested.Metadata, nested.Config.Name, nested.Config.Value, nested.DataPtr.Message, nested.DataPtr.ID, nested.DataPtr.Active), nil
 }
 
 // TestNewRunnerWithStructParameters tests the runner with struct and pointer-to-struct parameters
@@ -523,6 +538,114 @@ func TestNewRunnerWithStructParameters(t *testing.T) {
 				Parameters: []interface{}{
 					test.param1,
 					test.param2,
+				},
+				Options: &model.Options{
+					OnError: &model.OnError{
+						Timeout: 5.0,
+					},
+				},
+			}
+
+			runner, err := NewRunnerFromJob(mockTask, job)
+			if test.wantErr {
+				assert.Error(t, err, "NewRunnerFromJob should return an error")
+				return
+			}
+
+			require.NoError(t, err, "NewRunnerFromJob should not return an error")
+			assert.NotNil(t, runner)
+
+			go runner.Run(context.Background())
+
+		outerLoop:
+			for {
+				select {
+				case err := <-runner.ErrorChannel:
+					assert.NoError(t, err, "Runner should not return an error")
+					break outerLoop
+				case results := <-runner.ResultsChannel:
+					assert.NotNil(t, results)
+					assert.Len(t, results, 1)
+					assert.Equal(t, test.wantResult, results[0])
+					break outerLoop
+				case <-time.After(2 * time.Second):
+					t.Fatal("Test timed out")
+				}
+			}
+		})
+	}
+}
+
+// TestNewRunnerWithNestedStruct tests the runner with nested structs containing both struct and pointer fields
+func TestNewRunnerWithNestedStruct(t *testing.T) {
+	tests := []struct {
+		name       string
+		param      interface{}
+		wantErr    bool
+		wantResult string
+	}{
+		{
+			name: "Direct Nested Struct with Struct and Pointer",
+			param: NestedStruct{
+				Config: TestConfig{
+					Name:  "nested-config",
+					Value: 100,
+				},
+				DataPtr: &TestData{
+					ID:      10,
+					Message: "nested data",
+					Active:  true,
+				},
+				Metadata: "meta-direct",
+			},
+			wantErr:    false,
+			wantResult: "meta-direct: nested-config-100 | nested data (ID: 10, Active: true)",
+		},
+		{
+			name: "Map to Nested Struct Conversion",
+			param: map[string]interface{}{
+				"Config": map[string]interface{}{
+					"Name":  "map-config",
+					"Value": 200,
+				},
+				"DataPtr": map[string]interface{}{
+					"ID":      20,
+					"Message": "map data",
+					"Active":  false,
+				},
+				"Metadata": "meta-from-map",
+			},
+			wantErr:    false,
+			wantResult: "meta-from-map: map-config-200 | map data (ID: 20, Active: false)",
+		},
+		{
+			name: "Map with Type Conversions in Nested Struct",
+			param: map[string]interface{}{
+				"Config": map[string]interface{}{
+					"Name":  "type-conv",
+					"Value": 300.5, // float64 to int
+				},
+				"DataPtr": map[string]interface{}{
+					"ID":      30.0, // float64 to int
+					"Message": "type conversion",
+					"Active":  true,
+				},
+				"Metadata": "meta-type-conv",
+			},
+			wantErr:    false,
+			wantResult: "meta-type-conv: type-conv-300 | type conversion (ID: 30, Active: true)",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mockTask, err := model.NewTask(taskWithNestedStruct)
+			require.NoError(t, err, "Failed to create mock task")
+
+			job := &model.Job{
+				TaskName: mockTask.Name,
+				Parameters: []interface{}{
+					test.param,
 				},
 				Options: &model.Options{
 					OnError: &model.OnError{
