@@ -38,7 +38,7 @@ func NewRunner(options *model.Options, task interface{}, parameters ...interface
 	for i, param := range parameters {
 		paramConverted, err := vh.AnyToType(param, taskInputParameters[i])
 		if err != nil {
-			return nil, fmt.Errorf("parameter %d of task must be of type %s, got %s", i, taskInputParameters[i].Kind(), reflect.TypeOf(param).Kind())
+			return nil, fmt.Errorf("error converting parameter %d to type %s: %v", i, taskInputParameters[i].Kind(), err)
 		}
 		parameters[i] = paramConverted
 	}
