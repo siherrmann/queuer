@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/siherrmann/queuer/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -434,6 +435,7 @@ type TestConfig struct {
 
 type TestData struct {
 	ID      int
+	RID     uuid.UUID
 	Message string
 	Active  bool
 }
@@ -450,7 +452,7 @@ func taskWithStructParams(config TestConfig, data *TestData) (string, error) {
 	if data == nil {
 		return "", fmt.Errorf("data cannot be nil")
 	}
-	return fmt.Sprintf("%s-%d: %s (ID: %d, Active: %t)", config.Name, config.Value, data.Message, data.ID, data.Active), nil
+	return fmt.Sprintf("%s-%d: %s (ID: %d, RID: %s, Active: %t)", config.Name, config.Value, data.Message, data.ID, data.RID.String(), data.Active), nil
 }
 
 // Task function that accepts a nested struct with both struct and pointer fields
@@ -458,7 +460,7 @@ func taskWithNestedStruct(nested NestedStruct) (string, error) {
 	if nested.DataPtr == nil {
 		return "", fmt.Errorf("nested.DataPtr cannot be nil")
 	}
-	return fmt.Sprintf("%s: %s-%d | %s (ID: %d, Active: %t)", nested.Metadata, nested.Config.Name, nested.Config.Value, nested.DataPtr.Message, nested.DataPtr.ID, nested.DataPtr.Active), nil
+	return fmt.Sprintf("%s: %s-%d | %s (ID: %d, RID: %s, Active: %t)", nested.Metadata, nested.Config.Name, nested.Config.Value, nested.DataPtr.Message, nested.DataPtr.ID, nested.DataPtr.RID.String(), nested.DataPtr.Active), nil
 }
 
 // TestNewRunnerWithStructParameters tests the runner with struct and pointer-to-struct parameters
@@ -478,11 +480,12 @@ func TestNewRunnerWithStructParameters(t *testing.T) {
 			},
 			param2: &TestData{
 				ID:      1,
+				RID:     uuid.MustParse("550e8400-e29b-41d4-a716-446655440001"),
 				Message: "test message",
 				Active:  true,
 			},
 			wantErr:    false,
-			wantResult: "config-42: test message (ID: 1, Active: true)",
+			wantResult: "config-42: test message (ID: 1, RID: 550e8400-e29b-41d4-a716-446655440001, Active: true)",
 		},
 		{
 			name: "Map to Struct and Map to Pointer Conversion",
@@ -492,11 +495,12 @@ func TestNewRunnerWithStructParameters(t *testing.T) {
 			},
 			param2: map[string]interface{}{
 				"ID":      2,
+				"RID":     "550e8400-e29b-41d4-a716-446655440001",
 				"Message": "converted from map",
 				"Active":  false,
 			},
 			wantErr:    false,
-			wantResult: "fromMap-99: converted from map (ID: 2, Active: false)",
+			wantResult: "fromMap-99: converted from map (ID: 2, RID: 550e8400-e29b-41d4-a716-446655440001, Active: false)",
 		},
 		{
 			name: "Struct Value and Map to Pointer",
@@ -506,11 +510,12 @@ func TestNewRunnerWithStructParameters(t *testing.T) {
 			},
 			param2: map[string]interface{}{
 				"ID":      3,
+				"RID":     "550e8400-e29b-41d4-a716-446655440001",
 				"Message": "mixed params",
 				"Active":  true,
 			},
 			wantErr:    false,
-			wantResult: "direct-10: mixed params (ID: 3, Active: true)",
+			wantResult: "direct-10: mixed params (ID: 3, RID: 550e8400-e29b-41d4-a716-446655440001, Active: true)",
 		},
 		{
 			name: "Map to Struct with Type Conversion",
@@ -520,11 +525,12 @@ func TestNewRunnerWithStructParameters(t *testing.T) {
 			},
 			param2: map[string]interface{}{
 				"ID":      4.0, // float64 should convert to int
+				"RID":     "550e8400-e29b-41d4-a716-446655440001",
 				"Message": "type conversion test",
 				"Active":  true,
 			},
 			wantErr:    false,
-			wantResult: "typeConv-25: type conversion test (ID: 4, Active: true)",
+			wantResult: "typeConv-25: type conversion test (ID: 4, RID: 550e8400-e29b-41d4-a716-446655440001, Active: true)",
 		},
 	}
 
@@ -593,13 +599,14 @@ func TestNewRunnerWithNestedStruct(t *testing.T) {
 				},
 				DataPtr: &TestData{
 					ID:      10,
+					RID:     uuid.MustParse("550e8400-e29b-41d4-a716-446655440001"),
 					Message: "nested data",
 					Active:  true,
 				},
 				Metadata: "meta-direct",
 			},
 			wantErr:    false,
-			wantResult: "meta-direct: nested-config-100 | nested data (ID: 10, Active: true)",
+			wantResult: "meta-direct: nested-config-100 | nested data (ID: 10, RID: 550e8400-e29b-41d4-a716-446655440001, Active: true)",
 		},
 		{
 			name: "Map to Nested Struct Conversion",
@@ -610,13 +617,14 @@ func TestNewRunnerWithNestedStruct(t *testing.T) {
 				},
 				"DataPtr": map[string]interface{}{
 					"ID":      20,
+					"RID":     "550e8400-e29b-41d4-a716-446655440001",
 					"Message": "map data",
 					"Active":  false,
 				},
 				"Metadata": "meta-from-map",
 			},
 			wantErr:    false,
-			wantResult: "meta-from-map: map-config-200 | map data (ID: 20, Active: false)",
+			wantResult: "meta-from-map: map-config-200 | map data (ID: 20, RID: 550e8400-e29b-41d4-a716-446655440001, Active: false)",
 		},
 		{
 			name: "Map with Type Conversions in Nested Struct",
@@ -627,13 +635,14 @@ func TestNewRunnerWithNestedStruct(t *testing.T) {
 				},
 				"DataPtr": map[string]interface{}{
 					"ID":      30.0, // float64 to int
+					"RID":     "550e8400-e29b-41d4-a716-446655440001",
 					"Message": "type conversion",
 					"Active":  true,
 				},
 				"Metadata": "meta-type-conv",
 			},
 			wantErr:    false,
-			wantResult: "meta-type-conv: type-conv-300 | type conversion (ID: 30, Active: true)",
+			wantResult: "meta-type-conv: type-conv-300 | type conversion (ID: 30, RID: 550e8400-e29b-41d4-a716-446655440001, Active: true)",
 		},
 	}
 
