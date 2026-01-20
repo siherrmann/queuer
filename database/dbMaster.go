@@ -37,16 +37,21 @@ func NewMasterDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Mas
 		db: dbConnection,
 	}
 
-	err := loadSql.LoadMasterSql(masterDbHandler.db.Instance, false)
-	if err != nil {
-		return nil, helper.NewError("load master sql", err)
-	}
-
 	if withTableDrop {
+		err := dbConnection.DropFunctionsFromPublicSchema(loadSql.MasterFunctions)
+		if err != nil {
+			return nil, helper.NewError("drop master functions", err)
+		}
+
 		err = masterDbHandler.DropTable()
 		if err != nil {
 			return nil, helper.NewError("drop master table", err)
 		}
+	}
+
+	err := loadSql.LoadMasterSql(masterDbHandler.db.Instance, false)
+	if err != nil {
+		return nil, helper.NewError("load master sql", err)
 	}
 
 	err = masterDbHandler.CreateTable()

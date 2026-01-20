@@ -47,16 +47,21 @@ func NewWorkerDBHandler(dbConnection *helper.Database, withTableDrop bool) (*Wor
 		db: dbConnection,
 	}
 
-	err := loadSql.LoadWorkerSql(dbConnection.Instance, withTableDrop)
-	if err != nil {
-		return nil, helper.NewError("load worker sql", err)
-	}
-
 	if withTableDrop {
-		err := workerDbHandler.DropTable()
+		err := dbConnection.DropFunctionsFromPublicSchema(loadSql.WorkerFunctions)
+		if err != nil {
+			return nil, helper.NewError("drop worker functions", err)
+		}
+
+		err = workerDbHandler.DropTable()
 		if err != nil {
 			return nil, helper.NewError("drop worker table", err)
 		}
+	}
+
+	err := loadSql.LoadWorkerSql(dbConnection.Instance, withTableDrop)
+	if err != nil {
+		return nil, helper.NewError("load worker sql", err)
 	}
 
 	err = workerDbHandler.CreateTable()
