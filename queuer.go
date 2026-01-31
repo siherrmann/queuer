@@ -334,7 +334,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 // It runs the job processing in a separate goroutine and listens for job events.
 //
 // This version does not run the job processing, allowing the queuer to be started without a worker.
-// Is is useful if you want to run a queuer instance in a seperate service without a worker,
+// Is is useful if you want to run a queuer instance in a separate service without a worker,
 // for example to handle listening to job events and providing a central frontend.
 func (q *Queuer) StartWithoutWorker(ctx context.Context, cancel context.CancelFunc, withoutListeners bool, masterSettings ...*model.MasterSettings) {
 	q.ctx = ctx

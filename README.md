@@ -3,6 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/siherrmann/queuer.svg)](https://pkg.go.dev/github.com/siherrmann/queuer)
 [![Go Coverage](https://github.com/siherrmann/queuer/wiki/coverage.svg)](https://raw.githack.com/wiki/siherrmann/queuer/coverage.html)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/siherrmann/queuer/blob/master/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/siherrmann/queuer)](http://goreportcard.com/report/siherrmann/queuer)
 
 Queueing package based on postgres written in Go.
 
@@ -87,6 +88,7 @@ func NewQueuerWithDB(name string, maxConcurrency int, encryptionKey string, dbCo
 - `options`: Optional `OnError` configurations to apply to the worker.
 
 This function performs the following setup:
+
 - Initializes a logger.
 - Sets up the database connection using the provided `dbConfig` or environment variables.
 - Creates `JobDBHandler`, `WorkerDBHandler`, and `MasterDBHandler` instances for database interactions.
@@ -109,6 +111,7 @@ func (q *Queuer) Start(ctx context.Context, cancel context.CancelFunc, masterSet
 - `masterSettings`: The central settings set will be set if the current worker becomes the master.
 
 Upon calling Start:
+
 - It performs a basic check to ensure internal listeners are initialized.
 - Db listeners and broadcasters are created to listen to job events (inserts, updates, deletes).
 - It starts a poller to periodically poll the database for new jobs to process (5 minute interval).
@@ -158,6 +161,7 @@ func (q *Queuer) StopWorker(workerRID uuid.UUID) error
 - `workerRID`: The `uuid.UUID` identifying the worker to stop.
 
 When a worker is stopped:
+
 - The worker status is immediately set to `STOPPED` in the database
 - The heartbeat ticker detects the `STOPPED` status and calls `Stop()` on that worker
 - All running jobs on that worker are cancelled immediately
@@ -178,6 +182,7 @@ func (q *Queuer) StopWorkerGracefully(workerRID uuid.UUID) error
 - `workerRID`: The `uuid.UUID` identifying the worker to stop gracefully.
 
 When a worker is stopped gracefully:
+
 - The worker status is set to `STOPPING` in the database
 - The heartbeat ticker detects the `STOPPING` status and sets `maxConcurrency` to `0`
 - Currently running jobs are allowed to complete normally
@@ -254,7 +259,7 @@ const (
 
 - `RETRY_BACKOFF_NONE`: No backoff. The RetryDelay remains constant for all retries.
 - `RETRY_BACKOFF_LINEAR`: The retry delay increases linearly with each attempt (e.g., delay, 2*delay, 3*delay).
-- `RETRY_BACKOFF_EXPONENTIAL`: The retry delay increases exponentially with each attempt (e.g., delay, delay*2, delay*2*2).
+- `RETRY_BACKOFF_EXPONENTIAL`: The retry delay increases exponentially with each attempt (e.g., delay, delay*2, delay*2\*2).
 
 ---
 
@@ -355,6 +360,7 @@ The CLI tool supports the following main commands:
 ### Pagination Support
 
 List commands support pagination through:
+
 - `--lastId <int>` - Last ID from previous call for pagination
 - `--limit <int>` - Maximum number of entries to return (default: 10)
 
