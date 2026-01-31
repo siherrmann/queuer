@@ -131,7 +131,7 @@ func TestCheckTableExistance(t *testing.T) {
 	database := NewTestDatabase(dbConfig)
 
 	_, err = database.Instance.Exec(
-		`CREATE TABLE IF NOT EXISTS test_table_existance (
+		`CREATE TABLE IF NOT EXISTS test_table_existence (
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			name TEXT NOT NULL
 		);`,
@@ -140,7 +140,7 @@ func TestCheckTableExistance(t *testing.T) {
 		log.Panicf("error creating job table: %#v", err)
 	}
 
-	exists, err := database.CheckTableExistance("test_table_existance")
+	exists, err := database.CheckTableExistance("test_table_existence")
 	assert.NoError(t, err, "expected no error when checking table existence")
 	assert.True(t, exists, "expected 'workers' table to exist")
 
