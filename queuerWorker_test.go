@@ -60,7 +60,7 @@ func TestGetWorkers(t *testing.T) {
 		assert.Nil(t, workers, "expected no workers to be retrieved for zero entries")
 	})
 
-	t.Run("Return empty slice for non existant lastId", func(t *testing.T) {
+	t.Run("Return empty slice for non existent lastId", func(t *testing.T) {
 		workers, err := testQueuer.GetWorkers(1000, 10)
 		assert.NoError(t, err, "expected no error when getting workers with non-existent lastId")
 		require.Nil(t, workers, "expected no workers to be retrieved for non-existent lastId")

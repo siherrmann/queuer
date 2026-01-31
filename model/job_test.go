@@ -26,7 +26,7 @@ func TaskMock(duration int, param2 string) (int, error) {
 	return duration + param2Int, nil
 }
 
-// Tast with a name longer than 100 characters to test the validation logic.
+// Task with a name longer than 100 characters to test the validation logic.
 func TaskMockWithNameLonger100_283032343638404244464850525456586062646668707274767880828486889092949698100() string {
 	return "Uff"
 }
