@@ -851,3 +851,70 @@ func TestStopWorkerGracefullyWithRunningJobs(t *testing.T) {
 		// Note: Both queuers will be stopped automatically by their heartbeat tickers
 	})
 }
+
+func TestJobArchiveRetention(t *testing.T) {
+	t.Run("TimescaleDB retention policy", func(t *testing.T) {
+		teardown, timescalePort, err := helper.MustStartTimescaleContainer()
+		require.NoError(t, err)
+		defer teardown(context.Background())
+
+		queuer := NewQueuerWithDB("test-retention", 10, "", &helper.DatabaseConfiguration{
+			Host: "localhost", Port: timescalePort, Database: "database",
+			Username: "user", Password: "password", Schema: "public",
+			SSLMode: "disable", WithTableDrop: true, WithTimescale: true,
+		})
+		queuer.AddTaskWithName(func() (string, error) { return "success", nil }, "test-task")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		queuer.Start(ctx, cancel, &model.MasterSettings{JobDeleteThreshold: 1 * time.Hour})
+		time.Sleep(6 * time.Second)
+
+		master, err := queuer.dbMaster.SelectMaster()
+		require.NoError(t, err)
+		assert.Equal(t, 1*time.Hour, master.Settings.JobDeleteThreshold)
+
+		queuer.Stop()
+	})
+
+	t.Run("PostgreSQL trigger-based retention", func(t *testing.T) {
+		teardown, postgresPort, err := helper.MustStartPostgresContainer()
+		require.NoError(t, err)
+		defer teardown(context.Background())
+
+		queuer := NewQueuerWithDB("test-retention", 10, "", &helper.DatabaseConfiguration{
+			Host: "localhost", Port: postgresPort, Database: "database",
+			Username: "user", Password: "password", Schema: "public",
+			SSLMode: "disable", WithTableDrop: true, WithTimescale: false,
+		})
+		queuer.AddTaskWithName(func() (string, error) { return "success", nil }, "test-task")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		queuer.Start(ctx, cancel, &model.MasterSettings{JobDeleteThreshold: 1 * time.Hour})
+		time.Sleep(6 * time.Second)
+
+		// Insert old job
+		oldJobRID := uuid.New()
+		_, err = queuer.DB.Exec(`INSERT INTO job_archive (id, rid, worker_id, worker_rid, task_name, status, updated_at, created_at)
+			VALUES (1, $1, 1, $2, 'test-task', 'SUCCEEDED', CURRENT_TIMESTAMP - INTERVAL '2 hours', CURRENT_TIMESTAMP - INTERVAL '2 hours')`,
+			oldJobRID, queuer.worker.RID)
+		require.NoError(t, err)
+
+		// Add 15 jobs to trigger cleanup (trigger runs every 10th insert)
+		for i := 0; i < 15; i++ {
+			_, err := queuer.AddJob("test-task", nil)
+			require.NoError(t, err)
+		}
+
+		// Wait for jobs to complete and trigger to execute
+		time.Sleep(5 * time.Second)
+
+		// Verify old job was deleted
+		deletedJob, err := queuer.dbJob.SelectJobFromArchive(oldJobRID)
+		assert.Error(t, err)
+		assert.Nil(t, deletedJob)
+
+		queuer.Stop()
+	})
+}

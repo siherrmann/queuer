@@ -8,6 +8,16 @@ import (
 	"github.com/siherrmann/queuer/model"
 )
 
+func (q *Queuer) GetCurrentWorkerRID() uuid.UUID {
+	q.workerMu.RLock()
+	defer q.workerMu.RUnlock()
+
+	if q.worker != nil {
+		return q.worker.RID
+	}
+	return uuid.Nil
+}
+
 // StopWorkerGracefully sets the status of the specified worker to 'STOPPING'
 // to cancel running jobs when stopping.
 func (q *Queuer) StopWorker(workerRid uuid.UUID) error {

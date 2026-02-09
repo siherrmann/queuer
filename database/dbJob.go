@@ -42,25 +42,27 @@ type JobDBHandlerFunctions interface {
 type JobDBHandler struct {
 	db            *helper.Database
 	EncryptionKey string
+	WithTimescale bool
 }
 
 // NewJobDBHandler creates a new instance of JobDBHandler.
 // It initializes the database connection and optionally drops existing tables.
 // If withTableDrop is true, it will drop the existing job tables before creating new ones
-func NewJobDBHandler(dbConnection *helper.Database, withTableDrop bool, encryptionKey ...string) (*JobDBHandler, error) {
+func NewJobDBHandler(dbConnection *helper.Database, dbConfig *helper.DatabaseConfiguration, encryptionKey ...string) (*JobDBHandler, error) {
 	if dbConnection == nil {
 		return nil, helper.NewError("database connection validation", fmt.Errorf("database connection is nil"))
 	}
 
 	jobDbHandler := &JobDBHandler{
-		db: dbConnection,
+		db:            dbConnection,
+		WithTimescale: dbConfig.WithTimescale,
 	}
 
 	if len(encryptionKey) > 0 {
 		jobDbHandler.EncryptionKey = encryptionKey[0]
 	}
 
-	if withTableDrop {
+	if dbConfig.WithTableDrop {
 		err := dbConnection.DropFunctionsFromPublicSchema(loadSql.JobFunctions)
 		if err != nil {
 			return nil, helper.NewError("drop job functions", err)
@@ -112,7 +114,7 @@ func (r JobDBHandler) CreateTable() error {
 	defer cancel()
 
 	// Use the SQL init() function to create all tables, triggers, and indexes
-	_, err := r.db.Instance.ExecContext(ctx, `SELECT init_job();`)
+	_, err := r.db.Instance.ExecContext(ctx, `SELECT init_job($1);`, r.WithTimescale)
 	if err != nil {
 		log.Panicf("error initializing job tables: %#v", err)
 	}
@@ -623,8 +625,9 @@ func (r JobDBHandler) SelectAllJobsBySearch(search string, lastID int, entries i
 // AddRetentionArchive updates the retention archive settings for the job archive.
 func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
 	_, err := r.db.Instance.Exec(
-		`SELECT add_retention_archive($1)`,
+		`SELECT add_retention_archive($1, $2)`,
 		int(retention.Hours()/24),
+		r.WithTimescale,
 	)
 	if err != nil {
 		return helper.NewError("exec", err)
@@ -636,7 +639,8 @@ func (r JobDBHandler) AddRetentionArchive(retention time.Duration) error {
 // RemoveRetentionArchive removes the retention archive settings for the job archive.
 func (r JobDBHandler) RemoveRetentionArchive() error {
 	_, err := r.db.Instance.Exec(
-		`SELECT remove_retention_archive()`,
+		`SELECT remove_retention_archive($1)`,
+		r.WithTimescale,
 	)
 	if err != nil {
 		return helper.NewError("exec", err)

@@ -1,8 +1,10 @@
 package manager
 
 import (
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"net/http"
+
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"github.com/siherrmann/queuer"
 	"github.com/siherrmann/queuer/manager/handler"
 )
@@ -12,9 +14,11 @@ func SetupRoutes(e *echo.Echo, queuerInstance *queuer.Queuer) {
 	h := handler.NewManagerHandler(queuerInstance)
 
 	// Middleware
-	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
+	}))
 
 	e.GET("/health", h.HealthCheck)
 	e.GET("/", h.HealthCheck)

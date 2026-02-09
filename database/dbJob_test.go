@@ -22,7 +22,7 @@ func TestJobNewJobDBHandler(t *testing.T) {
 	t.Run("Valid call NewJobDBHandler", func(t *testing.T) {
 		database := helper.NewTestDatabase(dbConfig)
 
-		jobDbHandler, err := NewJobDBHandler(database, true)
+		jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 		assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 		require.NotNil(t, jobDbHandler, "Expected NewJobDBHandler to return a non-nil instance")
 		require.NotNil(t, jobDbHandler.db, "Expected NewJobDBHandler to have a non-nil database instance")
@@ -37,7 +37,7 @@ func TestJobNewJobDBHandler(t *testing.T) {
 	})
 
 	t.Run("Invalid call NewJobDBHandler with nil database", func(t *testing.T) {
-		_, err := NewJobDBHandler(nil, true)
+		_, err := NewJobDBHandler(nil, dbConfig)
 		assert.Error(t, err, "Expected error when creating JobDBHandler with nil database")
 		assert.Contains(t, err.Error(), "database connection is nil", "Expected specific error message for nil database connection")
 	})
@@ -51,7 +51,7 @@ func TestJobCheckTableExistance(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	exists, err := jobDbHandler.CheckTablesExistance()
@@ -67,7 +67,7 @@ func TestJobCreateTable(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	err = jobDbHandler.CreateTable()
@@ -82,7 +82,7 @@ func TestJobDropTable(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	err = jobDbHandler.DropTables()
@@ -97,7 +97,7 @@ func TestJobInsertJob(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -121,7 +121,7 @@ func TestJobInsertJobTx(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -151,7 +151,7 @@ func TestJobBatchInsertJobs(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	t.Run("Successful batch insert jobs", func(t *testing.T) {
@@ -249,7 +249,7 @@ func TestJobUpdateJobsInitial(t *testing.T) {
 	require.NoError(t, err, "Expected UpdateWorker to not return an error")
 
 	// Now we can proceed with the job insertion and update
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -276,7 +276,7 @@ func TestJobUpdateJobFinal(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -302,7 +302,7 @@ func TestJobUpdateJobFinalEncrypted(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true, "test-encryption-key")
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig, "test-encryption-key")
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -340,7 +340,7 @@ func TestUpdateStaleJobs(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	assert.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	workerDbHandler, err := NewWorkerDBHandler(database, true)
@@ -450,7 +450,7 @@ func TestJobDeleteJob(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -484,7 +484,7 @@ func TestJobSelectJob(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -507,7 +507,7 @@ func TestJobSelectJobEncrypted(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true, "test-encryption-key")
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig, "test-encryption-key")
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -543,7 +543,7 @@ func TestJobSelectAllJobs(t *testing.T) {
 	database := helper.NewTestDatabase(dbConfig)
 
 	newJobCount := 5
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	for i := 0; i < newJobCount; i++ {
@@ -573,7 +573,7 @@ func TestJobSelectAllJobsEncrypted(t *testing.T) {
 	database := helper.NewTestDatabase(dbConfig)
 
 	newJobCount := 5
-	jobDbHandler, err := NewJobDBHandler(database, true, "test-encryption-key")
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig, "test-encryption-key")
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	expectedResultsByTaskName := make(map[string]model.Parameters)
@@ -641,7 +641,7 @@ func TestJobSelectAllJobsByWorkerRID(t *testing.T) {
 	require.NoError(t, err, "Expected UpdateWorker to not return an error")
 
 	// Insert jobs associated with the worker
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	for i := 0; i < newJobCount; i++ {
@@ -673,7 +673,7 @@ func TestJobSelectAllJobsBySearch(t *testing.T) {
 	newJobCountSearch := 5
 	newJobCountOther := 3
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	// Insert multiple jobs with different names
@@ -711,7 +711,7 @@ func TestJobSelectJobFromArchive(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	job, err := model.NewJob("TestTask", nil, nil)
@@ -741,7 +741,7 @@ func TestJobSelectAllJobsFromArchive(t *testing.T) {
 	}
 	database := helper.NewTestDatabase(dbConfig)
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	newJobCount := 5
@@ -780,7 +780,7 @@ func TestJobSelectAllJobsFromArchiveBySearch(t *testing.T) {
 	newJobCountSearch := 5
 	newJobCountOther := 3
 
-	jobDbHandler, err := NewJobDBHandler(database, true)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
 	require.NoError(t, err, "Expected NewJobDBHandler to not return an error")
 
 	// Insert multiple jobs with different names

@@ -3,7 +3,7 @@ package manager
 import (
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/siherrmann/queuer"
 )
 
@@ -13,5 +13,8 @@ func ManagerServer(port int, maxConcurrency int) {
 	e := echo.New()
 	SetupRoutes(e, queuerInstance)
 
-	e.Logger.Fatal(e.Start(":" + strconv.Itoa(port)))
+	err := e.Start(":" + strconv.Itoa(port))
+	if err != nil {
+		panic(err)
+	}
 }

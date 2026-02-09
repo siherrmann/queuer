@@ -5,12 +5,12 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/siherrmann/queuer/model"
 )
 
 // AddJob handles the addition of a new job
-func (m *ManagerHandler) AddJob(c echo.Context) error {
+func (m *ManagerHandler) AddJob(c *echo.Context) error {
 	job := model.Job{}
 	err := c.Bind(&job)
 	if err != nil {
@@ -26,7 +26,7 @@ func (m *ManagerHandler) AddJob(c echo.Context) error {
 }
 
 // GetJob retrieves a specific job by RID
-func (m *ManagerHandler) GetJob(c echo.Context) error {
+func (m *ManagerHandler) GetJob(c *echo.Context) error {
 	ridStr := c.Param("rid")
 	rid, err := uuid.Parse(ridStr)
 	if err != nil {
@@ -42,7 +42,7 @@ func (m *ManagerHandler) GetJob(c echo.Context) error {
 }
 
 // ListJobs retrieves a paginated list of jobs
-func (m *ManagerHandler) ListJobs(c echo.Context) error {
+func (m *ManagerHandler) ListJobs(c *echo.Context) error {
 	lastIdStr := c.QueryParam("lastId")
 	limitStr := c.QueryParam("limit")
 
@@ -75,7 +75,7 @@ func (m *ManagerHandler) ListJobs(c echo.Context) error {
 }
 
 // CancelJob cancels a specific job by RID
-func (m *ManagerHandler) CancelJob(c echo.Context) error {
+func (m *ManagerHandler) CancelJob(c *echo.Context) error {
 	ridStr := c.Param("rid")
 	rid, err := uuid.Parse(ridStr)
 	if err != nil {
