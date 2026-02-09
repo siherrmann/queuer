@@ -58,6 +58,7 @@ type DatabaseConfiguration struct {
 	Schema        string
 	SSLMode       string
 	WithTableDrop bool
+	WithTimescale bool
 }
 
 // NewDatabaseConfiguration creates a new DatabaseConfiguration instance.
@@ -73,6 +74,7 @@ func NewDatabaseConfiguration() (*DatabaseConfiguration, error) {
 		Schema:        os.Getenv("QUEUER_DB_SCHEMA"),
 		SSLMode:       os.Getenv("QUEUER_DB_SSLMODE"),
 		WithTableDrop: os.Getenv("QUEUER_DB_WITH_TABLE_DROP") == "true",
+		WithTimescale: os.Getenv("QUEUER_DB_WITH_TIMESCALE") != "false",
 	}
 	if len(strings.TrimSpace(config.Host)) == 0 || len(strings.TrimSpace(config.Port)) == 0 || len(strings.TrimSpace(config.Database)) == 0 || len(strings.TrimSpace(config.Username)) == 0 || len(strings.TrimSpace(config.Password)) == 0 || len(strings.TrimSpace(config.Schema)) == 0 {
 		return nil, fmt.Errorf("QUEUER_DB_HOST, QUEUER_DB_PORT, QUEUER_DB_DATABASE, QUEUER_DB_USERNAME, QUEUER_DB_PASSWORD and QUEUER_DB_SCHEMA environment variables must be set")

@@ -19,8 +19,43 @@ const (
 	dbPwd  = "password"
 )
 
-// MustStartPostgresContainer starts a PostgreSQL container for testing purposes.
-// It uses the timescale/timescaledb image with PostgreSQL 17.
+// MustStartTimescaleContainer starts a PostgreSQL container for testing purposes.
+// It uses the timescale/timescaledb:latest-pg17 image.
+// It returns a function to terminate the container, the port on which the database is accessible,
+// and an error if the container could not be started.
+func MustStartTimescaleContainer() (func(ctx context.Context, opts ...testcontainers.TerminateOption) error, string, error) {
+	ctx := context.Background()
+
+	pgContainer, err := postgres.Run(
+		ctx,
+		"timescale/timescaledb:latest-pg17",
+		postgres.WithDatabase(dbName),
+		postgres.WithUsername(dbUser),
+		postgres.WithPassword(dbPwd),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).WithStartupTimeout(5*time.Second),
+		),
+	)
+	if err != nil {
+		return nil, "", fmt.Errorf("error starting postgres container: %w", err)
+	}
+
+	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		return nil, "", fmt.Errorf("error getting connection string: %w", err)
+	}
+
+	u, err := url.Parse(connStr)
+	if err != nil {
+		return nil, "", fmt.Errorf("error parsing connection string: %v", err)
+	}
+
+	return pgContainer.Terminate, u.Port(), err
+}
+
+// MustStartTimescaleContainer starts a PostgreSQL container for testing purposes.
+// It uses the postgres:latest image.
 // It returns a function to terminate the container, the port on which the database is accessible,
 // and an error if the container could not be started.
 func MustStartPostgresContainer() (func(ctx context.Context, opts ...testcontainers.TerminateOption) error, string, error) {
@@ -28,7 +63,7 @@ func MustStartPostgresContainer() (func(ctx context.Context, opts ...testcontain
 
 	pgContainer, err := postgres.Run(
 		ctx,
-		"timescale/timescaledb:latest-pg17",
+		"postgres:latest",
 		postgres.WithDatabase(dbName),
 		postgres.WithUsername(dbUser),
 		postgres.WithPassword(dbPwd),

@@ -111,7 +111,7 @@ func NewQueuerWithDB(name string, maxConcurrency int, encryptionKey string, dbCo
 	}
 
 	// DBs
-	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig.WithTableDrop)
+	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig)
 	if err != nil {
 		log.Panicf("error creating job db handler: %s", err.Error())
 	}
@@ -199,7 +199,7 @@ func NewStaticQueuer(logLevel slog.Leveler, dbConfig *helper.DatabaseConfigurati
 	}
 
 	// DBs
-	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig.WithTableDrop)
+	dbJob, err := database.NewJobDBHandler(dbCon, dbConfig)
 	if err != nil {
 		log.Panicf("error creating job db handler: %s", err.Error())
 	}

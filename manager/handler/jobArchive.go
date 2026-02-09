@@ -5,11 +5,11 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // GetJobArchive retrieves a specific archived job by RID
-func (m *ManagerHandler) GetJobArchive(c echo.Context) error {
+func (m *ManagerHandler) GetJobArchive(c *echo.Context) error {
 	ridStr := c.Param("rid")
 	rid, err := uuid.Parse(ridStr)
 	if err != nil {
@@ -25,7 +25,7 @@ func (m *ManagerHandler) GetJobArchive(c echo.Context) error {
 }
 
 // ListJobArchives retrieves a paginated list of archived jobs
-func (m *ManagerHandler) ListJobArchives(c echo.Context) error {
+func (m *ManagerHandler) ListJobArchives(c *echo.Context) error {
 	lastIdStr := c.QueryParam("lastId")
 	limitStr := c.QueryParam("limit")
 

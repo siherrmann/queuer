@@ -16,7 +16,7 @@ var dbPort string
 func TestMain(m *testing.M) {
 	var teardown func(ctx context.Context, opts ...testcontainers.TerminateOption) error
 	var err error
-	teardown, dbPort, err = MustStartPostgresContainer()
+	teardown, dbPort, err = MustStartTimescaleContainer()
 	if err != nil {
 		log.Fatalf("error starting postgres container: %v", err)
 	}
