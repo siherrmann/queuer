@@ -5,11 +5,11 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // GetWorker retrieves a specific worker by RID
-func (m *ManagerHandler) GetWorker(c echo.Context) error {
+func (m *ManagerHandler) GetWorker(c *echo.Context) error {
 	ridStr := c.Param("rid")
 	rid, err := uuid.Parse(ridStr)
 	if err != nil {
@@ -25,7 +25,7 @@ func (m *ManagerHandler) GetWorker(c echo.Context) error {
 }
 
 // ListWorkers retrieves a paginated list of workers
-func (m *ManagerHandler) ListWorkers(c echo.Context) error {
+func (m *ManagerHandler) ListWorkers(c *echo.Context) error {
 	lastIdStr := c.QueryParam("lastId")
 	limitStr := c.QueryParam("limit")
 

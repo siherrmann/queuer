@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"github.com/siherrmann/queuer"
 )
 
@@ -18,7 +18,7 @@ func NewManagerHandler(queuer *queuer.Queuer) *ManagerHandler {
 }
 
 // Health check handler
-func (m *ManagerHandler) HealthCheck(c echo.Context) error {
+func (m *ManagerHandler) HealthCheck(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{
 		"status":  "healthy",
 		"service": "queuer-manager",
