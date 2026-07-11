@@ -34,7 +34,7 @@ func CheckValidTaskWithParameters(task interface{}, parameters ...interface{}) e
 	taskType := reflect.TypeOf(task)
 	expectedParams := taskType.NumIn()
 	startIndex := 0
-	
+
 	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	if expectedParams > 0 && taskType.In(0) == contextType {
 		startIndex = 1

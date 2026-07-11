@@ -13,10 +13,10 @@ import (
 func TestPrettyHandler(t *testing.T) {
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, PrettyHandlerOptions{})
-	
+
 	logger := slog.New(handler)
 	logger.Info("test message", "key", "value")
-	
+
 	output := buf.String()
 	assert.Contains(t, output, "test message")
 	assert.Contains(t, output, "key")
@@ -31,12 +31,12 @@ func TestPrettyHandlerLevels(t *testing.T) {
 			Level: slog.LevelDebug,
 		},
 	})
-	
+
 	logger := slog.New(handler)
 	logger.Debug("debug msg")
 	logger.Warn("warn msg")
 	logger.Error("error msg")
-	
+
 	output := buf.String()
 	assert.Contains(t, output, "debug msg")
 	assert.Contains(t, output, "warn msg")
@@ -49,9 +49,9 @@ func TestPrettyHandlerLevels(t *testing.T) {
 func TestPrettyHandlerHandleDirect(t *testing.T) {
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, PrettyHandlerOptions{})
-	
+
 	r := slog.NewRecord(time.Now(), slog.LevelInfo, "direct handle", 0)
-	
+
 	err := handler.Handle(context.Background(), r)
 	assert.NoError(t, err)
 	assert.Contains(t, buf.String(), "direct handle")

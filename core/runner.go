@@ -15,15 +15,16 @@ import (
 )
 
 type ContextKey string
+
 const JobRIDContextKey ContextKey = "JobRIDContextKey"
 
 type Runner struct {
-	cancel         context.CancelFunc
-	cancelMu       sync.RWMutex
-	Options        *model.Options
-	JobRID         *uuid.UUID
-	Task           interface{}
-	Parameters     model.Parameters
+	cancel     context.CancelFunc
+	cancelMu   sync.RWMutex
+	Options    *model.Options
+	JobRID     *uuid.UUID
+	Task       interface{}
+	Parameters model.Parameters
 	// Result channel to return results
 	ResultsChannel chan []interface{}
 	ErrorChannel   chan error
@@ -37,7 +38,7 @@ func NewRunner(options *model.Options, task interface{}, parameters ...interface
 	if err != nil {
 		return nil, helper.NewError("getting task input parameters", err)
 	}
-	
+
 	startIndex := 0
 	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	if len(taskInputParameters) > 0 && taskInputParameters[0] == contextType {
@@ -125,11 +126,11 @@ func (r *Runner) Run(ctx context.Context) {
 		}()
 
 		taskFunc := reflect.ValueOf(r.Task)
-		
+
 		var callParameters []reflect.Value
 		taskType := reflect.TypeOf(r.Task)
 		contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
-		
+
 		if taskType.NumIn() > 0 && taskType.In(0) == contextType {
 			jobCtx := ctx
 			if r.JobRID != nil {
@@ -137,7 +138,7 @@ func (r *Runner) Run(ctx context.Context) {
 			}
 			callParameters = append(callParameters, reflect.ValueOf(jobCtx))
 		}
-		
+
 		callParameters = append(callParameters, r.Parameters.ToReflectValues()...)
 		results := taskFunc.Call(callParameters)
 		resultValues := []interface{}{}

@@ -331,7 +331,7 @@ func TestMustStartPostgresContainer(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, port)
 	assert.NotNil(t, teardown)
-	
+
 	if teardown != nil {
 		err := teardown(context.Background())
 		assert.NoError(t, err)

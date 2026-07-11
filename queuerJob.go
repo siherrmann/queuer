@@ -72,7 +72,6 @@ func (qw *QueuerContextWrapper) AddJobs(batchJobs []model.BatchJob) error {
 	return qw.q.AddJobs(batchJobs)
 }
 
-
 // AddJob adds a job to the queue with the given task and parameters.
 // As a task you can either pass a function or a string with the task name
 // (necessary if you want to use a task with a name set by you).
@@ -139,7 +138,6 @@ Example usage:
 		}
 	}
 */
-
 
 func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)

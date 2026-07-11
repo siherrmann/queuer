@@ -860,7 +860,7 @@ func TestBatchInsertJobs(t *testing.T) {
 
 	job1, _ := model.NewJob("Task1", nil, nil)
 	job2, _ := model.NewJob("Task2", nil, nil)
-	
+
 	err = jobDbHandler.BatchInsertJobs([]*model.Job{job1, job2})
 	assert.NoError(t, err)
 }
