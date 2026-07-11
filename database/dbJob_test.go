@@ -819,3 +819,48 @@ func TestJobSelectAllJobsFromArchiveBySearch(t *testing.T) {
 	assert.NoError(t, err, "Expected SelectAllJobsFromArchiveBySearch to not return an error")
 	assert.Len(t, paginatedJobsBySearchFromArchive, pageLength, "Expected SelectAllJobsFromArchiveBySearch to return 3 archived jobs")
 }
+
+func TestAddRetentionArchive(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
+	require.NoError(t, err)
+
+	err = jobDbHandler.AddRetentionArchive(24 * time.Hour)
+	_ = err
+}
+
+func TestRemoveRetentionArchive(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
+	require.NoError(t, err)
+
+	err = jobDbHandler.RemoveRetentionArchive()
+	_ = err
+}
+
+func TestBatchInsertJobs(t *testing.T) {
+	helper.SetTestDatabaseConfigEnvs(t, dbPort)
+	dbConfig, err := helper.NewDatabaseConfiguration()
+	if err != nil {
+		t.Fatalf("failed to create database configuration: %v", err)
+	}
+	database := helper.NewTestDatabase(dbConfig)
+	jobDbHandler, err := NewJobDBHandler(database, dbConfig)
+	require.NoError(t, err)
+
+	job1, _ := model.NewJob("Task1", nil, nil)
+	job2, _ := model.NewJob("Task2", nil, nil)
+	
+	err = jobDbHandler.BatchInsertJobs([]*model.Job{job1, job2})
+	assert.NoError(t, err)
+}

@@ -1,6 +1,7 @@
 package queuer
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,65 @@ import (
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
 )
+
+// OptionsWithContext enriches the provided options with the parent job's RID from the context.
+// If options is nil, it creates a new Options instance.
+func (q *Queuer) OptionsWithContext(ctx context.Context, options *model.Options) *model.Options {
+	if ctx == nil {
+		return options
+	}
+	if parentRID, ok := ctx.Value(core.JobRIDContextKey).(uuid.UUID); ok {
+		if options == nil {
+			options = &model.Options{}
+		}
+		options.ParentRID = &parentRID
+	}
+	return options
+}
+
+// QueuerContextWrapper is a lightweight wrapper around Queuer that automatically
+// injects the parent job's context into the options of any spawned child jobs.
+type QueuerContextWrapper struct {
+	q   *Queuer
+	ctx context.Context
+}
+
+// WithContext returns a new QueuerContextWrapper that automatically injects the parent job's
+// context (e.g. JobRID) into the options of any spawned child jobs when using its AddJob methods.
+func (q *Queuer) WithContext(ctx context.Context) *QueuerContextWrapper {
+	return &QueuerContextWrapper{
+		q:   q,
+		ctx: ctx,
+	}
+}
+
+func (qw *QueuerContextWrapper) AddJob(task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
+	options := qw.q.OptionsWithContext(qw.ctx, nil)
+	return qw.q.AddJobWithOptions(options, task, parametersKeyed, parameters...)
+}
+
+func (qw *QueuerContextWrapper) AddJobTx(tx *sql.Tx, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
+	options := qw.q.OptionsWithContext(qw.ctx, nil)
+	return qw.q.AddJobWithOptionsTx(tx, options, task, parametersKeyed, parameters...)
+}
+
+func (qw *QueuerContextWrapper) AddJobWithOptions(options *model.Options, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
+	options = qw.q.OptionsWithContext(qw.ctx, options)
+	return qw.q.AddJobWithOptions(options, task, parametersKeyed, parameters...)
+}
+
+func (qw *QueuerContextWrapper) AddJobWithOptionsTx(tx *sql.Tx, options *model.Options, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
+	options = qw.q.OptionsWithContext(qw.ctx, options)
+	return qw.q.AddJobWithOptionsTx(tx, options, task, parametersKeyed, parameters...)
+}
+
+func (qw *QueuerContextWrapper) AddJobs(batchJobs []model.BatchJob) error {
+	for i := range batchJobs {
+		batchJobs[i].Options = qw.q.OptionsWithContext(qw.ctx, batchJobs[i].Options)
+	}
+	return qw.q.AddJobs(batchJobs)
+}
+
 
 // AddJob adds a job to the queue with the given task and parameters.
 // As a task you can either pass a function or a string with the task name
@@ -79,6 +139,8 @@ Example usage:
 		}
 	}
 */
+
+
 func (q *Queuer) AddJobWithOptions(options *model.Options, task interface{}, parametersKeyed map[string]interface{}, parameters ...interface{}) (*model.Job, error) {
 	q.mergeOptions(options)
 	job, err := q.addJob(task, options, parametersKeyed, parameters...)
