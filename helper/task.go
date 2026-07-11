@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -23,7 +24,7 @@ func CheckValidTask(task interface{}) error {
 }
 
 // CheckValidTaskWithParameters checks if the provided task and parameters are valid.
-// It checks if the task is a valid function and if the parameters match the task's input types.
+// It checks if the task is a valid function and if the parameters match the task's input types, ignoring an optional context.Context as first argument.
 func CheckValidTaskWithParameters(task interface{}, parameters ...interface{}) error {
 	err := CheckValidTask(task)
 	if err != nil {
@@ -31,13 +32,21 @@ func CheckValidTaskWithParameters(task interface{}, parameters ...interface{}) e
 	}
 
 	taskType := reflect.TypeOf(task)
-	if taskType.NumIn() != len(parameters) {
-		return fmt.Errorf("task expects %d parameters, got %d", taskType.NumIn(), len(parameters))
+	expectedParams := taskType.NumIn()
+	startIndex := 0
+
+	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
+	if expectedParams > 0 && taskType.In(0) == contextType {
+		startIndex = 1
+	}
+
+	if expectedParams-startIndex != len(parameters) {
+		return fmt.Errorf("task expects %d parameters, got %d", expectedParams-startIndex, len(parameters))
 	}
 
 	for i, param := range parameters {
-		if !reflect.TypeOf(param).AssignableTo(taskType.In(i)) {
-			return fmt.Errorf("parameter %d of task must be of type %s, got %s", i, taskType.In(i).Kind(), reflect.TypeOf(param).Kind())
+		if !reflect.TypeOf(param).AssignableTo(taskType.In(i + startIndex)) {
+			return fmt.Errorf("parameter %d of task must be of type %s, got %s", i, taskType.In(i+startIndex).Kind(), reflect.TypeOf(param).Kind())
 		}
 	}
 

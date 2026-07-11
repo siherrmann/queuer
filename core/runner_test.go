@@ -692,3 +692,43 @@ func TestNewRunnerWithNestedStruct(t *testing.T) {
 		})
 	}
 }
+
+func TestRunnerContextInjection(t *testing.T) {
+	rid := uuid.New()
+	taskFn := func(ctx context.Context, p string) string {
+		ctxRid := ctx.Value(JobRIDContextKey)
+		if ctxRid != nil {
+			if id, ok := ctxRid.(uuid.UUID); ok {
+				return id.String() + "-" + p
+			}
+		}
+		return "no-ctx-" + p
+	}
+
+	task, err := model.NewTask(taskFn)
+	require.NoError(t, err)
+
+	job := &model.Job{
+		RID:        rid,
+		TaskName:   task.Name,
+		Parameters: []interface{}{"test"},
+	}
+
+	runner, err := NewRunnerFromJob(task, job)
+	require.NoError(t, err)
+
+	// Run the runner with a background context
+	go runner.Run(context.Background())
+
+	select {
+	case results := <-runner.ResultsChannel:
+		require.Len(t, results, 1)
+		resStr, ok := results[0].(string)
+		require.True(t, ok)
+		assert.Equal(t, rid.String()+"-test", resStr, "Context should contain the JobRID injected by Runner")
+	case err := <-runner.ErrorChannel:
+		t.Fatalf("Runner returned error: %v", err)
+	case <-time.After(1 * time.Second):
+		t.Fatal("Runner timed out")
+	}
+}

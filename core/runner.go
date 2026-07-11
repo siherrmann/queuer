@@ -8,15 +8,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/siherrmann/queuer/helper"
 	"github.com/siherrmann/queuer/model"
 	vh "github.com/siherrmann/validator/helper"
 )
 
+type ContextKey string
+
+const JobRIDContextKey ContextKey = "JobRIDContextKey"
+
 type Runner struct {
 	cancel     context.CancelFunc
 	cancelMu   sync.RWMutex
 	Options    *model.Options
+	JobRID     *uuid.UUID
 	Task       interface{}
 	Parameters model.Parameters
 	// Result channel to return results
@@ -31,14 +37,22 @@ func NewRunner(options *model.Options, task interface{}, parameters ...interface
 	taskInputParameters, err := helper.GetInputParametersFromTask(task)
 	if err != nil {
 		return nil, helper.NewError("getting task input parameters", err)
-	} else if len(taskInputParameters) != len(parameters) {
-		return nil, fmt.Errorf("task expects %d parameters, got %d", len(taskInputParameters), len(parameters))
+	}
+
+	startIndex := 0
+	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
+	if len(taskInputParameters) > 0 && taskInputParameters[0] == contextType {
+		startIndex = 1
+	}
+
+	if len(taskInputParameters)-startIndex != len(parameters) {
+		return nil, fmt.Errorf("task expects %d parameters, got %d", len(taskInputParameters)-startIndex, len(parameters))
 	}
 
 	for i, param := range parameters {
-		paramConverted, err := vh.AnyToType(param, taskInputParameters[i])
+		paramConverted, err := vh.AnyToType(param, taskInputParameters[i+startIndex])
 		if err != nil {
-			return nil, fmt.Errorf("error converting parameter %d to type %s: %v", i, taskInputParameters[i].Kind(), err)
+			return nil, fmt.Errorf("error converting parameter %d to type %s: %v", i, taskInputParameters[i+startIndex].Kind(), err)
 		}
 		parameters[i] = paramConverted
 	}
@@ -73,6 +87,7 @@ func NewRunnerFromJob(task *model.Task, job *model.Job) (*Runner, error) {
 		return nil, fmt.Errorf("error creating runner from job: %v", err)
 	}
 
+	runner.JobRID = &job.RID
 	return runner, nil
 }
 
@@ -111,7 +126,21 @@ func (r *Runner) Run(ctx context.Context) {
 		}()
 
 		taskFunc := reflect.ValueOf(r.Task)
-		results := taskFunc.Call(r.Parameters.ToReflectValues())
+
+		var callParameters []reflect.Value
+		taskType := reflect.TypeOf(r.Task)
+		contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
+
+		if taskType.NumIn() > 0 && taskType.In(0) == contextType {
+			jobCtx := ctx
+			if r.JobRID != nil {
+				jobCtx = context.WithValue(ctx, JobRIDContextKey, *r.JobRID)
+			}
+			callParameters = append(callParameters, reflect.ValueOf(jobCtx))
+		}
+
+		callParameters = append(callParameters, r.Parameters.ToReflectValues()...)
+		results := taskFunc.Call(callParameters)
 		resultValues := []interface{}{}
 		for _, result := range results {
 			resultValues = append(resultValues, result.Interface())
@@ -125,7 +154,8 @@ func (r *Runner) Run(ctx context.Context) {
 
 		var ok bool
 		if len(resultValues) > 0 {
-			if err, ok = resultValues[len(resultValues)-1].(error); ok || (outputParameters[1].String() == "error" && resultValues[len(resultValues)-1] == nil) {
+			lastOutIdx := len(outputParameters) - 1
+			if err, ok = resultValues[len(resultValues)-1].(error); ok || (lastOutIdx >= 0 && outputParameters[lastOutIdx].String() == "error" && resultValues[len(resultValues)-1] == nil) {
 				resultValues = resultValues[:len(resultValues)-1]
 			}
 		}

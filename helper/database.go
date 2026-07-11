@@ -354,6 +354,9 @@ func (d *Database) DropFunctionsFromPublicSchema(functionNames []string) error {
 			}
 			signatures = append(signatures, signature)
 		}
+		if err := rows.Err(); err != nil {
+			return NewError("rows iteration", err)
+		}
 
 		// Drop each overloaded function by its full signature
 		for _, signature := range signatures {
