@@ -67,6 +67,14 @@ QUEUER_DB_SCHEMA=public
 
 You can find a full example (the same as above plus a more detailed example) in the example folder. In there you'll also find a docker-compose file with the timescaleDB/postgres service that is needed for the running the queuer (it's just postgres with an extension).
 
+### Automatic Parent-Child Job Tracking
+
+If you add a new job *from within* the execution of an existing job, the `queuer` automatically tracks this relationship. By leveraging Go's native `context.Context` propagation (e.g., using `q.WithContext(ctx)`), the new job will seamlessly inherit the `parent_rid` of the currently executing job. This enables you to create deep, scalable trees of sub-jobs cleanly, without having to manually pass job IDs around in your function parameters.
+
+### Database Stability & Timeouts
+
+The queuer is built for robust, uninterrupted long-term polling and can seamlessly handle PostgreSQL connection drops or cursor interruptions. We enforce a strict `connect_timeout` (10s) and query `statement_timeout` (30s) at the connection layer to prevent workers from hanging indefinitely on blocking calls. Furthermore, our iterative fetches and polling loops are wrapped in comprehensive error checking. If the database crashes or becomes temporarily unavailable, the queuer will gracefully wait and reconnect rather than crashing the worker thread.
+
 ---
 
 ## NewQueuer

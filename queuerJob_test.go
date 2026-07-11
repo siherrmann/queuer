@@ -142,10 +142,8 @@ func TestAddJobRunning(t *testing.T) {
 		job, err := testQueuer.AddJobWithOptions(options, TaskMock, nil, 1, "2")
 		require.NoError(t, err, "AddJob should not return an error on success")
 
-		queuedJob, err := testQueuer.GetJob(job.RID)
-		require.NoError(t, err, "GetJob should not return an error")
-		require.NotNil(t, queuedJob, "GetJob should return the scheduled job")
-		assert.Equal(t, model.JobStatusScheduled, queuedJob.Status, "Job should be in Scheduled status")
+		require.NotNil(t, job, "AddJob should return a job")
+		assert.Equal(t, model.JobStatusScheduled, job.Status, "Job should be in Scheduled status")
 
 		job = testQueuer.WaitForJobFinished(job.RID, 5*time.Second)
 		assert.NotNil(t, job, "WaitForJobFinished should return the finished job")
