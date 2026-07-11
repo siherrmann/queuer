@@ -123,8 +123,8 @@ func TestCheckValidTaskWithParameters(t *testing.T) {
 		err := CheckValidTaskWithParameters(testFuncOneParam, "hello")
 		assert.NoError(t, err, "should not return error for matching params")
 
-		err = CheckValidTaskWithParameters(testFuncMultiParamsReturn, context.Background(), 10, 3.14)
-		assert.NoError(t, err, "should not return error for multiple matching params")
+		err = CheckValidTaskWithParameters(testFuncMultiParamsReturn, 10, 3.14)
+		assert.NoError(t, err, "should not return error for multiple matching params, ignoring context")
 	})
 
 	t.Run("Not a function", func(t *testing.T) {
@@ -152,15 +152,15 @@ func TestCheckValidTaskWithParameters(t *testing.T) {
 	})
 
 	t.Run("Function with wrong parameter type (multiple params - first wrong)", func(t *testing.T) {
-		err := CheckValidTaskWithParameters(testFuncMultiParamsReturn, "wrong", 10, 3.14)
+		err := CheckValidTaskWithParameters(testFuncMultiParamsReturn, "wrong", 3.14)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "parameter 0 of task must be of type interface, got string", "should fail on first wrong type")
+		assert.Contains(t, err.Error(), "parameter 0 of task must be of type int, got string", "should fail on first wrong type")
 	})
 
 	t.Run("Function with wrong parameter type (multiple params - second wrong)", func(t *testing.T) {
-		err := CheckValidTaskWithParameters(testFuncMultiParamsReturn, context.Background(), "wrong", 3.14)
+		err := CheckValidTaskWithParameters(testFuncMultiParamsReturn, 10, "wrong")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "parameter 1 of task must be of type int, got string", "should fail on second wrong type")
+		assert.Contains(t, err.Error(), "parameter 1 of task must be of type float64, got string", "should fail on second wrong type")
 	})
 
 	t.Run("Function with different parameter type (time.Duration vs int)", func(t *testing.T) {

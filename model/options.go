@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/siherrmann/queuer/helper"
 )
 
 type Options struct {
-	OnError  *OnError  `json:"on_error,omitempty"`
-	Schedule *Schedule `json:"schedule,omitempty"`
+	OnError   *OnError               `json:"on_error,omitempty"`
+	Schedule  *Schedule              `json:"schedule,omitempty"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	ParentRID *uuid.UUID             `json:"parent_rid,omitempty"`
 }
 
 func (c *Options) IsValid() error {

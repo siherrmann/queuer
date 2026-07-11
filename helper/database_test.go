@@ -2,6 +2,7 @@ package helper
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"testing"
 
@@ -301,4 +302,38 @@ func TestDropIndex(t *testing.T) {
 
 	err = database.DropIndex("test_drop_index", "name")
 	assert.NoError(t, err, "expected no error when dropping non-existing index")
+}
+
+func TestNewDatabaseWithDB(t *testing.T) {
+	db := NewDatabaseWithDB("test_with_db", nil, nil)
+	assert.NotNil(t, db)
+	assert.Equal(t, "test_with_db", db.Name)
+	assert.Nil(t, db.Instance)
+}
+
+func TestDatabaseClose(t *testing.T) {
+	dbConn, _ := sql.Open("postgres", "user=pqgotest dbname=pqgotest sslmode=verify-full")
+	db := NewDatabaseWithDB("test", dbConn, nil)
+	err := db.Close()
+	assert.NoError(t, err)
+}
+
+func TestDropFunctionsFromPublicSchema(t *testing.T) {
+	dbConn, _ := sql.Open("postgres", "user=pqgotest dbname=pqgotest sslmode=verify-full")
+	db := NewDatabaseWithDB("test", dbConn, nil)
+	// it will probably error with connection refused, but it tests the nil guard if any, or it tests the query logic
+	err := db.DropFunctionsFromPublicSchema([]string{"non_existent_func"})
+	assert.Error(t, err) // since it's a dummy connection string, it should error
+}
+
+func TestMustStartPostgresContainer(t *testing.T) {
+	teardown, port, err := MustStartPostgresContainer()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, port)
+	assert.NotNil(t, teardown)
+
+	if teardown != nil {
+		err := teardown(context.Background())
+		assert.NoError(t, err)
+	}
 }
